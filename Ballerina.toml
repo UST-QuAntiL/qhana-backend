@@ -1,0 +1,14 @@
+[package]
+org = "qhana"
+name = "qhana_backend"
+version = "0.1.0"
+export = []
+
+[[platform.java11.dependency]]
+artifactId="sqlite-jdbc"
+version="3.36.0.1"
+groupId="org.xerial"
+
+
+[build-options]
+observabilityIncluded = true
