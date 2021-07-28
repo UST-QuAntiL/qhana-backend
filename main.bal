@@ -37,13 +37,13 @@ service / on new http:Listener(port) {
         return {};
     }
 
-    resource function get experiments(string? page, string? 'item\-count) returns ExperimentResponse[]|http:InternalServerError {
+    resource function get experiments(string? page, string? 'item\-count) returns ExperimentListResponse|http:InternalServerError {
         var experiments = database:getExperiments();
 
         if !(experiments is error) {
             // make sure that the id is not included in the answer
             var result = from var exp in experiments select mapToExperimentResponse(exp);
-            return result;
+            return {'\@self: string`/experiments/`, items: result};
         }
 
         io:println(experiments);
@@ -55,11 +55,11 @@ service / on new http:Listener(port) {
     @http:ResourceConfig {
         consumes: ["application/json"]
     }
-    resource function post experiments(@http:Payload database:Experiment experiment) returns http:Ok|http:InternalServerError {
-        error? result = database:createExperiment(experiment);
+    resource function post experiments(@http:Payload database:Experiment experiment) returns ExperimentResponse|http:InternalServerError {
+        var result = database:createExperiment(experiment);
 
         if !(result is error) {
-            return <http:Ok>{};
+            return mapToExperimentResponse(result);
         }
 
         return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
@@ -79,9 +79,16 @@ service / on new http:Listener(port) {
     @http:ResourceConfig {
         consumes: ["application/json"]
     }
-    resource function update experiments/[int experimentId](@http:Payload database:Experiment experiment) returns http:Ok {
-        return {};
+    resource function update experiments/[int experimentId](@http:Payload database:Experiment experiment) returns ExperimentResponse|http:InternalServerError {
+        var result = database:updateExperiment(experimentId, experiment);
+
+        if !(result is error) {
+            return mapToExperimentResponse(result);
+        }
+
+        return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
     }
+
     resource function get experiments/[int experimentId]/data() returns http:Ok {
         return {};
     }

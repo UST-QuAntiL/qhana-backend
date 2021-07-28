@@ -4,7 +4,7 @@
 
 The QHAna Backend API is implemented in [Ballerina](https://ballerina.io) (swan-lake Beta 2).
 
-Please use the following resources to make yourself familiar with ballerina:
+Please use the following resources to make yourself familiar with Ballerina:
 
   * [Installation instructions](https://ballerina.io/learn/user-guide/getting-started/setting-up-ballerina/)
   * [Hello world](https://ballerina.io/learn/user-guide/getting-started/writing-your-first-ballerina-program/)

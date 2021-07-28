@@ -28,9 +28,20 @@ type RootResponse record {|
 |};
 
 
-type ExperimentResponse record {|
-    *database:Experiment;
+type ApiResponse record {|
     string '\@self;
+|};
+
+
+type ExperimentResponse record {|
+    *ApiResponse;
+    *database:Experiment;
+|};
+
+
+type ExperimentListResponse record {|
+    *ApiResponse;
+    ExperimentResponse[] items;
 |};
 
 function mapToExperimentResponse(database:ExperimentFull experiment) returns ExperimentResponse {

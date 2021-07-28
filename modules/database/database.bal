@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//import ballerina/io;
+import ballerina/io;
 //import ballerina/time;
 import ballerina/sql;
 import ballerinax/java.jdbc;
@@ -20,21 +20,32 @@ import ballerinax/java.jdbc;
 
 final jdbc:Client testDB = check new jdbc:Client("jdbc:sqlite:qhana-backend.db", options={datasourceName:""});
 
+# Record containing the pure data of an Experiment.
+#
+# + name - The experiment name
+# + description - The experiment description
 public type Experiment record {|
     string name;
     string description;
 |};
 
+# Record containing the experiment data and the database ID of the Experiment
+#
+# + experimentId - The database id of the record
 public type ExperimentFull record {|
+    readonly int experimentId;
     *Experiment;
-    int experimentId;
 |};
 
 
-# Description
-# + return - Return Value Description  
-public isolated function getExperiments() returns ExperimentFull[]|error {
-    stream<ExperimentFull, sql:Error?> experiments = testDB->query(`SELECT experimentId, name, description FROM Experiment;`);
+
+# Get the list of experiments from the database.
+#
+# + 'limit - The maximum number of experiments fetched in one call (default: `100`)
+# + offset - The offset applied to the sql query (default: `0`)
+# + return - The list of experiments or the encountered error
+public isolated function getExperiments(int 'limit=100, int offset=0) returns ExperimentFull[]|error {
+    stream<ExperimentFull, sql:Error?> experiments = testDB->query(`SELECT experimentId, name, description FROM Experiment LIMIT ${'limit} OFFSET ${offset};`);
 
 
     ExperimentFull[]? experimentList = check from var experiment in experiments select experiment;
@@ -47,6 +58,10 @@ public isolated function getExperiments() returns ExperimentFull[]|error {
 }
 
 
+# Get a single experiment from the database.
+#
+# + experimentId - The database id of the experiment to fetch
+# + return - The experiment or the encountered error
 public isolated function getExperiment(int experimentId) returns ExperimentFull|error {
     stream<ExperimentFull, sql:Error?> experiments = testDB->query(`SELECT experimentId, name, description FROM Experiment WHERE experimentId = ${experimentId};`);
 
@@ -59,19 +74,49 @@ public isolated function getExperiment(int experimentId) returns ExperimentFull|
     fail error(string`Experiment ${experimentId} was not found!`);
 }
 
-public isolated function createExperiment(*Experiment experiment) returns error? {
+# Create a new experiment in the database.
+#
+# + experiment - The data for the new experiment
+# + return     - The experiment data including the database id or the encountered error
+public isolated function createExperiment(*Experiment experiment) returns ExperimentFull|error {
+    ExperimentFull? result = ();
+
     transaction {
         stream<Experiment, sql:Error?> experiments;
-        _ = check testDB->execute(`INSERT INTO Experiment (name, description) VALUES (${experiment.name}, ${experiment.description});`);
-        check commit;
+        var insertResult = check testDB->execute(`INSERT INTO Experiment (name, description) VALUES (${experiment.name}, ${experiment.description});`);
+
+        // extract experiment id and build full experiment data
+        var experimentId = insertResult.lastInsertId;
+        if experimentId is string {
+            fail error("Expected integer id but got a string!");
+        } else if experimentId == () {
+            fail error("Expected the experiment id back but got nothing!");
+        } else {
+            result = { experimentId: experimentId, name: experiment.name, description: experiment.description };
+            check commit;
+        }
+    }
+
+    if result == () {
+        // this should logically never happen but is included for the compiler
+        return error("Experiment was empty after transaction comitted.");
+    } else {
+        return result;
     }
 }
 
-public isolated function updateExperiment(int experimentId, *Experiment experiment) returns error? {
+# Update an existing experiment in place in the database.
+#
+# + experimentId - The database id of the experiment to update
+# + experiment - The updated data for the existing experiment
+# + return - The updated experiment data including the database id or the encountered error
+public isolated function updateExperiment(int experimentId, *Experiment experiment) returns ExperimentFull|error {
     transaction {
         stream<Experiment, sql:Error?> experiments;
-        _ = check testDB->execute(`UPDATE Experiment SET name=${experiment.name}, description=${experiment.description} WHERE experimentId = ${experimentId};`);
+        var test = check testDB->execute(`UPDATE Experiment SET name=${experiment.name}, description=${experiment.description} WHERE experimentId = ${experimentId};`);
+        io:println(test);
         check commit;
     }
+    return {experimentId, name: experiment.name, description: experiment.description};
 }
 
