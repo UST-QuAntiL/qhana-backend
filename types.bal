@@ -14,37 +14,58 @@
 
 import qhana_backend.database;
 
+# Generic error response for the api.
+#
+# + message - The error message
+# + code - The http status code
 public type Error record {
-    # The error message indicating what the issue is
     string message;
-    # The http status code
     int code;
 };
 
-type RootResponse record {|
+
+# The base record for api responses.
+#
+# + '\@self - Canonical self link of the resource
+public type ApiResponse record {|
+    string '\@self;
+|};
+
+# The root api response
+#
+# + experiments - Url to the experiments collection resource
+# + pluginRunners - Url to the plugin runners collection resource
+# + tasks - Url to the tasks collection resource
+public type RootResponse record {|
+    *ApiResponse;
     string experiments;
     string pluginRunners;
     string tasks;
 |};
 
 
-type ApiResponse record {|
-    string '\@self;
-|};
-
-
-type ExperimentResponse record {|
+# Api response for a single experiment.  
+public type ExperimentResponse record {|
     *ApiResponse;
     *database:Experiment;
 |};
 
 
-type ExperimentListResponse record {|
+# Api response for a list of experiments.
+#
+# + items - The experiment list
+public type ExperimentListResponse record {|
     *ApiResponse;
     ExperimentResponse[] items;
+    int itemCount;
 |};
 
-function mapToExperimentResponse(database:ExperimentFull experiment) returns ExperimentResponse {
+
+# Convenience function to map database experiment entries to experiment responses.
+#
+# + experiment - The full experiment data from the database
+# + return - The api response
+public isolated function mapToExperimentResponse(database:ExperimentFull experiment) returns ExperimentResponse {
     return {
         '\@self: string`/experiments/${experiment.experimentId}`, 
         name: experiment.name, 

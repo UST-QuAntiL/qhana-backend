@@ -24,6 +24,7 @@ configurable int port = 9090;
 service / on new http:Listener(port) {
     resource function get .() returns RootResponse {
         return {
+            '\@self: "/",
             experiments: "/experiments/",
             pluginRunners: "/pluginRunners/",
             tasks: "/tasks/"
@@ -38,18 +39,22 @@ service / on new http:Listener(port) {
     }
 
     resource function get experiments(string? page, string? 'item\-count) returns ExperimentListResponse|http:InternalServerError {
-        var experiments = database:getExperiments();
+        int experimentCount;
+        database:ExperimentFull[] experiments;
 
-        if !(experiments is error) {
-            // make sure that the id is not included in the answer
-            var result = from var exp in experiments select mapToExperimentResponse(exp);
-            return {'\@self: string`/experiments/`, items: result};
+        do {
+            experimentCount = check database:getExperimentCount();
+            experiments = check database:getExperiments();
+        } on fail error err {
+            io:println(err);
+            // if with return does not correctly narrow type for rest of function... this does.
+            http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
+            return resultErr;
         }
 
-        io:println(experiments);
-
-        http:InternalServerError err = {body: "Something went wrong. Please try again later."};
-        return err;
+        // map to api response(s)
+        var result = from var exp in experiments select mapToExperimentResponse(exp);
+        return {'\@self: string`/experiments/`, items: result, itemCount: experimentCount};
     }
     
     @http:ResourceConfig {

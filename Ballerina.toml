@@ -2,7 +2,7 @@
 org = "qhana"
 name = "qhana_backend"
 version = "0.1.0"
-export = []
+export = ["qhana_backend", "qhana_backend.database"]
 
 [[platform.java11.dependency]]
 artifactId="sqlite-jdbc"

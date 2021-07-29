@@ -37,6 +37,23 @@ public type ExperimentFull record {|
     *Experiment;
 |};
 
+type RowCount record {
+    int rowCount;
+};
+
+
+# Return the number of experiments in the database.
+#
+# + return - The number of experiments or the encountered error
+public isolated  function getExperimentCount() returns int|error {
+    var result = testDB->query("SELECT count(*) AS rowCount FROM Experiment;", RowCount);
+    var count = result.next();
+    if !(count is error) {
+        return count.value.rowCount;
+    } else {
+        return count;
+    }
+}
 
 
 # Get the list of experiments from the database.
@@ -45,7 +62,7 @@ public type ExperimentFull record {|
 # + offset - The offset applied to the sql query (default: `0`)
 # + return - The list of experiments or the encountered error
 public isolated function getExperiments(int 'limit=100, int offset=0) returns ExperimentFull[]|error {
-    stream<ExperimentFull, sql:Error?> experiments = testDB->query(`SELECT experimentId, name, description FROM Experiment LIMIT ${'limit} OFFSET ${offset};`);
+    stream<ExperimentFull, sql:Error?> experiments = testDB->query(`SELECT experimentId, name, description FROM Experiment ORDER BY name ASC LIMIT ${'limit} OFFSET ${offset};`);
 
 
     ExperimentFull[]? experimentList = check from var experiment in experiments select experiment;
