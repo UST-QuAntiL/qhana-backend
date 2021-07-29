@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS "ExperimentData" (
 	"location"	TEXT NOT NULL,
 	"type"	VARCHAR(500) NOT NULL,
 	"contentType"	VARCHAR(500) NOT NULL,
-	CONSTRAINT "ux_name_and_version" UNIQUE("name","version"),
+	CONSTRAINT "ux_name_and_version" UNIQUE("experimentId","name","version"),
 	FOREIGN KEY("experimentId") REFERENCES "Experiment"("experimentId"),
 	PRIMARY KEY("dataId" AUTOINCREMENT)
 );
