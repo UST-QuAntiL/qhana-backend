@@ -69,3 +69,32 @@ public isolated function mapToExperimentResponse(database:ExperimentFull experim
         description: experiment.description
     };
 }
+
+
+public type ExperimentDataResponse record {|
+    *ApiResponse;
+    string download;
+    string name;
+    int 'version;
+    string 'type;
+    string contentType;
+|};
+
+
+public type ExperimentDataListResponse record {|
+    *ApiResponse;
+    ExperimentDataResponse[] items;
+    int itemCount;
+|};
+
+
+public isolated function mapToExperimentDataResponse(database:ExperimentDataFull data) returns ExperimentDataResponse {
+    return {
+        '\@self: string `/experiments/${data.experimentId}/data/${data.name}?version=${data.'version}`,
+        download: string `/experiments/${data.experimentId}/data/${data.name}/download?version=${data.'version}`,
+        name: data.name,
+        'version: data.'version,
+        'type: data.'type,
+        contentType: data.contentType
+    };
+}

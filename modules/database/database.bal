@@ -17,7 +17,11 @@ import ballerina/io;
 import ballerina/sql;
 import ballerinax/java.jdbc;
 
-final jdbc:Client testDB = check new jdbc:Client("jdbc:sqlite:qhana-backend.db", options = {datasourceName: ""});
+final jdbc:Client testDB = check new jdbc:Client("jdbc:sqlite:qhana-backend.db");
+
+type RowCount record {
+    int rowCount;
+};
 
 # Record containing the pure data of an Experiment.
 #
@@ -25,7 +29,7 @@ final jdbc:Client testDB = check new jdbc:Client("jdbc:sqlite:qhana-backend.db",
 # + description - The experiment description
 public type Experiment record {|
     string name;
-    string description;
+    string description="";
 |};
 
 # Record containing the experiment data and the database ID of the Experiment
@@ -36,9 +40,19 @@ public type ExperimentFull record {|
     *Experiment;
 |};
 
-type RowCount record {
-    int rowCount;
-};
+public type ExperimentData record {|
+    string name;
+    int 'version;
+    string location;
+    string 'type;
+    string contentType;
+|};
+
+public type ExperimentDataFull record {|
+    readonly int dataId;
+    readonly int experimentId;
+    *ExperimentData;
+|};
 
 # Return the number of experiments in the database.
 #
@@ -131,5 +145,77 @@ public isolated function updateExperiment(int experimentId, *Experiment experime
         check commit;
     }
     return {experimentId, name: experiment.name, description: experiment.description};
+}
+
+
+# Get the number of data entries for a specific experiment.
+#
+# + experimentId - The experiment id
+# + all - If true count all experiment data including old version, if false count only the newest verwions (e.g. distinct data names)
+# + return - The count or the encountered error
+public isolated function getExperimentDataCount(int experimentId, boolean all=true) returns int|error {
+    stream<RowCount, sql:Error> result;
+    if all {
+        result = testDB->query(`SELECT count(*) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId};`);
+    } else {
+        result = testDB->query(`SELECT count(DISTINCT name) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId};`);
+    }
+    var count = result.next();
+    if !(count is error) {
+        return count.value.rowCount;
+    } else {
+        return count;
+    }
+}
+
+
+public isolated function getDataList(int experimentId, boolean all=true, int 'limit = 100, int offset = 0) returns ExperimentDataFull[]|error {
+    stream<ExperimentDataFull, sql:Error?> experimentData;
+    if all {
+        experimentData = testDB->query(`SELECT dataId, experimentId, name, version, location, type, contentType 
+                                        FROM ExperimentData WHERE experimentId=${experimentId} 
+                                        ORDER BY name ASC, version DESC 
+                                        LIMIT ${'limit} OFFSET ${offset};`);
+    } else {
+        experimentData = testDB->query(`SELECT dataId, experimentId, name, version, location, type, contentType 
+                                        FROM ExperimentData WHERE experimentId=${experimentId} 
+                                            AND version=(SELECT MAX(t2.version) 
+                                                FROM ExperimentData AS t2 
+                                                WHERE ExperimentData.name=t2.name AND t2.experimentId=${experimentId})
+                                        ORDER BY name ASC, version DESC 
+                                        LIMIT ${'limit} OFFSET ${offset};`);
+    }
+
+    ExperimentDataFull[]? experimentDataList = check from var data in experimentData
+        select data;
+
+    if experimentDataList != () {
+        return experimentDataList;
+    }
+
+    return [];
+}
+
+
+public isolated function getData(int experimentId, string name, string? 'version) returns ExperimentDataFull|error {
+    stream<ExperimentDataFull, sql:Error?> data;
+
+    if 'version == () || 'version == "latest" {
+        data = testDB->query(`SELECT dataId, experimentId, name, version, location, type, contentType 
+                              FROM ExperimentData WHERE experimentId=${experimentId} AND name=${name}
+                              ORDER BY version DESC 
+                              LIMIT 1;`); // get latest version with order by descending and limit to one
+    } else {
+        data = testDB->query(`SELECT dataId, experimentId, name, version, location, type, contentType 
+                              FROM ExperimentData WHERE experimentId=${experimentId} AND name=${name} AND version=${'version};`);
+    }
+
+    var result = data.next();
+
+    if !(result is sql:Error) && (result != ()) {
+        return result.value;
+    }
+
+    fail error(string `Experiment data with experimentId: ${experimentId}, name: ${name} and version: ${'version == () ? "latest" : 'version} was not found!`);
 }
 
