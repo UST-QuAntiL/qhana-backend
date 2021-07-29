@@ -18,8 +18,6 @@ import qhana_backend.database;
 
 configurable int port = 9090;
 
-
-
 # The QHAna backend api service.
 service / on new http:Listener(port) {
     resource function get .() returns RootResponse {
@@ -53,10 +51,11 @@ service / on new http:Listener(port) {
         }
 
         // map to api response(s)
-        var result = from var exp in experiments select mapToExperimentResponse(exp);
-        return {'\@self: string`/experiments/`, items: result, itemCount: experimentCount};
+        var result = from var exp in experiments
+            select mapToExperimentResponse(exp);
+        return {'\@self: string `/experiments/`, items: result, itemCount: experimentCount};
     }
-    
+
     @http:ResourceConfig {
         consumes: ["application/json"]
     }
@@ -69,7 +68,7 @@ service / on new http:Listener(port) {
 
         return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
     }
-    
+
     resource function get experiments/[int experimentId]() returns ExperimentResponse|http:InternalServerError {
         var experiment = database:getExperiment(experimentId);
 
@@ -80,7 +79,7 @@ service / on new http:Listener(port) {
         return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
 
     }
-    
+
     @http:ResourceConfig {
         consumes: ["application/json"]
     }

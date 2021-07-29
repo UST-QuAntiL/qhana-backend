@@ -23,7 +23,6 @@ public type Error record {
     int code;
 };
 
-
 # The base record for api responses.
 #
 # + '\@self - Canonical self link of the resource
@@ -43,23 +42,21 @@ public type RootResponse record {|
     string tasks;
 |};
 
-
 # Api response for a single experiment.  
 public type ExperimentResponse record {|
     *ApiResponse;
     *database:Experiment;
 |};
 
-
 # Api response for a list of experiments.
 #
 # + items - The experiment list
+# + itemCount - The total number of resources in the collection
 public type ExperimentListResponse record {|
     *ApiResponse;
     ExperimentResponse[] items;
     int itemCount;
 |};
-
 
 # Convenience function to map database experiment entries to experiment responses.
 #
@@ -67,8 +64,8 @@ public type ExperimentListResponse record {|
 # + return - The api response
 public isolated function mapToExperimentResponse(database:ExperimentFull experiment) returns ExperimentResponse {
     return {
-        '\@self: string`/experiments/${experiment.experimentId}`, 
-        name: experiment.name, 
+        '\@self: string `/experiments/${experiment.experimentId}`,
+        name: experiment.name,
         description: experiment.description
     };
 }
