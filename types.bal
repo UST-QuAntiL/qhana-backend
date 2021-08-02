@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import ballerina/time;
 import qhana_backend.database;
 
 # Generic error response for the api.
@@ -42,6 +43,12 @@ public type RootResponse record {|
     string tasks;
 |};
 
+
+////////////////////////////////////////////////////////////////////////////////
+// Experiments /////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+
 # Api response for a single experiment.  
 public type ExperimentResponse record {|
     *ApiResponse;
@@ -71,6 +78,11 @@ public isolated function mapToExperimentResponse(database:ExperimentFull experim
 }
 
 
+////////////////////////////////////////////////////////////////////////////////
+// Data ////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+
 public type ExperimentDataResponse record {|
     *ApiResponse;
     string download;
@@ -96,5 +108,71 @@ public isolated function mapToExperimentDataResponse(database:ExperimentDataFull
         'version: data.'version,
         'type: data.'type,
         contentType: data.contentType
+    };
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Timeline ////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+public type TimelineStepMinResponse record {|
+    *ApiResponse;
+    string notes;
+    int sequence;
+    string 'start;
+    string? end=();
+    string processorName;
+    string? processorVersion=();
+    string? processorLocation=();
+    string? parameterDescriptionLocation=();
+|};
+
+public type TimelineStepResponse record {|
+    *TimelineStepMinResponse;
+    string parameters;
+|};
+
+
+public type TimelineStepListResponse record {|
+    *ApiResponse;
+    TimelineStepMinResponse[] items;
+    int itemCount;
+|};
+
+public type TimelineStepNotesResponse record {|
+    *ApiResponse;
+    string notes;
+|};
+
+
+public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull step) returns TimelineStepMinResponse {
+    var end = step.end;
+    return {
+        '\@self: string`/experiments/${step.experimentId}/timeline/${step.sequence}`,
+        notes: string `/experiments/${step.experimentId}/timeline/${step.sequence}/notes`,
+        sequence: step.sequence,
+        'start: time:utcToString(step.'start),
+        end: end == () ? () : time:utcToString(end),
+        processorName: step.processorName,
+        processorVersion: step.processorVersion,
+        processorLocation: step.processorLocation,
+        parameterDescriptionLocation: step.parameterDescriptionLocation
+    };
+}
+
+public isolated function mapToTimelineStepResponse(database:TimelineStepWithParams step) returns TimelineStepResponse {
+    var end = step.end;
+    return {
+        '\@self: string `/experiments/${step.experimentId}/timeline/${step.sequence}`,
+        notes: string `/experiments/${step.experimentId}/timeline/${step.sequence}/notes`,
+        sequence: step.sequence,
+        'start: time:utcToString(step.'start),
+        end: end == () ? () : time:utcToString(end),
+        processorName: step.processorName,
+        processorVersion: step.processorVersion,
+        processorLocation: step.processorLocation,
+        parameterDescriptionLocation: step.parameterDescriptionLocation,
+        parameters: step?.parameters
     };
 }

@@ -36,6 +36,10 @@ service / on new http:Listener(port) {
         return {};
     }
 
+    ////////////////////////////////////////////////////////////////////////////
+    // Experiments /////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+
     resource function get experiments(string? page, string? 'item\-count) returns ExperimentListResponse|http:InternalServerError {
         int experimentCount;
         database:ExperimentFull[] experiments;
@@ -92,6 +96,10 @@ service / on new http:Listener(port) {
         return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
     }
 
+    ////////////////////////////////////////////////////////////////////////////
+    // Data ////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+
     resource function get experiments/[int experimentId]/data(boolean? allVersions) returns ExperimentDataListResponse|http:InternalServerError {
         boolean includeAllVersions = allVersions == true || allVersions == ();
 
@@ -145,19 +153,54 @@ service / on new http:Listener(port) {
         check caller->respond(resp);
     }
 
-    resource function get experiments/[int experimentId]/timeline() returns http:Ok {
-        return {};
+    ////////////////////////////////////////////////////////////////////////////
+    // Timeline ////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+
+    resource function get experiments/[int experimentId]/timeline() returns TimelineStepListResponse|http:InternalServerError {
+        int stepCount;
+        database:TimelineStepFull[] steps;
+
+        do {
+            stepCount = check database:getTimelineStepCount(experimentId);
+            steps = check database:getTimelineStepList(experimentId);
+        } on fail error err {
+            io:println(err);
+            // if with return does not correctly narrow type for rest of function... this does.
+            http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
+            return resultErr;
+        }
+
+        var stepList = from var s in steps
+            select mapToTimelineStepMinResponse(s); 
+        return {'\@self: string `/experiments/${experimentId}/timeline`, items: stepList, itemCount: stepCount};
     }
     resource function post experiments/[int experimentId]/timeline() returns http:Ok {
         return {};
     }
-    resource function get experiments/[int experimentId]/timeline/[string timelineStep]() returns http:Ok {
-        return {};
+    resource function get experiments/[int experimentId]/timeline/[int timelineStep]() returns TimelineStepResponse|http:InternalServerError {
+        database:TimelineStepWithParams|error result = database:getTimelineStep(experimentId, timelineStep);
+
+        if !(result is error) {
+            return mapToTimelineStepResponse(result);
+        }
+
+        return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
     }
-    resource function get experiments/[int experimentId]/timeline/[string timelineStep]/notes() returns http:Ok {
-        return {};
+    resource function get experiments/[int experimentId]/timeline/[int timelineStep]/notes() returns TimelineStepNotesResponse|http:InternalServerError {
+        string|error result = database:getTimelineStepNotes(experimentId, timelineStep);
+
+        if !(result is error) {
+            return {
+                '\@self: string `/experiments/${experimentId}/timeline/${timelineStep}/notes`,
+                notes: result
+            };
+        }
+        io:println(result);
+
+        return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
     }
-    resource function put experiments/[int experimentId]/timeline/[string timelineStep]/notes() returns http:Ok {
+    resource function put experiments/[int experimentId]/timeline/[int timelineStep]/notes() returns http:Ok {
         return {};
     }
 }

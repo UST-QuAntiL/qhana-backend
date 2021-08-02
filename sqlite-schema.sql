@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS "TimelineStep" (
 	"stepId"	INTEGER NOT NULL,
 	"experimentId"	INTEGER NOT NULL,
 	"sequence"	INTEGER NOT NULL,
-	"start"	DATETIME NOT NULL DEFAULT 'datetime(''now'')',
+	"start"	DATETIME NOT NULL DEFAULT strftime('%Y-%m-%dT%H:%M:%S', 'now'),
 	"end"	DATETIME,
 	"processorName"	VARCHAR(500) NOT NULL,
 	"processorVersion"	VARCHAR(150),
