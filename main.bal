@@ -16,9 +16,19 @@ import ballerina/http;
 import ballerina/io;
 import qhana_backend.database;
 
+
+configurable string[] corsDomains = ["http://localhost:4200"];
 configurable int port = 9090;
 
 # The QHAna backend api service.
+@http:ServiceConfig {
+    cors: {
+        allowOrigins: corsDomains,
+        allowMethods: ["OPTIONS", "GET", "PUT", "POST", "DELETE"],
+        //allowCredentials: false,
+        maxAge: 84900
+    }
+}
 service / on new http:Listener(port) {
     resource function get .() returns RootResponse {
         return {
@@ -44,9 +54,10 @@ service / on new http:Listener(port) {
         int experimentCount;
         database:ExperimentFull[] experiments;
 
-        do {
+        transaction {
             experimentCount = check database:getExperimentCount();
             experiments = check database:getExperiments();
+            check commit;
         } on fail error err {
             io:println(err);
             // if with return does not correctly narrow type for rest of function... this does.
@@ -64,36 +75,42 @@ service / on new http:Listener(port) {
         consumes: ["application/json"]
     }
     resource function post experiments(@http:Payload database:Experiment experiment) returns ExperimentResponse|http:InternalServerError {
-        var result = database:createExperiment(experiment);
-
-        if !(result is error) {
-            return mapToExperimentResponse(result);
+        database:ExperimentFull result;
+        transaction {
+            result = check database:createExperiment(experiment);
+            check commit;
+        } on fail error err {
+            return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
-        return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
+        return mapToExperimentResponse(result);
     }
 
     resource function get experiments/[int experimentId]() returns ExperimentResponse|http:InternalServerError|error {
-        var experiment = database:getExperiment(experimentId);
-
-        if !(experiment is error) {
-            return mapToExperimentResponse(experiment);
+        database:ExperimentFull result;
+        transaction {
+            result = check database:getExperiment(experimentId);
+            check commit;
+        } on fail error err {
+            return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
-        return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
+        return mapToExperimentResponse(result);
     }
 
     @http:ResourceConfig {
         consumes: ["application/json"]
     }
     resource function update experiments/[int experimentId](@http:Payload database:Experiment experiment) returns ExperimentResponse|http:InternalServerError {
-        var result = database:updateExperiment(experimentId, experiment);
-
-        if !(result is error) {
-            return mapToExperimentResponse(result);
+        database:ExperimentFull result;
+        transaction {
+            result = check database:updateExperiment(experimentId, experiment);
+            check commit;
+        } on fail error err {
+            return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
-        return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
+        return mapToExperimentResponse(result);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -106,9 +123,10 @@ service / on new http:Listener(port) {
         int dataCount;
         database:ExperimentDataFull[] data;
 
-        do {
+        transaction {
             dataCount = check database: getExperimentDataCount(experimentId, all=includeAllVersions);
             data = check database:getDataList(experimentId, all=includeAllVersions);
+            check commit;
         } on fail error err {
             io:println(err);
             // if with return does not correctly narrow type for rest of function... this does.
@@ -122,33 +140,44 @@ service / on new http:Listener(port) {
     }
 
     resource function get experiments/[int experimentId]/data/[string name](string? 'version) returns ExperimentDataResponse|http:InternalServerError {
-        var data = database:getData(experimentId, name, 'version);
+        database:ExperimentDataFull data;
 
-        if !(data is error) {
-            return mapToExperimentDataResponse(data);
+        transaction {
+            data = check database:getData(experimentId, name, 'version);
+            check commit;
+        } on fail error err {
+            io:println(data);
+            return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
-        io:println(data);
-        return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
+        return mapToExperimentDataResponse(data);
     }
 
     resource function get experiments/[int experimentId]/data/[string name]/download(string? 'version, http:Caller caller) returns error? {
-        var data = database:getData(experimentId, name, 'version);
+        database:ExperimentDataFull data;
 
         http:Response resp = new;
-        if !(data is error) {
-            resp.statusCode = http:STATUS_OK;
-            var cType = data.contentType;
-            if cType.startsWith("text/") || cType.startsWith("application/json") || cType.startsWith("application/X-lines+json"){
-                resp.addHeader("Content-Disposition", string`inline; filename="${data.name}"`);
-            } else {
-                resp.addHeader("Content-Disposition", string`attachment; filename="${data.name}"`);
-            }
-            resp.setFileAsPayload(data.location, contentType=data.contentType);
-        } else {
+        
+        transaction {
+            data = check database:getData(experimentId, name, 'version);
+            check commit;
+        } on fail error err {
+            io:println(err);
+
             resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
             resp.setPayload("Something went wrong. Please try again later.");
+
+            check caller->respond(resp);
         }
+
+        resp.statusCode = http:STATUS_OK;
+        var cType = data.contentType;
+        if cType.startsWith("text/") || cType.startsWith("application/json") || cType.startsWith("application/X-lines+json"){
+            resp.addHeader("Content-Disposition", string`inline; filename="${data.name}"`);
+        } else {
+            resp.addHeader("Content-Disposition", string`attachment; filename="${data.name}"`);
+        }
+        resp.setFileAsPayload(data.location, contentType=data.contentType);
 
         check caller->respond(resp);
     }
@@ -161,9 +190,10 @@ service / on new http:Listener(port) {
         int stepCount;
         database:TimelineStepFull[] steps;
 
-        do {
+        transaction {
             stepCount = check database:getTimelineStepCount(experimentId);
             steps = check database:getTimelineStepList(experimentId);
+            check commit;
         } on fail error err {
             io:println(err);
             // if with return does not correctly narrow type for rest of function... this does.
@@ -179,26 +209,33 @@ service / on new http:Listener(port) {
         return {};
     }
     resource function get experiments/[int experimentId]/timeline/[int timelineStep]() returns TimelineStepResponse|http:InternalServerError {
-        database:TimelineStepWithParams|error result = database:getTimelineStep(experimentId, timelineStep);
-
-        if !(result is error) {
-            return mapToTimelineStepResponse(result);
+        database:TimelineStepWithParams result;
+        
+        transaction {
+            result = check database:getTimelineStep(experimentId, timelineStep);
+            check commit;
+        } on fail error err {
+            io:println(err);
+            return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
-        return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
+        return mapToTimelineStepResponse(result);
     }
     resource function get experiments/[int experimentId]/timeline/[int timelineStep]/notes() returns TimelineStepNotesResponse|http:InternalServerError {
-        string|error result = database:getTimelineStepNotes(experimentId, timelineStep);
-
-        if !(result is error) {
-            return {
-                '\@self: string `/experiments/${experimentId}/timeline/${timelineStep}/notes`,
-                notes: result
-            };
+        string result;
+        
+        transaction {
+            result = check database:getTimelineStepNotes(experimentId, timelineStep);
+            check commit;
+        } on fail error err {
+            io:println(err);
+            return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
-        io:println(result);
 
-        return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
+        return {
+            '\@self: string `/experiments/${experimentId}/timeline/${timelineStep}/notes`,
+            notes: result
+        };
     }
     resource function put experiments/[int experimentId]/timeline/[int timelineStep]/notes() returns http:Ok {
         return {};

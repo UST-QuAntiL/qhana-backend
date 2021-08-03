@@ -17,7 +17,13 @@ import ballerina/time;
 import ballerina/sql;
 import ballerinax/java.jdbc;
 
-final jdbc:Client testDB = check new jdbc:Client("jdbc:sqlite:qhana-backend.db");
+sql:ConnectionPool pool = { 
+    maxOpenConnections: 5, 
+    maxConnectionLifeTime: 1800,
+    minIdleConnections: 0
+};
+
+final jdbc:Client testDB = check new jdbc:Client("jdbc:sqlite:qhana-backend.db", connectionPool = pool);
 
 type RowCount record {
     int rowCount;
@@ -114,7 +120,7 @@ public type StepToData record {|
 # Return the number of experiments in the database.
 #
 # + return - The number of experiments or the encountered error
-public isolated function getExperimentCount() returns int|error {
+public isolated transactional function getExperimentCount() returns int|error {
     var result = testDB->query("SELECT count(*) AS rowCount FROM Experiment;", RowCount);
     var count = result.next();
     if !(count is error) {
@@ -129,7 +135,7 @@ public isolated function getExperimentCount() returns int|error {
 # + 'limit - The maximum number of experiments fetched in one call (default: `100`)
 # + offset - The offset applied to the sql query (default: `0`)
 # + return - The list of experiments or the encountered error
-public isolated function getExperiments(int 'limit = 100, int offset = 0) returns ExperimentFull[]|error {
+public isolated transactional function getExperiments(int 'limit = 100, int offset = 0) returns ExperimentFull[]|error {
     stream<ExperimentFull, sql:Error?> experiments = testDB->query(
         `SELECT experimentId, name, description FROM Experiment ORDER BY name ASC LIMIT ${'limit} OFFSET ${offset};`
     );
@@ -148,7 +154,7 @@ public isolated function getExperiments(int 'limit = 100, int offset = 0) return
 #
 # + experimentId - The database id of the experiment to fetch
 # + return - The experiment or the encountered error
-public isolated function getExperiment(int experimentId) returns ExperimentFull|error {
+public isolated transactional function getExperiment(int experimentId) returns ExperimentFull|error {
     stream<ExperimentFull, sql:Error?> experiments = testDB->query(
         `SELECT experimentId, name, description FROM Experiment WHERE experimentId = ${experimentId};`
     );
@@ -166,25 +172,22 @@ public isolated function getExperiment(int experimentId) returns ExperimentFull|
 #
 # + experiment - The data for the new experiment
 # + return - The experiment data including the database id or the encountered error
-public isolated function createExperiment(*Experiment experiment) returns ExperimentFull|error {
+public isolated transactional function createExperiment(*Experiment experiment) returns ExperimentFull|error {
     ExperimentFull? result = ();
 
-    transaction {
-        stream<Experiment, sql:Error?> experiments;
-        var insertResult = check testDB->execute(
-            `INSERT INTO Experiment (name, description) VALUES (${experiment.name}, ${experiment.description});`
-        );
+    stream<Experiment, sql:Error?> experiments;
+    var insertResult = check testDB->execute(
+        `INSERT INTO Experiment (name, description) VALUES (${experiment.name}, ${experiment.description});`
+    );
 
-        // extract experiment id and build full experiment data
-        var experimentId = insertResult.lastInsertId;
-        if experimentId is string {
-            fail error("Expected integer id but got a string!");
-        } else if experimentId == () {
-            fail error("Expected the experiment id back but got nothing!");
-        } else {
-            result = {experimentId: experimentId, name: experiment.name, description: experiment.description};
-            check commit;
-        }
+    // extract experiment id and build full experiment data
+    var experimentId = insertResult.lastInsertId;
+    if experimentId is string {
+        fail error("Expected integer id but got a string!");
+    } else if experimentId == () {
+        fail error("Expected the experiment id back but got nothing!");
+    } else {
+        result = {experimentId: experimentId, name: experiment.name, description: experiment.description};
     }
 
     if result == () {
@@ -200,15 +203,12 @@ public isolated function createExperiment(*Experiment experiment) returns Experi
 # + experimentId - The database id of the experiment to update
 # + experiment - The updated data for the existing experiment
 # + return - The updated experiment data including the database id or the encountered error
-public isolated function updateExperiment(int experimentId, *Experiment experiment) returns ExperimentFull|error {
-    transaction {
-        stream<Experiment, sql:Error?> experiments;
-        var test = check testDB->execute(
-            `UPDATE Experiment SET name=${experiment.name}, description=${experiment.description} WHERE experimentId = ${experimentId};`
-        );
-        io:println(test);
-        check commit;
-    }
+public isolated transactional function updateExperiment(int experimentId, *Experiment experiment) returns ExperimentFull|error {
+    stream<Experiment, sql:Error?> experiments;
+    var test = check testDB->execute(
+        `UPDATE Experiment SET name=${experiment.name}, description=${experiment.description} WHERE experimentId = ${experimentId};`
+    );
+    io:println(test);
     return {experimentId, name: experiment.name, description: experiment.description};
 }
 
@@ -223,7 +223,7 @@ public isolated function updateExperiment(int experimentId, *Experiment experime
 # + experimentId - The experiment id
 # + all - If true count all experiment data including old version, if false count only the newest verwions (e.g. distinct data names)
 # + return - The count or the encountered error
-public isolated function getExperimentDataCount(int experimentId, boolean all=true) returns int|error {
+public isolated transactional function getExperimentDataCount(int experimentId, boolean all=true) returns int|error {
     stream<RowCount, sql:Error> result;
     if all {
         result = testDB->query(`SELECT count(*) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId};`);
@@ -239,7 +239,7 @@ public isolated function getExperimentDataCount(int experimentId, boolean all=tr
 }
 
 
-public isolated function getDataList(int experimentId, boolean all=true, int 'limit = 100, int offset = 0) returns ExperimentDataFull[]|error {
+public isolated transactional function getDataList(int experimentId, boolean all=true, int 'limit = 100, int offset = 0) returns ExperimentDataFull[]|error {
     stream<ExperimentDataFull, sql:Error?> experimentData;
     if all {
         experimentData = testDB->query(`SELECT dataId, experimentId, name, version, location, type, contentType 
@@ -267,7 +267,7 @@ public isolated function getDataList(int experimentId, boolean all=true, int 'li
 }
 
 
-public isolated function getData(int experimentId, string name, string? 'version) returns ExperimentDataFull|error {
+public isolated transactional function getData(int experimentId, string name, string? 'version) returns ExperimentDataFull|error {
     stream<ExperimentDataFull, sql:Error?> data;
 
     if 'version == () || 'version == "latest" {
@@ -294,7 +294,7 @@ public isolated function getData(int experimentId, string name, string? 'version
 // Timeline ////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
-public isolated function getTimelineStepCount(int experimentId) returns int|error {
+public isolated transactional function getTimelineStepCount(int experimentId) returns int|error {
     stream<RowCount, sql:Error> result = testDB->query(
         `SELECT count(*) AS rowCount FROM TimelineStep WHERE experimentId = ${experimentId};`
     );
@@ -307,7 +307,7 @@ public isolated function getTimelineStepCount(int experimentId) returns int|erro
     }
 }
 
-public isolated function castToTimelineStepFull(TimelineStepSQL step) returns TimelineStepFull|error {
+public isolated transactional function castToTimelineStepFull(TimelineStepSQL step) returns TimelineStepFull|error {
     var startString = step.'start;
     if startString is string {
         if !startString.endsWith("Z") {
@@ -327,7 +327,7 @@ public isolated function castToTimelineStepFull(TimelineStepSQL step) returns Ti
     return step.cloneWithType();
 }
 
-public isolated function getTimelineStepList(int experimentId, boolean allAttributes=false, int 'limit = 100, int offset = 0) returns TimelineStepFull[]|error {
+public isolated transactional function getTimelineStepList(int experimentId, boolean allAttributes=false, int 'limit = 100, int offset = 0) returns TimelineStepFull[]|error {
     stream<TimelineStepSQL, sql:Error?> timelineSteps;
     if allAttributes {
         timelineSteps = testDB->query(
@@ -366,7 +366,7 @@ public isolated function getTimelineStepList(int experimentId, boolean allAttrib
 }
 
 
-public isolated function getTimelineStep(int experimentId, int sequence) returns TimelineStepWithParams|error {
+public isolated transactional function getTimelineStep(int experimentId, int sequence) returns TimelineStepWithParams|error {
     stream<TimelineStepSQL, sql:Error?> timelineStep = testDB->query(
         `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, processorName, processorVersion, processorLocation, parameterDescriptionLocation, parameters
          FROM TimelineStep WHERE experimentId=${experimentId} AND sequence=${sequence};`
@@ -392,7 +392,7 @@ public isolated function getTimelineStep(int experimentId, int sequence) returns
     return error(string `Timeline step with experimentId: ${experimentId} and sequence: ${sequence} was not found!`);
 }
 
-public isolated function getTimelineStepNotes(int experimentId, int sequence) returns string|error {
+public isolated transactional function getTimelineStepNotes(int experimentId, int sequence) returns string|error {
     stream<record {|string notes;|}, sql:Error?> note = testDB->query(
         `SELECT notes
          FROM TimelineStep WHERE experimentId=${experimentId} AND sequence=${sequence};`
@@ -405,5 +405,13 @@ public isolated function getTimelineStepNotes(int experimentId, int sequence) re
     }
 
     return error(string `Notes for timeline step with experimentId: ${experimentId} and sequence: ${sequence} were not found!`);
+}
+
+public isolated transactional function updateTimelineStepNotes(int experimentId, int sequence, string notes) returns error? {
+    stream<Experiment, sql:Error?> experiments;
+    var test = check testDB->execute(
+        `UPDATE TimelineStep SET notes=${notes} WHERE experimentId = ${experimentId} AND sequence=${sequence};`
+    );
+    io:println(test);
 }
 
