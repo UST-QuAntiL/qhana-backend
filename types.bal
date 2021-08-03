@@ -52,6 +52,7 @@ public type RootResponse record {|
 # Api response for a single experiment.  
 public type ExperimentResponse record {|
     *ApiResponse;
+    int experimentId;
     *database:Experiment;
 |};
 
@@ -72,6 +73,7 @@ public type ExperimentListResponse record {|
 public isolated function mapToExperimentResponse(database:ExperimentFull experiment) returns ExperimentResponse {
     return {
         '\@self: string `/experiments/${experiment.experimentId}`,
+        experimentId: experiment.experimentId,
         name: experiment.name,
         description: experiment.description
     };
