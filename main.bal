@@ -39,8 +39,13 @@ service / on new http:Listener(port) {
         };
     }
 
-    resource function get plugin\-runners() returns http:Ok {
-        return {};
+    resource function get plugin\-runners() returns PluginRunnersListResponse {
+        // FIXME load from database...
+        return {
+            '\@self: "/plugin-runners",
+            items: ["http://localhost:5005"],
+            itemCount: 1
+        };
     }
     resource function get tasks/[string taskId]() returns http:Ok {
         return {};
