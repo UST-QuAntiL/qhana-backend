@@ -141,16 +141,20 @@ service / on new http:Listener(port) {
 
     resource function get experiments/[int experimentId]/data/[string name](string? 'version) returns ExperimentDataResponse|http:InternalServerError {
         database:ExperimentDataFull data;
+        int? producingStep;
+        int[]? inputFor;
 
         transaction {
             data = check database:getData(experimentId, name, 'version);
+            producingStep = check database:getProducingStepOfData(data);
+            inputFor = check database:getStepsUsingData(data);
             check commit;
         } on fail error err {
             io:println(data);
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
-        return mapToExperimentDataResponse(data);
+        return mapToExperimentDataResponse(data, producingStep, inputFor);
     }
 
     resource function get experiments/[int experimentId]/data/[string name]/download(string? 'version, http:Caller caller) returns error? {

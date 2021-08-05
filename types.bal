@@ -88,6 +88,10 @@ public isolated function mapToExperimentResponse(database:ExperimentFull experim
 public type ExperimentDataResponse record {|
     *ApiResponse;
     string download;
+    int producingStep?;
+    string producingStepLink?;
+    int[] inputFor?;
+    string[] inputForLinks?;
     string name;
     int 'version;
     string 'type;
@@ -102,8 +106,8 @@ public type ExperimentDataListResponse record {|
 |};
 
 
-public isolated function mapToExperimentDataResponse(database:ExperimentDataFull data) returns ExperimentDataResponse {
-    return {
+public isolated function mapToExperimentDataResponse(database:ExperimentDataFull data, int? producingStep=(), int[]? inputFor=()) returns ExperimentDataResponse {
+    ExperimentDataResponse dataMapped = {
         '\@self: string `/experiments/${data.experimentId}/data/${data.name}?version=${data.'version}`,
         download: string `/experiments/${data.experimentId}/data/${data.name}/download?version=${data.'version}`,
         name: data.name,
@@ -111,6 +115,15 @@ public isolated function mapToExperimentDataResponse(database:ExperimentDataFull
         'type: data.'type,
         contentType: data.contentType
     };
+    if (producingStep != ()) {
+        dataMapped.producingStep = producingStep;
+        dataMapped.producingStepLink = string `/experiments/${data.experimentId}/timeline/${producingStep}`;
+    }
+    if (inputFor != ()) {
+        dataMapped.inputFor = inputFor;
+        dataMapped.inputForLinks = from var step in inputFor select string `/experiments/${data.experimentId}/timeline/${step}`;
+    }
+    return dataMapped;
 }
 
 

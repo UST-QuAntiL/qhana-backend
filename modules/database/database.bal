@@ -289,6 +289,44 @@ public isolated transactional function getData(int experimentId, string name, st
     return error(string `Experiment data with experimentId: ${experimentId}, name: ${name} and version: ${'version == () ? "latest" : 'version} was not found!`);
 }
 
+public isolated transactional function getProducingStepOfData(int|ExperimentDataFull data) returns int|error {
+    stream<record {int producingStep;}, sql:Error?> step;
+
+    final var dataId = (data is int) ? data : data.dataId;
+    step = testDB->query(
+        `SELECT sequence AS producingStep FROM StepData JOIN TimelineStep ON StepData.stepId = TimelineStep.stepId 
+         WHERE relationType = "output" and dataId = ${dataId} LIMIT 1;`
+    );
+
+    var result = step.next();
+
+    if !(result is sql:Error) && (result != ()) {
+        return result.value.producingStep;
+    }
+
+    return error(string `Experiment data with dataId: ${dataId} has no producing step!`);
+}
+
+public isolated transactional function getStepsUsingData(int|ExperimentDataFull data) returns int[]|error {
+    stream<record {int sequence;}, sql:Error?> steps;
+
+    final var dataId = (data is int) ? data : data.dataId;
+    steps = testDB->query(
+        `SELECT sequence FROM StepData JOIN TimelineStep ON StepData.stepId = TimelineStep.stepId 
+         WHERE relationType = "input" and dataId = ${dataId} LIMIT 1;`
+    );
+
+    int[]|error? inputForSteps = from var step in steps select step.sequence;
+    if inputForSteps is () {
+        return [];
+    } else if !(inputForSteps is error) {
+        return inputForSteps;
+    }
+
+    return error(string `Experiment data with dataId: ${dataId} has no producing step!`);
+}
+
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Timeline ////////////////////////////////////////////////////////////////////
