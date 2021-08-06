@@ -56,7 +56,7 @@ CREATE INDEX IF NOT EXISTS "ix_data_contenttype" ON "ExperimentData" (
 );
 
 -- "start"	DATETIME NOT NULL DEFAULT `strftime('%Y-%m-%dT%H:%M:%S', 'now')`, (does not work in sqlite, preserved here for later)
-CREATE TABLE IF NOT EXISTS "TimelineSteps" (
+CREATE TABLE IF NOT EXISTS "TimelineStep" (
 	"stepId"	INTEGER NOT NULL,
 	"experimentId"	INTEGER NOT NULL,
 	"sequence"	INTEGER NOT NULL,
