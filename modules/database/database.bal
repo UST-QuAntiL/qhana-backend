@@ -50,9 +50,13 @@ public type ExperimentFull record {|
 
 // Data ////////////////////////////////////////////////////////////////////////
 
-public type ExperimentData record {|
+public type ExperimentDataReference record {|
     string name;
-    int 'version;
+    int 'version;    
+|};
+
+public type ExperimentData record {|
+    *ExperimentDataReference;
     string location;
     string 'type;
     string contentType;
@@ -69,11 +73,14 @@ public type ExperimentDataFull record {|
 public type TimelineStep record {|
     time:Utc 'start;
     time:Utc? end=();
+    string status="PENDING";
+    string? resultLog=();
     string processorName;
     string? processorVersion=();
     string? processorLocation=();
     string parameters?; // optional for small requests
-    string? parameterDescriptionLocation=();
+    string? parametersContentType=();
+    string? parametersDescriptionLocation=();
     string notes?; // optional for small requests
 |};
 
@@ -90,11 +97,14 @@ public type TimelineStepSQL record {|
     readonly int sequence;
     string|time:Utc 'start;
     string|time:Utc|() end=();
+    string status="PENDING";
+    string? resultLog=();
     string processorName;
     string? processorVersion=();
     string? processorLocation=();
     string parameters?; // optional for small requests
-    string? parameterDescriptionLocation=();
+    string? parametersContentType=();
+    string? parametersDescriptionLocation=();
     string notes?; // optional for small requests
 |};
 
@@ -369,14 +379,14 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
     stream<TimelineStepSQL, sql:Error?> timelineSteps;
     if allAttributes {
         timelineSteps = testDB->query(
-            `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, processorName, processorVersion, processorLocation, parameterDescriptionLocation, parameters, notes 
+            `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultLog, processorName, processorVersion, processorLocation, parametersDescriptionLocation, parameters, parametersContentType, notes 
              FROM TimelineStep WHERE experimentId=${experimentId} 
              ORDER BY sequence ASC 
              LIMIT ${'limit} OFFSET ${offset};`
         );
     } else {
         timelineSteps = testDB->query(
-            `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, processorName, processorVersion, processorLocation, parameterDescriptionLocation 
+            `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, null AS resultLog, processorName, processorVersion, processorLocation, parametersDescriptionLocation 
              FROM TimelineStep WHERE experimentId=${experimentId} 
              ORDER BY sequence ASC 
              LIMIT ${'limit} OFFSET ${offset};`
@@ -406,7 +416,7 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
 
 public isolated transactional function getTimelineStep(int experimentId, int sequence) returns TimelineStepWithParams|error {
     stream<TimelineStepSQL, sql:Error?> timelineStep = testDB->query(
-        `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, processorName, processorVersion, processorLocation, parameterDescriptionLocation, parameters
+        `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultLog, processorName, processorVersion, processorLocation, parametersDescriptionLocation, parameters, parametersContentType
          FROM TimelineStep WHERE experimentId=${experimentId} AND sequence=${sequence};`
     );
 
@@ -428,6 +438,44 @@ public isolated transactional function getTimelineStep(int experimentId, int seq
     io:println(result);
 
     return error(string `Timeline step with experimentId: ${experimentId} and sequence: ${sequence} was not found!`);
+}
+
+public isolated transactional function getStepInputData(int|TimelineStepFull step) returns ExperimentDataReference[]|error {
+    stream<ExperimentDataReference, sql:Error?> inputData;
+
+    var stepId = step is int ? step : step.stepId;
+    inputData = testDB->query(
+        `SELECT name, version FROM StepData JOIN ExperimentData ON StepData.dataId = ExperimentData.dataId 
+         WHERE relationType = "input" and stepId = ${stepId};`
+    );
+
+    ExperimentDataReference[]|error? inputDataList = from var row in inputData select row;
+    if inputDataList is () {
+        return [];
+    } else if !(inputDataList is error) {
+        return inputDataList;
+    }
+
+    return error(string `Failed to retrieve input data for experiment step with stepId ${stepId}!`);
+}
+
+public isolated transactional function getStepOutputData(int|TimelineStepFull step) returns ExperimentDataReference[]|error {
+    stream<ExperimentDataReference, sql:Error?> outputData;
+
+    var stepId = step is int ? step : step.stepId;
+    outputData = testDB->query(
+        `SELECT name, version FROM StepData JOIN ExperimentData ON StepData.dataId = ExperimentData.dataId 
+         WHERE relationType = "output" and stepId = ${stepId};`
+    );
+
+    ExperimentDataReference[]|error? outputDataList = from var row in outputData select row;
+    if outputDataList is () {
+        return [];
+    } else if !(outputDataList is error) {
+        return outputDataList;
+    }
+
+    return error(string `Failed to retrieve output data for experiment step with stepId ${stepId}!`);
 }
 
 public isolated transactional function getTimelineStepNotes(int experimentId, int sequence) returns string|error {

@@ -219,16 +219,20 @@ service / on new http:Listener(port) {
     }
     resource function get experiments/[int experimentId]/timeline/[int timelineStep]() returns TimelineStepResponse|http:InternalServerError {
         database:TimelineStepWithParams result;
+        database:ExperimentDataReference[] inputData;
+        database:ExperimentDataReference[] outputData;
         
         transaction {
             result = check database:getTimelineStep(experimentId, timelineStep);
+            inputData = check database:getStepInputData(result);
+            outputData = check database:getStepOutputData(result);
             check commit;
         } on fail error err {
             io:println(err);
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
-        return mapToTimelineStepResponse(result);
+        return mapToTimelineStepResponse(result, inputData, outputData);
     }
     resource function get experiments/[int experimentId]/timeline/[int timelineStep]/notes() returns TimelineStepNotesResponse|http:InternalServerError {
         string result;

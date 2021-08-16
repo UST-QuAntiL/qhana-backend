@@ -144,15 +144,22 @@ public type TimelineStepMinResponse record {|
     int sequence;
     string 'start;
     string? end=();
+    string status;
     string processorName;
     string? processorVersion=();
     string? processorLocation=();
-    string? parameterDescriptionLocation=();
+    string? parametersContentType=();
+    string? parametersDescriptionLocation=();
 |};
 
 public type TimelineStepResponse record {|
     *TimelineStepMinResponse;
+    string resultLog;
     string parameters;
+    database:ExperimentDataReference[] inputData;
+    string[] inputDataLinks;
+    database:ExperimentDataReference[] outputData;
+    string[] outputDataLinks;
 |};
 
 
@@ -172,29 +179,46 @@ public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull 
     var end = step.end;
     return {
         '\@self: string`/experiments/${step.experimentId}/timeline/${step.sequence}`,
-        notes: string `/experiments/${step.experimentId}/timeline/${step.sequence}/notes`,
+        notes: string `./notes`,
         sequence: step.sequence,
         'start: time:utcToString(step.'start),
         end: end == () ? () : time:utcToString(end),
+        status: step.status,
         processorName: step.processorName,
         processorVersion: step.processorVersion,
         processorLocation: step.processorLocation,
-        parameterDescriptionLocation: step.parameterDescriptionLocation
+        parametersDescriptionLocation: step.parametersDescriptionLocation
     };
 }
 
-public isolated function mapToTimelineStepResponse(database:TimelineStepWithParams step) returns TimelineStepResponse {
+public isolated function mapToTimelineStepResponse(
+        database:TimelineStepWithParams step, 
+        database:ExperimentDataReference[] inputData=[], 
+        database:ExperimentDataReference[] outputData=[]
+    ) returns TimelineStepResponse {
     var end = step.end;
+    var log = step.resultLog;
+    var inputDataLinks = from var dataRef in inputData 
+        select string`/experiments/${step.experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
+    var outputDataLinks = from var dataRef in outputData 
+        select string`/experiments/${step.experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
     return {
         '\@self: string `/experiments/${step.experimentId}/timeline/${step.sequence}`,
-        notes: string `/experiments/${step.experimentId}/timeline/${step.sequence}/notes`,
+        notes: string `./notes`,
         sequence: step.sequence,
         'start: time:utcToString(step.'start),
         end: end == () ? () : time:utcToString(end),
+        status: step.status,
+        resultLog: log == () ? "" : log,
         processorName: step.processorName,
         processorVersion: step.processorVersion,
         processorLocation: step.processorLocation,
-        parameterDescriptionLocation: step.parameterDescriptionLocation,
-        parameters: step?.parameters
+        parametersDescriptionLocation: step.parametersDescriptionLocation,
+        parametersContentType: step.parametersContentType,
+        parameters: step?.parameters,
+        inputData: inputData,
+        inputDataLinks: inputDataLinks,
+        outputData: outputData,
+        outputDataLinks: outputDataLinks
     };
 }
