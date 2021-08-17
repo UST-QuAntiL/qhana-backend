@@ -250,20 +250,19 @@ public isolated transactional function getExperimentDataCount(int experimentId, 
 
 
 public isolated transactional function getDataList(int experimentId, boolean all=true, int 'limit = 100, int offset = 0) returns ExperimentDataFull[]|error {
+    var baseQuery = `SELECT dataId, experimentId, name, version, location, type, contentType 
+                     FROM ExperimentData WHERE experimentId=${experimentId} `;
+    var baseQuerySuffix = `ORDER BY name ASC, version DESC 
+                           LIMIT ${'limit} OFFSET ${offset};`;
+
     stream<ExperimentDataFull, sql:Error?> experimentData;
     if all {
-        experimentData = testDB->query(`SELECT dataId, experimentId, name, version, location, type, contentType 
-                                        FROM ExperimentData WHERE experimentId=${experimentId} 
-                                        ORDER BY name ASC, version DESC 
-                                        LIMIT ${'limit} OFFSET ${offset};`);
+        experimentData = testDB->query(check new ConcatQuery(baseQuery, baseQuerySuffix));
     } else {
-        experimentData = testDB->query(`SELECT dataId, experimentId, name, version, location, type, contentType 
-                                        FROM ExperimentData WHERE experimentId=${experimentId} 
-                                            AND version=(SELECT MAX(t2.version) 
-                                                FROM ExperimentData AS t2 
-                                                WHERE ExperimentData.name=t2.name AND t2.experimentId=${experimentId})
-                                        ORDER BY name ASC, version DESC 
-                                        LIMIT ${'limit} OFFSET ${offset};`);
+        var extraFilter = `AND version=(SELECT MAX(t2.version) 
+                                FROM ExperimentData AS t2 
+                                WHERE ExperimentData.name=t2.name AND t2.experimentId=${experimentId}) `;
+        experimentData = testDB->query(check new ConcatQuery(baseQuery, extraFilter, baseQuerySuffix));
     }
 
     ExperimentDataFull[]? experimentDataList = check from var data in experimentData
@@ -278,16 +277,16 @@ public isolated transactional function getDataList(int experimentId, boolean all
 
 
 public isolated transactional function getData(int experimentId, string name, string? 'version) returns ExperimentDataFull|error {
+    var baseQuery = `SELECT dataId, experimentId, name, version, location, type, contentType 
+                     FROM ExperimentData WHERE experimentId=${experimentId} AND name=${name}`;
     stream<ExperimentDataFull, sql:Error?> data;
 
     if 'version == () || 'version == "latest" {
-        data = testDB->query(`SELECT dataId, experimentId, name, version, location, type, contentType 
-                              FROM ExperimentData WHERE experimentId=${experimentId} AND name=${name}
-                              ORDER BY version DESC 
-                              LIMIT 1;`); // get latest version with order by descending and limit to one
+        // get latest version with order by descending and limit to one
+        data = testDB->query(check new ConcatQuery(baseQuery, ` ORDER BY version DESC LIMIT 1;`));
     } else {
-        data = testDB->query(`SELECT dataId, experimentId, name, version, location, type, contentType 
-                              FROM ExperimentData WHERE experimentId=${experimentId} AND name=${name} AND version=${'version};`);
+        // get a specific version with order by descending and limit to one
+        data = testDB->query(check new ConcatQuery(baseQuery, ` AND version=${'version};`));
     }
 
     var result = data.next();
@@ -388,7 +387,7 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
 
     query.push(`FROM TimelineStep WHERE experimentId=${experimentId} ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`);
 
-    stream<TimelineStepSQL, sql:Error?> timelineSteps = testDB->query(check new ConcatenatingTemplate(...query));
+    stream<TimelineStepSQL, sql:Error?> timelineSteps = testDB->query(check new ConcatQuery(...query));
 
     (TimelineStepSQL|TimelineStepFull)[]|error|() tempList = from var step in timelineSteps select step;
 

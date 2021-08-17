@@ -36,7 +36,7 @@ isolated function checkAllValues((any|error)[] values) returns sql:Value[] | err
 
 
 # Custom class that allows concatenating raw templates to dynamically build sql queries
-public class ConcatenatingTemplate {
+public class ConcatQuery {
     *sql:ParameterizedQuery;
 
     isolated function init(object:RawTemplate... templates) returns error? {
