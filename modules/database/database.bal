@@ -376,22 +376,19 @@ public isolated transactional function castToTimelineStepFull(TimelineStepSQL st
 }
 
 public isolated transactional function getTimelineStepList(int experimentId, boolean allAttributes=false, int 'limit = 100, int offset = 0) returns TimelineStepFull[]|error {
-    stream<TimelineStepSQL, sql:Error?> timelineSteps;
+    object:RawTemplate[] query = [
+        `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, processorName, processorVersion, processorLocation, parametersDescriptionLocation`
+    ];
+
     if allAttributes {
-        timelineSteps = testDB->query(
-            `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultLog, processorName, processorVersion, processorLocation, parametersDescriptionLocation, parameters, parametersContentType, notes 
-             FROM TimelineStep WHERE experimentId=${experimentId} 
-             ORDER BY sequence ASC 
-             LIMIT ${'limit} OFFSET ${offset};`
-        );
+        query.push(`, resultLog, parameters, parametersContentType, notes `);
     } else {
-        timelineSteps = testDB->query(
-            `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, null AS resultLog, processorName, processorVersion, processorLocation, parametersDescriptionLocation 
-             FROM TimelineStep WHERE experimentId=${experimentId} 
-             ORDER BY sequence ASC 
-             LIMIT ${'limit} OFFSET ${offset};`
-        );
+        query.push(`, null AS resultLog `);
     }
+
+    query.push(`FROM TimelineStep WHERE experimentId=${experimentId} ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`);
+
+    stream<TimelineStepSQL, sql:Error?> timelineSteps = testDB->query(check new ConcatenatingTemplate(...query));
 
     (TimelineStepSQL|TimelineStepFull)[]|error|() tempList = from var step in timelineSteps select step;
 
