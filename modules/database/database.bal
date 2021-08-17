@@ -70,6 +70,15 @@ public type ExperimentDataFull record {|
 
 // Timeline ////////////////////////////////////////////////////////////////////
 
+public type TimelineStepRef record {|
+    readonly int experimentId;
+    readonly int sequence;
+|};
+
+public type TimelineStepDbRef record {|
+    readonly int stepId;
+|};
+
 public type TimelineStep record {|
     time:Utc 'start;
     time:Utc? end=();
@@ -85,16 +94,14 @@ public type TimelineStep record {|
 |};
 
 public type TimelineStepFull record {|
-    readonly int stepId;
-    readonly int experimentId;
-    readonly int sequence;
+    *TimelineStepDbRef;
+    *TimelineStepRef;
     *TimelineStep;
 |};
 
 public type TimelineStepSQL record {|
-    readonly int stepId;
-    readonly int experimentId;
-    readonly int sequence;
+    *TimelineStepDbRef;
+    *TimelineStepRef;
     string|time:Utc 'start;
     string|time:Utc|() end=();
     string status="PENDING";
@@ -410,22 +417,66 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
 }
 
 
-public isolated transactional function getTimelineStep(int experimentId, int sequence) returns TimelineStepWithParams|error {
-    stream<TimelineStepSQL, sql:Error?> timelineStep = testDB->query(
-        `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultLog, processorName, processorVersion, processorLocation, parametersDescriptionLocation, parameters, parametersContentType
-         FROM TimelineStep WHERE experimentId=${experimentId} AND sequence=${sequence};`
+public isolated transactional function createTimelineStep(*TimelineStepFull step) returns TimelineStepWithParams|error {
+    TimelineStepWithParams? result = ();
+
+    var paramContentType = step.parametersContentType != () ? step.parametersContentType : "application/x-www-form-urlencoded";
+    var parameters = step?.parameters;
+
+    stream<TimelineStepSQL, sql:Error?> createdStep;
+    var insertResult = check testDB->execute(
+        `INSERT INTO TimelineStep (experimentId, sequence, start, end, processorName, processorVersion, processorLocation, parameters, parametersContentType, parametersDescriptionLocation) 
+         VALUES (${step.experimentId}, (SELECT sequence+1 FROM TimelineStep WHERE experimentId = 1 ORDER BY sequence DESC LIMIT 1), strftime('%Y-%m-%dT%H:%M:%S', 'now'), ${step.processorName}, ${step.processorVersion}, ${step.processorLocation}, ${parameters}, ${paramContentType}, ${step.parametersDescriptionLocation});`
     );
+
+    // extract experiment id and build full experiment data
+    var stepId = insertResult.lastInsertId;
+    if stepId is string {
+        fail error("Expected integer id but got a string!");
+    } else if stepId == () {
+        fail error("Expected the experiment id back but got nothing!");
+    } else {
+        int s = check stepId.ensureType();
+        return getTimelineStep(stepId=s);
+    }
+
+}
+
+
+public isolated transactional function getTimelineStep(int? experimentId=(), int? sequence=(), int? stepId=()) returns TimelineStepWithParams|error {
+    var baseQuery = `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultLog, processorName, processorVersion, processorLocation, parametersDescriptionLocation, parameters, parametersContentType
+                     FROM TimelineStep `;
+    
+    stream<TimelineStepSQL, sql:Error?> timelineStep;
+
+    TimelineStepRef|TimelineStepDbRef ref;
+    
+    if experimentId == () && sequence == () && stepId == () {
+        return error("Must provide either experimentId and sequence or the stepId!");
+    } else if experimentId != () && sequence != () && stepId != () {
+        return error("Must not provide all parameters at the same time!");
+    } else if experimentId != () && sequence != () {
+        timelineStep = testDB->query(
+            check new ConcatQuery(baseQuery, `WHERE experimentId=${experimentId} AND sequence=${sequence};`)
+        );
+        ref = {experimentId: experimentId, sequence: sequence};
+    } else if stepId != () {
+        timelineStep = testDB->query(check new ConcatQuery(baseQuery, `WHERE stepId=${stepId};`));
+        ref = {stepId: stepId};
+    } else {
+        return error("Must provide either experimentId and sequence or the stepId!");
+    }
 
     var result = timelineStep.next();
 
     if !(result is sql:Error) && (result != ()) {
         TimelineStepFull|error stepFull = castToTimelineStepFull(result.value);
         if stepFull is error {
-            return error(string`The Timeline step with experimentId: ${experimentId} and sequence: ${sequence} could not be read from the database!`, stepFull);
+            return error(string`The Timeline step with reference ${ref.toString()} could not be read from the database!`, stepFull);
         } else {
             TimelineStepWithParams|error step = stepFull.cloneWithType(TimelineStepWithParams);
             if step is error {
-                return error(string`The Timeline step with experimentId: ${experimentId} and sequence: ${sequence} did not have the required parameters field!`, step);
+                return error(string`The Timeline step with reference ${ref.toString()} did not have the required parameters field!`, step);
             }
             return step;
         }
@@ -433,7 +484,7 @@ public isolated transactional function getTimelineStep(int experimentId, int seq
 
     io:println(result);
 
-    return error(string `Timeline step with experimentId: ${experimentId} and sequence: ${sequence} was not found!`);
+    return error(string `Timeline step with reference ${ref.toString()} was not found!`);
 }
 
 public isolated transactional function getStepInputData(int|TimelineStepFull step) returns ExperimentDataReference[]|error {

@@ -223,7 +223,7 @@ service / on new http:Listener(port) {
         database:ExperimentDataReference[] outputData;
         
         transaction {
-            result = check database:getTimelineStep(experimentId, timelineStep);
+            result = check database:getTimelineStep(experimentId=experimentId, sequence=timelineStep);
             inputData = check database:getStepInputData(result);
             outputData = check database:getStepOutputData(result);
             check commit;
