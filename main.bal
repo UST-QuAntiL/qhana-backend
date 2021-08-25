@@ -166,7 +166,7 @@ service / on new http:Listener(port) {
         database:ExperimentDataFull data;
 
         http:Response resp = new;
-        
+
         transaction {
             data = check database:getData(experimentId, name, 'version);
             check commit;
@@ -214,9 +214,44 @@ service / on new http:Listener(port) {
             select mapToTimelineStepMinResponse(s); 
         return {'\@self: string `/experiments/${experimentId}/timeline`, items: stepList, itemCount: stepCount};
     }
-    resource function post experiments/[int experimentId]/timeline() returns http:Ok {
-        return {};
+
+    resource function post experiments/[int experimentId]/timeline(@http:Payload TimelineStepPost stepData) returns TimelineStepResponse|http:InternalServerError {
+        database:TimelineStepWithParams createdStep;
+        database:ExperimentDataReference[] inputData;
+
+        transaction {
+            inputData = from var inputUrl in stepData.inputData
+                        select check mapFileUrlToDataRef(experimentId, inputUrl);
+            createdStep = check database:createTimelineStep(
+                experimentId=experimentId,
+                parameters=stepData.parameters,
+                parametersContentType=stepData.parametersContentType,
+                parametersDescriptionLocation=stepData.parametersDescriptionLocation,
+                processorName=stepData.processorName,
+                processorVersion=stepData.processorVersion,
+                processorLocation=stepData.processorLocation
+            );
+            check database:saveTimelineStepInputData(createdStep.stepId, experimentId, inputData);
+            check database:createTimelineStepResultWatcher(createdStep.stepId, stepData.resultLocation);
+            check commit;
+        } on fail error err {
+            io:println(err);
+            // if with return does not correctly narrow type for rest of function... this does.
+            http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
+            return resultErr;
+        }
+        do {
+            ResultWatcher watcher = check new (createdStep.stepId);
+            check watcher.schedule(2, 10, 5, 10, 30, 5, 60, 5, 600);
+        } on fail error err {
+            io:println(err);
+            // if with return does not correctly narrow type for rest of function... this does.
+            http:InternalServerError resultErr = {body: "Failed to start watcher."};
+            return resultErr;
+        }
+        return mapToTimelineStepResponse(createdStep, inputData, []);
     }
+
     resource function get experiments/[int experimentId]/timeline/[int timelineStep]() returns TimelineStepResponse|http:InternalServerError {
         database:TimelineStepWithParams result;
         database:ExperimentDataReference[] inputData;
@@ -252,5 +287,20 @@ service / on new http:Listener(port) {
     }
     resource function put experiments/[int experimentId]/timeline/[int timelineStep]/notes() returns http:Ok {
         return {};
+    }
+}
+
+
+public function main() {
+    // registering background tasks
+    transaction {
+        var stepsToWatch = check database:getTimelineStepsWithResultWatchers();
+        foreach var stepId in stepsToWatch {
+            ResultWatcher watcher = check new (stepId);
+            check watcher.schedule(2, 10, 5, 10, 30, 5, 60, 5, 600);
+        }
+        check commit;
+    } on fail error err {
+        io:println(err);
     }
 }

@@ -15,6 +15,7 @@
 import ballerina/io;
 import ballerina/time;
 import ballerina/sql;
+import ballerina/mime;
 import ballerinax/java.jdbc;
 
 sql:ConnectionPool pool = { 
@@ -283,7 +284,7 @@ public isolated transactional function getDataList(int experimentId, boolean all
 }
 
 
-public isolated transactional function getData(int experimentId, string name, string? 'version) returns ExperimentDataFull|error {
+public isolated transactional function getData(int experimentId, string name, string|int|() 'version) returns ExperimentDataFull|error {
     var baseQuery = `SELECT dataId, experimentId, name, version, location, type, contentType 
                      FROM ExperimentData WHERE experimentId=${experimentId} AND name=${name}`;
     stream<ExperimentDataFull, sql:Error?> data;
@@ -389,7 +390,7 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
     if allAttributes {
         query.push(`, resultLog, parameters, parametersContentType, notes `);
     } else {
-        query.push(`, null AS resultLog `);
+        query.push(`, NULL AS resultLog `);
     }
 
     query.push(`FROM TimelineStep WHERE experimentId=${experimentId} ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`);
@@ -397,8 +398,6 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
     stream<TimelineStepSQL, sql:Error?> timelineSteps = testDB->query(check new ConcatQuery(...query));
 
     (TimelineStepSQL|TimelineStepFull)[]|error|() tempList = from var step in timelineSteps select step;
-
-    io:println(tempList);
 
     TimelineStepFull[] stepList = [];
     if tempList is error{
@@ -417,16 +416,25 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
 }
 
 
-public isolated transactional function createTimelineStep(*TimelineStepFull step) returns TimelineStepWithParams|error {
+public isolated transactional function createTimelineStep(
+        int experimentId,
+        string processorName,
+        string? processorVersion=(),
+        string? processorLocation=(),
+        string? parameters=(),
+        string? parametersContentType=mime:APPLICATION_FORM_URLENCODED,
+        string? parametersDescriptionLocation=()
+    ) returns TimelineStepWithParams|error {
     TimelineStepWithParams? result = ();
 
-    var paramContentType = step.parametersContentType != () ? step.parametersContentType : "application/x-www-form-urlencoded";
-    var parameters = step?.parameters;
+    if parameters == () && parametersContentType == () {
+        return error("When parameters are given the parameters content type is required!");
+    }
 
     stream<TimelineStepSQL, sql:Error?> createdStep;
     var insertResult = check testDB->execute(
         `INSERT INTO TimelineStep (experimentId, sequence, start, end, processorName, processorVersion, processorLocation, parameters, parametersContentType, parametersDescriptionLocation) 
-         VALUES (${step.experimentId}, (SELECT sequence+1 FROM TimelineStep WHERE experimentId = 1 ORDER BY sequence DESC LIMIT 1), strftime('%Y-%m-%dT%H:%M:%S', 'now'), ${step.processorName}, ${step.processorVersion}, ${step.processorLocation}, ${parameters}, ${paramContentType}, ${step.parametersDescriptionLocation});`
+         VALUES (${experimentId}, (SELECT count(*)+1 FROM TimelineStep WHERE experimentId = 1), strftime('%Y-%m-%dT%H:%M:%S', 'now'), NULL, ${processorName}, ${processorVersion}, ${processorLocation}, ${parameters}, ${parametersContentType}, ${parametersDescriptionLocation});`
     );
 
     // extract experiment id and build full experiment data
@@ -439,7 +447,6 @@ public isolated transactional function createTimelineStep(*TimelineStepFull step
         int s = check stepId.ensureType();
         return getTimelineStep(stepId=s);
     }
-
 }
 
 
@@ -482,10 +489,20 @@ public isolated transactional function getTimelineStep(int? experimentId=(), int
         }
     }
 
-    io:println(result);
-
     return error(string `Timeline step with reference ${ref.toString()} was not found!`);
 }
+
+public isolated transactional function updateTimelineStepStatus(int|TimelineStepFull step, string status, string? resultLog) returns error? {
+    var stepId = step is int ? step : step.stepId;
+
+    _ = check testDB->execute(`UPDATE TimelineStep 
+                               SET 
+                                    end=strftime('%Y-%m-%dT%H:%M:%S', 'now'), 
+                                    status=${status},
+                                    resultLog=${resultLog}
+                               WHERE stepId = ${stepId} AND end IS NULL;`);
+}
+
 
 public isolated transactional function getStepInputData(int|TimelineStepFull step) returns ExperimentDataReference[]|error {
     stream<ExperimentDataReference, sql:Error?> inputData;
@@ -506,6 +523,13 @@ public isolated transactional function getStepInputData(int|TimelineStepFull ste
     return error(string `Failed to retrieve input data for experiment step with stepId ${stepId}!`);
 }
 
+public isolated transactional function saveTimelineStepInputData(int stepId, int experimentId, ExperimentDataReference[] inputData) returns error? {
+    foreach var data in inputData {
+        var experimentData = check getData(experimentId, data.name, data.'version);
+        _ = check testDB->execute(`INSERT INTO StepData (stepId, dataId, relationType) VALUES (${stepId}, ${experimentData.dataId}, ${"input"});`);
+    }
+}
+
 public isolated transactional function getStepOutputData(int|TimelineStepFull step) returns ExperimentDataReference[]|error {
     stream<ExperimentDataReference, sql:Error?> outputData;
 
@@ -523,6 +547,18 @@ public isolated transactional function getStepOutputData(int|TimelineStepFull st
     }
 
     return error(string `Failed to retrieve output data for experiment step with stepId ${stepId}!`);
+}
+
+public isolated transactional function saveTimelineStepOutputData(int stepId, int experimentId, ExperimentData[] outputData) returns error? {
+    var baseQuery = `INSERT INTO ExperimentData (experimentId, name, version, location, type, contentType) VALUES `;
+    var dataQuery = from var d in outputData
+                select `(${experimentId}, ${d.name}, (SELECT count(*) + 1 FROM ExperimentData WHERE name = ${d.name}), ${d.location}, ${d.'type}, ${d.contentType})`;
+
+    foreach var insertData in dataQuery {
+        var result = check testDB->execute(check new ConcatQuery(baseQuery, insertData));
+        var dataId = result.lastInsertId;
+        _ = check testDB->execute(`INSERT INTO StepData (stepId, dataId, relationType) VALUES (${stepId}, ${dataId}, ${"output"});`);
+    }
 }
 
 public isolated transactional function getTimelineStepNotes(int experimentId, int sequence) returns string|error {
@@ -547,4 +583,41 @@ public isolated transactional function updateTimelineStepNotes(int experimentId,
     );
     io:println(test);
 }
+
+public isolated transactional function getTimelineStepsWithResultWatchers() returns int[]|error {
+    stream<record {int stepId;}, error> stepWatchers = testDB->query(
+        `SELECT stepId FROM ResultWatchers;`
+    );
+    return from var watcher in stepWatchers
+        select watcher.stepId;
+}
+
+public isolated transactional function createTimelineStepResultWatcher(int stepId, string resultEndpoint) returns error? {
+    if resultEndpoint == "" {
+        return error("Result endpoint cannot be empty!");
+    }
+    var insertResult = check testDB->execute(
+        `INSERT INTO ResultWatchers (stepId, resultEndpoint) 
+         VALUES (${stepId}, ${resultEndpoint});`
+    );
+}
+
+public isolated transactional function getTimelineStepResultEndpoint(int stepId) returns string?|error {
+    stream<record {string resultEndpoint;}, error> result = testDB->query(
+        `SELECT resultEndpoint FROM ResultWatchers WHERE stepId = ${stepId};`
+    );
+    var first = result.next();
+    if first is error {
+        return first;
+    } else {
+        return first.value.resultEndpoint;
+    }
+}
+
+public isolated transactional function deleteTimelineStepResultWatcher(int stepId) returns error? {
+    _ = check testDB->execute(
+        `DELETE FROM ResultWatchers WHERE stepId = ${stepId};`
+    );
+}
+
 

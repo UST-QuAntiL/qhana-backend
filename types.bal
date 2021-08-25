@@ -13,6 +13,9 @@
 // limitations under the License.
 
 import ballerina/time;
+import ballerina/mime;
+import ballerina/regex;
+import ballerina/url;
 import qhana_backend.database;
 
 # Generic error response for the api.
@@ -56,7 +59,9 @@ public type PluginRunnersListResponse record {|
 ////////////////////////////////////////////////////////////////////////////////
 
 
-# Api response for a single experiment.  
+# Api response for a single experiment.
+# 
+# + experimentId - The database id of the experiment
 public type ExperimentResponse record {|
     *ApiResponse;
     int experimentId;
@@ -137,6 +142,18 @@ public isolated function mapToExperimentDataResponse(database:ExperimentDataFull
 ////////////////////////////////////////////////////////////////////////////////
 // Timeline ////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
+
+public type TimelineStepPost record {|
+    string resultLocation;
+    string[] inputData;
+
+    string processorName;
+    string? processorVersion=();
+    string? processorLocation=();
+    string? parameters;
+    string parametersContentType=mime:APPLICATION_FORM_URLENCODED;
+    string? parametersDescriptionLocation=();
+|};
 
 public type TimelineStepMinResponse record {|
     *ApiResponse;
@@ -221,4 +238,25 @@ public isolated function mapToTimelineStepResponse(
         outputData: outputData,
         outputDataLinks: outputDataLinks
     };
+}
+
+public isolated function mapFileUrlToDataRef(int experimentId, string url) returns database:ExperimentDataReference|error {
+    var regex = string`^(https?:\/\/)?[^\/]*\/experiments\/${experimentId}\/data\/[^\/]+\/download\?version=(latest|[0-9]+)$`;
+    if !regex:matches(url, regex) {
+        return error("url does not match any file from the experiment.");
+    }
+    var dataStart = url.lastIndexOf("/data/");
+    var filenameEnd = url.lastIndexOf("/download?");
+    var queryStart = url.lastIndexOf("?");
+    var versionStart = url.lastIndexOf("=");
+    if dataStart == () || filenameEnd == () || queryStart == () || versionStart == () {
+        return error("A malformed url slipped through the regex test.");
+    } else {
+        var filename = url.substring(dataStart + 6, filenameEnd);
+        var versionNumber = url.substring(versionStart+1, url.length());
+        return {
+            name: check url:decode(filename, "UTF-8"),
+            'version: check int:fromString(versionNumber)
+        };
+    }
 }

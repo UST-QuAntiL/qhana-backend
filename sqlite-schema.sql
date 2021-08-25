@@ -110,4 +110,11 @@ CREATE INDEX IF NOT EXISTS "ix_fk_step_data_relation" ON "StepData" (
 	"relationType"
 );
 
+CREATE TABLE "ResultWatchers" (
+	"stepId"	INTEGER NOT NULL,
+	"resultEndpoint"	TEXT NOT NULL,
+	FOREIGN KEY("stepId") REFERENCES "TimelineStep"("stepId"),
+	PRIMARY KEY("stepId")
+);
+
 COMMIT;
