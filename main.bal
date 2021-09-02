@@ -20,6 +20,8 @@ import qhana_backend.database;
 configurable string[] corsDomains = ["http://localhost:4200"];
 configurable int port = 9090;
 
+configurable (decimal|int)[] watcherIntervallConfig = [2, 10, 5, 10, 10, 60, 30, 20, 60, 10, 600];
+
 # The QHAna backend api service.
 @http:ServiceConfig {
     cors: {
@@ -303,7 +305,7 @@ service / on new http:Listener(port) {
         }
         do {
             ResultWatcher watcher = check new (createdStep.stepId);
-            check watcher.schedule(2, 10, 5, 10, 30, 5, 60, 5, 600);
+            check watcher.schedule(...watcherIntervallConfig);
         } on fail error err {
             io:println(err);
             // if with return does not correctly narrow type for rest of function... this does.
@@ -358,7 +360,7 @@ public function main() {
         var stepsToWatch = check database:getTimelineStepsWithResultWatchers();
         foreach var stepId in stepsToWatch {
             ResultWatcher watcher = check new (stepId);
-            check watcher.schedule(2, 10, 5, 10, 30, 5, 60, 5, 600);
+            check watcher.schedule(...watcherIntervallConfig);
         }
         check commit;
     } on fail error err {
