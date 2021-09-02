@@ -23,6 +23,9 @@ Before the first run create a sqlite database with the provided schema.
 # first time only
 bash create-sqlite-db.sh
 
+# insert localhost plugin runner endpoint
+echo 'INSERT INTO PluginEndpoints (url, type) VALUES ("http://localhost:5005", "PluginRunner");' | sqlite3 qhana-backend.db
+
 # start qhana backend
 bal run
 ```

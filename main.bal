@@ -39,16 +39,77 @@ service / on new http:Listener(port) {
         };
     }
 
-    resource function get plugin\-runners() returns PluginRunnersListResponse {
+    resource function get plugin\-endpoints() returns PluginEndpointsListResponse|http:InternalServerError {
+        int endpointCount;
+        database:PluginEndpointFull[] endpoints;
+
+        transaction {
+            endpointCount = check database:getPluginEndpointsCount();
+            endpoints = check database:getPluginEndpoints();
+            check commit;
+        } on fail error err {
+            io:println(err);
+            // if with return does not correctly narrow type for rest of function... this does.
+            http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
+            return resultErr;
+        }
+
+        var result = from var endpoint in endpoints
+            select mapToPluginEndpointResponse(endpoint);
         // FIXME load from database...
         return {
-            '\@self: "/plugin-runners",
-            items: ["http://localhost:5005"],
-            itemCount: 1
+            '\@self: "/plugin-endpoints",
+            items: result,
+            itemCount: endpointCount
         };
     }
-    resource function get tasks/[string taskId]() returns http:Ok {
-        return {};
+
+    resource function post plugin\-endpoints(@http:Payload PluginEndpointPost endpoint) returns PluginEndpointResponse|http:InternalServerError {
+        database:PluginEndpointFull result;
+        transaction {
+            result = check database:addPluginEndpoint(endpoint);
+            check commit;
+        } on fail error err {
+            return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
+        }
+
+        return mapToPluginEndpointResponse(result);
+    }
+
+    resource function get plugin\-endpoints/[int endpointId]() returns PluginEndpointResponse|http:InternalServerError {
+        database:PluginEndpointFull result;
+        transaction {
+            result = check database:getPluginEndpoint(endpointId);
+            check commit;
+        } on fail error err {
+            return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
+        }
+
+        return mapToPluginEndpointResponse(result);
+    }
+
+    resource function put plugin\-endpoints/[int endpointId](@http:Payload PluginEndpointPost endpoint) returns PluginEndpointResponse|http:InternalServerError {
+        database:PluginEndpointFull result;
+        transaction {
+            result = check database:editPluginEndpoint(endpointId, endpoint.'type);
+            check commit;
+        } on fail error err {
+            return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
+        }
+
+        return mapToPluginEndpointResponse(result);
+    }
+
+    resource function delete plugin\-endpoints/[int endpointId]() returns http:Ok|http:InternalServerError {
+        error? result;
+        transaction {
+            result = check database:deletePluginEndpoint(endpointId);
+            check commit;
+        } on fail error err {
+            return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
+        }
+
+        return <http:Ok>{};
     }
 
     ////////////////////////////////////////////////////////////////////////////

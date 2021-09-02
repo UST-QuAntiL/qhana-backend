@@ -47,11 +47,33 @@ public type RootResponse record {|
 |};
 
 
-public type PluginRunnersListResponse record {|
+public type PluginEndpointPost record {|
+    string url;
+    string 'type="PluginRunner";
+|};
+
+public type PluginEndpointResponse record {|
     *ApiResponse;
-    string[] items;
+    int endpointId;
+    string url;
+    string 'type="PluginRunner";
+|};
+
+
+public type PluginEndpointsListResponse record {|
+    *ApiResponse;
+    PluginEndpointResponse[] items;
     int itemCount;
 |};
+
+public isolated function mapToPluginEndpointResponse(database:PluginEndpointFull endpoint) returns PluginEndpointResponse {
+    return {
+        '\@self: string `/plugin-endpoints/${endpoint.id}`,
+        endpointId: endpoint.id,
+        url: endpoint.url,
+        'type: endpoint.'type
+    };
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////

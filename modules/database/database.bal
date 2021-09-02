@@ -30,6 +30,16 @@ type RowCount record {
     int rowCount;
 };
 
+public type PluginEndpoint record {|
+    string url;
+    string 'type="PluginRunner";
+|};
+
+public type PluginEndpointFull record {|
+    readonly int id;
+    *PluginEndpoint;
+|};
+
 // Experiments /////////////////////////////////////////////////////////////////
 
 # Record containing the pure data of an Experiment.
@@ -130,6 +140,92 @@ public type StepToData record {|
 |};
 
 
+
+public isolated transactional function getPluginEndpointsCount() returns int|error {
+    stream<RowCount, sql:Error?>  result = testDB->query("SELECT count(*) AS rowCount FROM PluginEndpoints;");
+    var count = result.next();
+    check result.close();
+    if count is error {
+        return count;
+    } if count is record {RowCount value;} {
+        return count.value.rowCount;
+    } else {
+        // should never happen based on the sql query
+        return error("Could not determine the plugin endpoint count!");
+    }
+}
+
+public isolated transactional function getPluginEndpoints() returns PluginEndpointFull[]|error {
+    stream<PluginEndpointFull, sql:Error?> endpoints = testDB->query(
+        `SELECT id, url, type FROM PluginEndpoints ORDER BY type, url;`
+    );
+
+    PluginEndpointFull[]? endpointList = check from var endpoint in endpoints
+        select endpoint;
+
+    check endpoints.close();
+
+    if endpointList != () {
+        return endpointList;
+    }
+
+    return [];
+}
+
+public isolated transactional function getPluginEndpoint(int endpointId) returns PluginEndpointFull|error {
+    stream<PluginEndpointFull, sql:Error?> endpoints = testDB->query(
+        `SELECT id, url, type FROM PluginEndpoints WHERE id=${endpointId};`
+    );
+
+    var endpoint = endpoints.next();
+    check endpoints.close();
+
+    if !(endpoint is sql:Error) && (endpoint != ()) {
+        return endpoint.value;
+    }
+
+    return error(string `Endpoint with id ${endpointId} was not found!`);
+}
+
+public isolated transactional function addPluginEndpoint(*PluginEndpoint endpoint) returns PluginEndpointFull|error {
+    var result = check testDB->execute(
+        `INSERT INTO PluginEndpoints (url, type) VALUES (${endpoint.url}, ${endpoint.'type});`
+    );
+
+    var endpointId = result.lastInsertId;
+
+    if !(endpointId is int) {
+        return error("Could not parse last insert id for endpoint.");
+    } else {
+        return {
+            id: endpointId,
+            url: endpoint.url,
+            'type: endpoint.'type
+        };
+    }
+}
+
+public isolated transactional function editPluginEndpoint(int endpointId, string 'type) returns PluginEndpointFull|error {
+    var result = check testDB->execute(
+        `UPDATE PluginEndpoints SET type=${'type} WHERE id=${endpointId});`
+    );
+
+    return getPluginEndpoint(endpointId);
+}
+
+public isolated transactional function deletePluginEndpoint(int endpointId) returns error? {
+    var result = testDB->execute(
+        `DELETE FROM PluginEndpoints WHERE id=${endpointId});`
+    );
+
+    if result is error {
+        return result;
+    } else {
+        return;
+    }
+}
+
+
 ////////////////////////////////////////////////////////////////////////////////
 // Experiments /////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -139,12 +235,16 @@ public type StepToData record {|
 #
 # + return - The number of experiments or the encountered error
 public isolated transactional function getExperimentCount() returns int|error {
-    var result = testDB->query("SELECT count(*) AS rowCount FROM Experiment;", RowCount);
+    stream<RowCount, sql:Error?>  result = testDB->query("SELECT count(*) AS rowCount FROM Experiment;");
     var count = result.next();
-    if !(count is error) {
+    check result.close();
+    if count is error {
+        return count;
+    } if count is record {RowCount value;} {
         return count.value.rowCount;
     } else {
-        return count;
+        // should never happen based on the sql query
+        return error("Could not determine the experiment count!");
     }
 }
 
@@ -161,6 +261,8 @@ public isolated transactional function getExperiments(int 'limit = 100, int offs
     ExperimentFull[]? experimentList = check from var experiment in experiments
         select experiment;
 
+    check experiments.close();
+
     if experimentList != () {
         return experimentList;
     }
@@ -174,10 +276,11 @@ public isolated transactional function getExperiments(int 'limit = 100, int offs
 # + return - The experiment or the encountered error
 public isolated transactional function getExperiment(int experimentId) returns ExperimentFull|error {
     stream<ExperimentFull, sql:Error?> experiments = testDB->query(
-        `SELECT experimentId, name, description FROM Experiment WHERE experimentId = ${experimentId};`
+        `SELECT experimentId, name, description FROM Experiment WHERE experimentId = ${experimentId} LIMIT 1;`
     );
 
     var experiment = experiments.next();
+    check experiments.close();
 
     if !(experiment is sql:Error) && (experiment != ()) {
         return experiment.value;
@@ -242,17 +345,23 @@ public isolated transactional function updateExperiment(int experimentId, *Exper
 # + all - If true count all experiment data including old version, if false count only the newest verwions (e.g. distinct data names)
 # + return - The count or the encountered error
 public isolated transactional function getExperimentDataCount(int experimentId, boolean all=true) returns int|error {
-    stream<RowCount, sql:Error> result;
+    stream<RowCount, sql:Error?> result;
     if all {
         result = testDB->query(`SELECT count(*) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId};`);
     } else {
         result = testDB->query(`SELECT count(DISTINCT name) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId};`);
     }
     var count = result.next();
-    if !(count is error) {
+
+    check result.close();
+
+    if count is record {RowCount value;} {
         return count.value.rowCount;
-    } else {
+    } else if count is error {
         return count;
+    } else {
+        // should never happen based on the sql query
+        return error("Could not determine the experiment count!");
     }
 }
 
@@ -276,6 +385,8 @@ public isolated transactional function getDataList(int experimentId, boolean all
     ExperimentDataFull[]? experimentDataList = check from var data in experimentData
         select data;
 
+    check experimentData.close();
+
     if experimentDataList != () {
         return experimentDataList;
     }
@@ -294,10 +405,11 @@ public isolated transactional function getData(int experimentId, string name, st
         data = testDB->query(check new ConcatQuery(baseQuery, ` ORDER BY version DESC LIMIT 1;`));
     } else {
         // get a specific version with order by descending and limit to one
-        data = testDB->query(check new ConcatQuery(baseQuery, ` AND version=${'version};`));
+        data = testDB->query(check new ConcatQuery(baseQuery, ` AND version=${'version} LIMIT 1;`));
     }
 
     var result = data.next();
+    check data.close();
 
     if !(result is sql:Error) && (result != ()) {
         return result.value;
@@ -316,6 +428,7 @@ public isolated transactional function getProducingStepOfData(int|ExperimentData
     );
 
     var result = step.next();
+    check step.close();
 
     if !(result is sql:Error) && (result != ()) {
         return result.value.producingStep;
@@ -334,6 +447,9 @@ public isolated transactional function getStepsUsingData(int|ExperimentDataFull 
     );
 
     int[]|error? inputForSteps = from var step in steps select step.sequence;
+
+    check steps.close();
+
     if inputForSteps is () {
         return [];
     } else if !(inputForSteps is error) {
@@ -350,15 +466,20 @@ public isolated transactional function getStepsUsingData(int|ExperimentDataFull 
 ////////////////////////////////////////////////////////////////////////////////
 
 public isolated transactional function getTimelineStepCount(int experimentId) returns int|error {
-    stream<RowCount, sql:Error> result = testDB->query(
+    stream<RowCount, sql:Error?> result = testDB->query(
         `SELECT count(*) AS rowCount FROM TimelineStep WHERE experimentId = ${experimentId};`
     );
 
     var count = result.next();
-    if !(count is error) {
+    check result.close();
+
+    if count is record {RowCount value;} {
         return count.value.rowCount;
-    } else {
+    } else if count is error {
         return count;
+    } else {
+        // should never happen based on the sql query
+        return error("Could not determine the experiment count!");
     }
 }
 
@@ -398,6 +519,8 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
     stream<TimelineStepSQL, sql:Error?> timelineSteps = testDB->query(check new ConcatQuery(...query));
 
     (TimelineStepSQL|TimelineStepFull)[]|error|() tempList = from var step in timelineSteps select step;
+
+    check timelineSteps.close();
 
     TimelineStepFull[] stepList = [];
     if tempList is error{
@@ -464,17 +587,18 @@ public isolated transactional function getTimelineStep(int? experimentId=(), int
         return error("Must not provide all parameters at the same time!");
     } else if experimentId != () && sequence != () {
         timelineStep = testDB->query(
-            check new ConcatQuery(baseQuery, `WHERE experimentId=${experimentId} AND sequence=${sequence};`)
+            check new ConcatQuery(baseQuery, `WHERE experimentId=${experimentId} AND sequence=${sequence} LIMIT 1;`)
         );
         ref = {experimentId: experimentId, sequence: sequence};
     } else if stepId != () {
-        timelineStep = testDB->query(check new ConcatQuery(baseQuery, `WHERE stepId=${stepId};`));
+        timelineStep = testDB->query(check new ConcatQuery(baseQuery, `WHERE stepId=${stepId} LIMIT 1;`));
         ref = {stepId: stepId};
     } else {
         return error("Must provide either experimentId and sequence or the stepId!");
     }
 
     var result = timelineStep.next();
+    check timelineStep.close();
 
     if !(result is sql:Error) && (result != ()) {
         TimelineStepFull|error stepFull = castToTimelineStepFull(result.value);
@@ -514,6 +638,8 @@ public isolated transactional function getStepInputData(int|TimelineStepFull ste
     );
 
     ExperimentDataReference[]|error? inputDataList = from var row in inputData select row;
+    check inputData.close();
+
     if inputDataList is () {
         return [];
     } else if !(inputDataList is error) {
@@ -540,6 +666,8 @@ public isolated transactional function getStepOutputData(int|TimelineStepFull st
     );
 
     ExperimentDataReference[]|error? outputDataList = from var row in outputData select row;
+    check outputData.close();
+
     if outputDataList is () {
         return [];
     } else if !(outputDataList is error) {
@@ -564,10 +692,11 @@ public isolated transactional function saveTimelineStepOutputData(int stepId, in
 public isolated transactional function getTimelineStepNotes(int experimentId, int sequence) returns string|error {
     stream<record {|string notes;|}, sql:Error?> note = testDB->query(
         `SELECT notes
-         FROM TimelineStep WHERE experimentId=${experimentId} AND sequence=${sequence};`
+         FROM TimelineStep WHERE experimentId=${experimentId} AND sequence=${sequence} LIMIT 1;`
     );
 
     var result = note.next();
+    check note.close();
 
     if !(result is sql:Error) && (result != ()) {
         return result.value.notes;
@@ -585,11 +714,18 @@ public isolated transactional function updateTimelineStepNotes(int experimentId,
 }
 
 public isolated transactional function getTimelineStepsWithResultWatchers() returns int[]|error {
-    stream<record {int stepId;}, error> stepWatchers = testDB->query(
+    stream<record {int stepId;}, sql:Error?> stepWatchers = testDB->query(
         `SELECT stepId FROM ResultWatchers;`
     );
-    return from var watcher in stepWatchers
+    int[]|error|() result = from var watcher in stepWatchers
         select watcher.stepId;
+    check stepWatchers.close();
+
+    if result is () {
+        return [];
+    } else {
+        return result;
+    }
 }
 
 public isolated transactional function createTimelineStepResultWatcher(int stepId, string resultEndpoint) returns error? {
@@ -603,14 +739,16 @@ public isolated transactional function createTimelineStepResultWatcher(int stepI
 }
 
 public isolated transactional function getTimelineStepResultEndpoint(int stepId) returns string?|error {
-    stream<record {string resultEndpoint;}, error> result = testDB->query(
+    stream<record {string resultEndpoint;}, sql:Error?> result = testDB->query(
         `SELECT resultEndpoint FROM ResultWatchers WHERE stepId = ${stepId};`
     );
     var first = result.next();
-    if first is error {
-        return first;
-    } else {
+    check result.close();
+
+    if first is record {record {string resultEndpoint;} value;} {
         return first.value.resultEndpoint;
+    } else {
+        return first;
     }
 }
 
