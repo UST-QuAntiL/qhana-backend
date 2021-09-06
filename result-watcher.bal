@@ -211,6 +211,7 @@ public isolated class ResultWatcher {
                     }
                     if newInterval == () {
                         check self.unschedule();
+                        io:println(`finally finish executing job for step ${self.stepId}`);
                         return;
                     } else {
                         check self.reschedule(newInterval);
@@ -229,6 +230,7 @@ public isolated class ResultWatcher {
 
         lock {
             self.jobId = check task:scheduleJobRecurByFrequency(self, interval);
+            io:println(string`Scheduled watcher for step ${self.stepId} with interval ${interval}. JobId: ${self.jobId.toString()}`);
         }
     }
 
@@ -265,16 +267,15 @@ public isolated class ResultWatcher {
                 }
             }
         }
-        int? backoffCounter = backoffCounters.length()>0 ? backoffCounters[0] : ();
-
-        check self.unschedule();
 
         lock {
             self.scheduleIntervals = scheduleIntervals.clone().reverse();
             self.backoffCounters = backoffCounters.clone().reverse();
-            self.currentBackoffCounter = backoffCounter;
 
-            self.jobId = check task:scheduleJobRecurByFrequency(self, scheduleIntervals.pop());
+            var startingIntervall = self.scheduleIntervals.pop(); // list always contains >1 entries at this point (see guard at top)
+            self.currentBackoffCounter = self.backoffCounters.length()>0 ? self.backoffCounters.pop() : ();
+
+            check self.reschedule(startingIntervall);
         }
     }
 
@@ -290,6 +291,7 @@ public isolated class ResultWatcher {
         }
         if jobId is task:JobId {
             check task:unscheduleJob(jobId);
+            io:println(string`Unscheduled watcher for step ${self.stepId}. JobId: ${jobId.toString()}`);
         }
     }
 
