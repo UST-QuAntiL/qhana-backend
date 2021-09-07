@@ -108,6 +108,7 @@ service / on new http:Listener(port) {
             result = check database:deletePluginEndpoint(endpointId);
             check commit;
         } on fail error err {
+            io:println(err);
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 

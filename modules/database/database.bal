@@ -207,7 +207,7 @@ public isolated transactional function addPluginEndpoint(*PluginEndpoint endpoin
 
 public isolated transactional function editPluginEndpoint(int endpointId, string 'type) returns PluginEndpointFull|error {
     var result = check testDB->execute(
-        `UPDATE PluginEndpoints SET type=${'type} WHERE id=${endpointId});`
+        `UPDATE PluginEndpoints SET type=${'type} WHERE id=${endpointId};`
     );
 
     return getPluginEndpoint(endpointId);
@@ -215,7 +215,7 @@ public isolated transactional function editPluginEndpoint(int endpointId, string
 
 public isolated transactional function deletePluginEndpoint(int endpointId) returns error? {
     var result = testDB->execute(
-        `DELETE FROM PluginEndpoints WHERE id=${endpointId});`
+        `DELETE FROM PluginEndpoints WHERE id=${endpointId};`
     );
 
     if result is error {
