@@ -1,5 +1,4 @@
 FROM ubuntu:focal
-COPY . /app
 WORKDIR /app
 RUN apt-get -y update && apt-get install -y wget sqlite3 unzip apt-transport-https gnupg
 
@@ -13,7 +12,7 @@ RUN echo "deb [signed-by=/usr/share/keyrings/adoptopenjdk-archive-keyring.gpg] h
 RUN apt-get -y update && apt-get install -y adoptopenjdk-11-hotspot
 
 # rename the installation folder so that the folder name is the same on every architecture
-RUN mv /usr/lib/jvm/adoptopenjdk-11-hotspot* /usr/lib/jvm/java-11
+RUN ln -s /usr/lib/jvm/adoptopenjdk-11-hotspot* /usr/lib/jvm/java-11
 ENV JAVA_HOME="/usr/lib/jvm/java-11"
 
 # install ballerina
@@ -21,9 +20,11 @@ RUN wget https://dist.ballerina.io/downloads/swan-lake-beta2/ballerina-swan-lake
 RUN unzip ballerina-swan-lake-beta2.zip
 ENV PATH="${PATH}:/app/ballerina-swan-lake-beta2/bin"
 
+# copy files
+COPY . /app
+
 # prepare database
 RUN bash create-sqlite-db.sh
-RUN echo 'INSERT INTO PluginEndpoints (url, type) VALUES ("http://localhost:5005", "PluginRunner");' | sqlite3 qhana-backend.db
 
 # run backend
 CMD bal run
