@@ -32,8 +32,11 @@ bal run
 
 The API is available at the configured port in `main.bal` (currently 9090).
 
+## Building the Docker image
+You can build a Docker image for the QHAna backend with this command: `docker build -t qhana-backend .`
 
-
+## Starting a Docker container
+Run a container with this image and bind it to port 9090 with `docker run -p 9090:9090 qhana-backend` if you want to run the container detached add the flag `-d`.
 
 ## Acknowledgements
 
