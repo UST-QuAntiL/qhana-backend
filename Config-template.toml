@@ -4,7 +4,7 @@
 port = 9090
 
 # the domains allowed cors requests
-corsDomains = ["http://localhost:4200"]
+corsDomains = ["http://localhost:4200", "*"]
 
 
 [qhana.qhana_backend.database]
