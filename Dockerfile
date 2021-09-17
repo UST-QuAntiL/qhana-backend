@@ -26,5 +26,8 @@ COPY . /app
 # prepare database
 RUN bash create-sqlite-db.sh
 
+# Apply docker specific config
+RUN cp /app/Config-docker.toml /app/Config.toml
+
 # run backend
 CMD bal run

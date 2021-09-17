@@ -1,0 +1,4 @@
+[qhana.qhana_backend]
+
+# Allow all CORS requests from any domain
+corsDomains = ["*"]
