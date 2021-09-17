@@ -9,6 +9,10 @@ artifactId="sqlite-jdbc"
 version="3.36.0.1"
 groupId="org.xerial"
 
+[[platform.java11.dependency]]
+artifactId="mariadb-java-client"
+groupId="org.mariadb.jdbc"
+version="2.7.4"
 
 [build-options]
 observabilityIncluded = true

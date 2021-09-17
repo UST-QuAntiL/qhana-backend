@@ -1,0 +1,28 @@
+[qhana.qhana_backend]
+
+# the port the server will listen on
+port = 9090
+
+# the domains allowed cors requests
+corsDomains = ["http://localhost:4200"]
+
+
+[qhana.qhana_backend.database]
+
+
+# Either "sqlite" or "mariadb"
+dbType = "sqlite"
+
+
+# File Path to the sqlite db
+dbPath = "qhana-backend.db"
+
+
+# Hostname + port for mariadb db
+dbHost = "localhost:3306"
+# DB name for mariadb db
+dbName = "QHAnaExperiments"
+# DB user for mariadb db
+dbUser = "QHAna"
+# DB password for mariadb db
+dbPassword = "SecretPassword"

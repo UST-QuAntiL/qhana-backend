@@ -18,13 +18,49 @@ import ballerina/sql;
 import ballerina/mime;
 import ballerinax/java.jdbc;
 
-sql:ConnectionPool pool = { 
+sql:ConnectionPool sqlitePool = { 
     maxOpenConnections: 5, 
     maxConnectionLifeTime: 1800,
     minIdleConnections: 0
 };
 
-final jdbc:Client testDB = check new jdbc:Client("jdbc:sqlite:qhana-backend.db", connectionPool = pool);
+# Either "sqlite" or "mariadb"
+configurable string dbType = "sqlite";
+
+// sqlite specific config
+# File Path to the sqlite db
+configurable string dbPath = "qhana-backend.db";
+
+// mariadb specific config
+# Hostname + port for mariadb db
+configurable string dbHost = "localhost:3306";
+# DB name for mariadb db
+configurable string dbName = "QHAnaExperiments";
+# DB user for mariadb db
+configurable string dbUser = "QHAna";
+# DB password for mariadb db
+configurable string dbPassword = "";
+
+
+function initClient() returns jdbc:Client|error {
+    if dbType == "sqlite" {
+        return new jdbc:Client(string`jdbc:sqlite:${dbPath}`, connectionPool = sqlitePool);
+    } else if dbType == "mariadb" || dbType == "mysql" {
+        string connection = string`jdbc:mariadb://${dbHost}/${dbName}?user=${dbUser}`;
+        if dbPassword != "" {
+            string passwordPart = string`&password=${dbPassword}`;
+            connection = connection + passwordPart;
+        }
+        io:println(connection);
+        return new jdbc:Client(connection);
+    } else {
+        return error(string`Db type ${dbType} is unknownn!`);
+    }
+}
+
+
+# always provide an initialized dummy jdbc client to circumvent null handling in every method
+final jdbc:Client experimentDB = check initClient();
 
 type RowCount record {
     int rowCount;
@@ -142,7 +178,7 @@ public type StepToData record {|
 
 
 public isolated transactional function getPluginEndpointsCount() returns int|error {
-    stream<RowCount, sql:Error?>  result = testDB->query("SELECT count(*) AS rowCount FROM PluginEndpoints;");
+    stream<RowCount, sql:Error?>  result = experimentDB->query("SELECT count(*) AS rowCount FROM PluginEndpoints;");
     var count = result.next();
     check result.close();
     if count is error {
@@ -156,7 +192,7 @@ public isolated transactional function getPluginEndpointsCount() returns int|err
 }
 
 public isolated transactional function getPluginEndpoints() returns PluginEndpointFull[]|error {
-    stream<PluginEndpointFull, sql:Error?> endpoints = testDB->query(
+    stream<PluginEndpointFull, sql:Error?> endpoints = experimentDB->query(
         `SELECT id, url, type FROM PluginEndpoints ORDER BY type, url;`
     );
 
@@ -173,7 +209,7 @@ public isolated transactional function getPluginEndpoints() returns PluginEndpoi
 }
 
 public isolated transactional function getPluginEndpoint(int endpointId) returns PluginEndpointFull|error {
-    stream<PluginEndpointFull, sql:Error?> endpoints = testDB->query(
+    stream<PluginEndpointFull, sql:Error?> endpoints = experimentDB->query(
         `SELECT id, url, type FROM PluginEndpoints WHERE id=${endpointId};`
     );
 
@@ -188,7 +224,7 @@ public isolated transactional function getPluginEndpoint(int endpointId) returns
 }
 
 public isolated transactional function addPluginEndpoint(*PluginEndpoint endpoint) returns PluginEndpointFull|error {
-    var result = check testDB->execute(
+    var result = check experimentDB->execute(
         `INSERT INTO PluginEndpoints (url, type) VALUES (${endpoint.url}, ${endpoint.'type});`
     );
 
@@ -206,7 +242,7 @@ public isolated transactional function addPluginEndpoint(*PluginEndpoint endpoin
 }
 
 public isolated transactional function editPluginEndpoint(int endpointId, string 'type) returns PluginEndpointFull|error {
-    var result = check testDB->execute(
+    var result = check experimentDB->execute(
         `UPDATE PluginEndpoints SET type=${'type} WHERE id=${endpointId};`
     );
 
@@ -214,7 +250,7 @@ public isolated transactional function editPluginEndpoint(int endpointId, string
 }
 
 public isolated transactional function deletePluginEndpoint(int endpointId) returns error? {
-    var result = testDB->execute(
+    var result = experimentDB->execute(
         `DELETE FROM PluginEndpoints WHERE id=${endpointId};`
     );
 
@@ -235,7 +271,7 @@ public isolated transactional function deletePluginEndpoint(int endpointId) retu
 #
 # + return - The number of experiments or the encountered error
 public isolated transactional function getExperimentCount() returns int|error {
-    stream<RowCount, sql:Error?>  result = testDB->query("SELECT count(*) AS rowCount FROM Experiment;");
+    stream<RowCount, sql:Error?>  result = experimentDB->query("SELECT count(*) AS rowCount FROM Experiment;");
     var count = result.next();
     check result.close();
     if count is error {
@@ -254,7 +290,7 @@ public isolated transactional function getExperimentCount() returns int|error {
 # + offset - The offset applied to the sql query (default: `0`)
 # + return - The list of experiments or the encountered error
 public isolated transactional function getExperiments(int 'limit = 100, int offset = 0) returns ExperimentFull[]|error {
-    stream<ExperimentFull, sql:Error?> experiments = testDB->query(
+    stream<ExperimentFull, sql:Error?> experiments = experimentDB->query(
         `SELECT experimentId, name, description FROM Experiment ORDER BY name ASC LIMIT ${'limit} OFFSET ${offset};`
     );
 
@@ -275,7 +311,7 @@ public isolated transactional function getExperiments(int 'limit = 100, int offs
 # + experimentId - The database id of the experiment to fetch
 # + return - The experiment or the encountered error
 public isolated transactional function getExperiment(int experimentId) returns ExperimentFull|error {
-    stream<ExperimentFull, sql:Error?> experiments = testDB->query(
+    stream<ExperimentFull, sql:Error?> experiments = experimentDB->query(
         `SELECT experimentId, name, description FROM Experiment WHERE experimentId = ${experimentId} LIMIT 1;`
     );
 
@@ -297,7 +333,7 @@ public isolated transactional function createExperiment(*Experiment experiment) 
     ExperimentFull? result = ();
 
     stream<Experiment, sql:Error?> experiments;
-    var insertResult = check testDB->execute(
+    var insertResult = check experimentDB->execute(
         `INSERT INTO Experiment (name, description) VALUES (${experiment.name}, ${experiment.description});`
     );
 
@@ -326,7 +362,7 @@ public isolated transactional function createExperiment(*Experiment experiment) 
 # + return - The updated experiment data including the database id or the encountered error
 public isolated transactional function updateExperiment(int experimentId, *Experiment experiment) returns ExperimentFull|error {
     stream<Experiment, sql:Error?> experiments;
-    var test = check testDB->execute(
+    var test = check experimentDB->execute(
         `UPDATE Experiment SET name=${experiment.name}, description=${experiment.description} WHERE experimentId = ${experimentId};`
     );
     io:println(test);
@@ -347,9 +383,9 @@ public isolated transactional function updateExperiment(int experimentId, *Exper
 public isolated transactional function getExperimentDataCount(int experimentId, boolean all=true) returns int|error {
     stream<RowCount, sql:Error?> result;
     if all {
-        result = testDB->query(`SELECT count(*) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId};`);
+        result = experimentDB->query(`SELECT count(*) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId};`);
     } else {
-        result = testDB->query(`SELECT count(DISTINCT name) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId};`);
+        result = experimentDB->query(`SELECT count(DISTINCT name) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId};`);
     }
     var count = result.next();
 
@@ -374,12 +410,12 @@ public isolated transactional function getDataList(int experimentId, boolean all
 
     stream<ExperimentDataFull, sql:Error?> experimentData;
     if all {
-        experimentData = testDB->query(check new ConcatQuery(baseQuery, baseQuerySuffix));
+        experimentData = experimentDB->query(check new ConcatQuery(baseQuery, baseQuerySuffix));
     } else {
-        var extraFilter = `AND version=(SELECT MAX(t2.version) 
+        var extraFilter = `AND version=(SELECT MAX(t2.version)
                                 FROM ExperimentData AS t2 
                                 WHERE ExperimentData.name=t2.name AND t2.experimentId=${experimentId}) `;
-        experimentData = testDB->query(check new ConcatQuery(baseQuery, extraFilter, baseQuerySuffix));
+        experimentData = experimentDB->query(check new ConcatQuery(baseQuery, extraFilter, baseQuerySuffix));
     }
 
     ExperimentDataFull[]? experimentDataList = check from var data in experimentData
@@ -402,10 +438,10 @@ public isolated transactional function getData(int experimentId, string name, st
 
     if 'version == () || 'version == "latest" {
         // get latest version with order by descending and limit to one
-        data = testDB->query(check new ConcatQuery(baseQuery, ` ORDER BY version DESC LIMIT 1;`));
+        data = experimentDB->query(check new ConcatQuery(baseQuery, ` ORDER BY version DESC LIMIT 1;`));
     } else {
         // get a specific version with order by descending and limit to one
-        data = testDB->query(check new ConcatQuery(baseQuery, ` AND version=${'version} LIMIT 1;`));
+        data = experimentDB->query(check new ConcatQuery(baseQuery, ` AND version=${'version} LIMIT 1;`));
     }
 
     var result = data.next();
@@ -422,7 +458,7 @@ public isolated transactional function getProducingStepOfData(int|ExperimentData
     stream<record {int producingStep;}, sql:Error?> step;
 
     final var dataId = (data is int) ? data : data.dataId;
-    step = testDB->query(
+    step = experimentDB->query(
         `SELECT sequence AS producingStep FROM StepData JOIN TimelineStep ON StepData.stepId = TimelineStep.stepId 
          WHERE relationType = "output" and dataId = ${dataId} LIMIT 1;`
     );
@@ -441,7 +477,7 @@ public isolated transactional function getStepsUsingData(int|ExperimentDataFull 
     stream<record {int sequence;}, sql:Error?> steps;
 
     final var dataId = (data is int) ? data : data.dataId;
-    steps = testDB->query(
+    steps = experimentDB->query(
         `SELECT sequence FROM StepData JOIN TimelineStep ON StepData.stepId = TimelineStep.stepId 
          WHERE relationType = "input" and dataId = ${dataId} LIMIT 1;`
     );
@@ -466,7 +502,7 @@ public isolated transactional function getStepsUsingData(int|ExperimentDataFull 
 ////////////////////////////////////////////////////////////////////////////////
 
 public isolated transactional function getTimelineStepCount(int experimentId) returns int|error {
-    stream<RowCount, sql:Error?> result = testDB->query(
+    stream<RowCount, sql:Error?> result = experimentDB->query(
         `SELECT count(*) AS rowCount FROM TimelineStep WHERE experimentId = ${experimentId};`
     );
 
@@ -504,9 +540,16 @@ public isolated transactional function castToTimelineStepFull(TimelineStepSQL st
 }
 
 public isolated transactional function getTimelineStepList(int experimentId, boolean allAttributes=false, int 'limit = 100, int offset = 0) returns TimelineStepFull[]|error {
-    object:RawTemplate[] query = [
-        `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, processorName, processorVersion, processorLocation, parametersDescriptionLocation`
-    ];
+    object:RawTemplate[] query = [`SELECT stepId, experimentId, sequence, `];
+
+    if dbType == "sqlite" {
+        query.push(`cast(start as TEXT) AS start, cast(end as TEXT) AS end, `);
+    } else {
+        query.push(`DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, `);
+    }
+
+    query.push(`status, processorName, processorVersion, processorLocation, parametersDescriptionLocation`);
+
 
     if allAttributes {
         query.push(`, resultLog, parameters, parametersContentType, notes `);
@@ -516,7 +559,7 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
 
     query.push(`FROM TimelineStep WHERE experimentId=${experimentId} ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`);
 
-    stream<TimelineStepSQL, sql:Error?> timelineSteps = testDB->query(check new ConcatQuery(...query));
+    stream<TimelineStepSQL, sql:Error?> timelineSteps = experimentDB->query(check new ConcatQuery(...query));
 
     (TimelineStepSQL|TimelineStepFull)[]|error|() tempList = from var step in timelineSteps select step;
 
@@ -555,9 +598,17 @@ public isolated transactional function createTimelineStep(
     }
 
     stream<TimelineStepSQL, sql:Error?> createdStep;
-    var insertResult = check testDB->execute(
-        `INSERT INTO TimelineStep (experimentId, sequence, start, end, processorName, processorVersion, processorLocation, parameters, parametersContentType, parametersDescriptionLocation) 
-         VALUES (${experimentId}, (SELECT count(*)+1 FROM TimelineStep WHERE experimentId = 1), strftime('%Y-%m-%dT%H:%M:%S', 'now'), NULL, ${processorName}, ${processorVersion}, ${processorLocation}, ${parameters}, ${parametersContentType}, ${parametersDescriptionLocation});`
+    sql:ParameterizedQuery currentTime = `strftime('%Y-%m-%dT%H:%M:%S', 'now')`;
+    if dbType != "sqlite" {
+        currentTime = `DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%S')`;
+    }
+    var insertResult = check experimentDB->execute(
+        check new ConcatQuery(
+            `INSERT INTO TimelineStep (experimentId, sequence, start, end, processorName, processorVersion, processorLocation, parameters, parametersContentType, parametersDescriptionLocation) 
+            VALUES (${experimentId}, (SELECT sequence from (SELECT count(*)+1 AS sequence FROM TimelineStep WHERE experimentId = 1) subquery), `,
+            currentTime,
+            `, NULL, ${processorName}, ${processorVersion}, ${processorLocation}, ${parameters}, ${parametersContentType}, ${parametersDescriptionLocation});`
+        )
     );
 
     // extract experiment id and build full experiment data
@@ -576,6 +627,10 @@ public isolated transactional function createTimelineStep(
 public isolated transactional function getTimelineStep(int? experimentId=(), int? sequence=(), int? stepId=()) returns TimelineStepWithParams|error {
     var baseQuery = `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultLog, processorName, processorVersion, processorLocation, parametersDescriptionLocation, parameters, parametersContentType
                      FROM TimelineStep `;
+    if dbType != "sqlite" {
+        baseQuery = `SELECT stepId, experimentId, sequence, DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, status, resultLog, processorName, processorVersion, processorLocation, parametersDescriptionLocation, parameters, parametersContentType
+                     FROM TimelineStep `;
+    }
     
     stream<TimelineStepSQL, sql:Error?> timelineStep;
 
@@ -586,12 +641,12 @@ public isolated transactional function getTimelineStep(int? experimentId=(), int
     } else if experimentId != () && sequence != () && stepId != () {
         return error("Must not provide all parameters at the same time!");
     } else if experimentId != () && sequence != () {
-        timelineStep = testDB->query(
+        timelineStep = experimentDB->query(
             check new ConcatQuery(baseQuery, `WHERE experimentId=${experimentId} AND sequence=${sequence} LIMIT 1;`)
         );
         ref = {experimentId: experimentId, sequence: sequence};
     } else if stepId != () {
-        timelineStep = testDB->query(check new ConcatQuery(baseQuery, `WHERE stepId=${stepId} LIMIT 1;`));
+        timelineStep = experimentDB->query(check new ConcatQuery(baseQuery, `WHERE stepId=${stepId} LIMIT 1;`));
         ref = {stepId: stepId};
     } else {
         return error("Must provide either experimentId and sequence or the stepId!");
@@ -619,12 +674,21 @@ public isolated transactional function getTimelineStep(int? experimentId=(), int
 public isolated transactional function updateTimelineStepStatus(int|TimelineStepFull step, string status, string? resultLog) returns error? {
     var stepId = step is int ? step : step.stepId;
 
-    _ = check testDB->execute(`UPDATE TimelineStep 
-                               SET 
-                                    end=strftime('%Y-%m-%dT%H:%M:%S', 'now'), 
-                                    status=${status},
-                                    resultLog=${resultLog}
-                               WHERE stepId = ${stepId} AND end IS NULL;`);
+    sql:ParameterizedQuery currentTime = `strftime('%Y-%m-%dT%H:%M:%S', 'now')`;
+    if dbType != "sqlite" {
+        currentTime = `DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%S')`;
+    }
+
+    _ = check experimentDB->execute(
+        check new ConcatQuery(
+            `UPDATE TimelineStep 
+                SET 
+                    end=`, currentTime, `, 
+                    status=${status},
+                    resultLog=${resultLog}
+                WHERE stepId = ${stepId} AND end IS NULL;`
+        )
+    );
 }
 
 
@@ -632,7 +696,7 @@ public isolated transactional function getStepInputData(int|TimelineStepFull ste
     stream<ExperimentDataReference, sql:Error?> inputData;
 
     var stepId = step is int ? step : step.stepId;
-    inputData = testDB->query(
+    inputData = experimentDB->query(
         `SELECT name, version FROM StepData JOIN ExperimentData ON StepData.dataId = ExperimentData.dataId 
          WHERE relationType = "input" and stepId = ${stepId};`
     );
@@ -652,7 +716,7 @@ public isolated transactional function getStepInputData(int|TimelineStepFull ste
 public isolated transactional function saveTimelineStepInputData(int stepId, int experimentId, ExperimentDataReference[] inputData) returns error? {
     foreach var data in inputData {
         var experimentData = check getData(experimentId, data.name, data.'version);
-        _ = check testDB->execute(`INSERT INTO StepData (stepId, dataId, relationType) VALUES (${stepId}, ${experimentData.dataId}, ${"input"});`);
+        _ = check experimentDB->execute(`INSERT INTO StepData (stepId, dataId, relationType) VALUES (${stepId}, ${experimentData.dataId}, ${"input"});`);
     }
 }
 
@@ -660,7 +724,7 @@ public isolated transactional function getStepOutputData(int|TimelineStepFull st
     stream<ExperimentDataReference, sql:Error?> outputData;
 
     var stepId = step is int ? step : step.stepId;
-    outputData = testDB->query(
+    outputData = experimentDB->query(
         `SELECT name, version FROM StepData JOIN ExperimentData ON StepData.dataId = ExperimentData.dataId 
          WHERE relationType = "output" and stepId = ${stepId};`
     );
@@ -680,17 +744,17 @@ public isolated transactional function getStepOutputData(int|TimelineStepFull st
 public isolated transactional function saveTimelineStepOutputData(int stepId, int experimentId, ExperimentData[] outputData) returns error? {
     var baseQuery = `INSERT INTO ExperimentData (experimentId, name, version, location, type, contentType) VALUES `;
     var dataQuery = from var d in outputData
-                select `(${experimentId}, ${d.name}, (SELECT count(*) + 1 FROM ExperimentData WHERE name = ${d.name}), ${d.location}, ${d.'type}, ${d.contentType})`;
+                select `(${experimentId}, ${d.name}, (SELECT version FROM (SELECT count(*) + 1 AS version FROM ExperimentData WHERE name = ${d.name}) subquery), ${d.location}, ${d.'type}, ${d.contentType})`;
 
     foreach var insertData in dataQuery {
-        var result = check testDB->execute(check new ConcatQuery(baseQuery, insertData));
+        var result = check experimentDB->execute(check new ConcatQuery(baseQuery, insertData));
         var dataId = result.lastInsertId;
-        _ = check testDB->execute(`INSERT INTO StepData (stepId, dataId, relationType) VALUES (${stepId}, ${dataId}, ${"output"});`);
+        _ = check experimentDB->execute(`INSERT INTO StepData (stepId, dataId, relationType) VALUES (${stepId}, ${dataId}, ${"output"});`);
     }
 }
 
 public isolated transactional function getTimelineStepNotes(int experimentId, int sequence) returns string|error {
-    stream<record {|string notes;|}, sql:Error?> note = testDB->query(
+    stream<record {|string notes;|}, sql:Error?> note = experimentDB->query(
         `SELECT notes
          FROM TimelineStep WHERE experimentId=${experimentId} AND sequence=${sequence} LIMIT 1;`
     );
@@ -707,14 +771,14 @@ public isolated transactional function getTimelineStepNotes(int experimentId, in
 
 public isolated transactional function updateTimelineStepNotes(int experimentId, int sequence, string notes) returns error? {
     stream<Experiment, sql:Error?> experiments;
-    var test = check testDB->execute(
+    var test = check experimentDB->execute(
         `UPDATE TimelineStep SET notes=${notes} WHERE experimentId = ${experimentId} AND sequence=${sequence};`
     );
     io:println(test);
 }
 
 public isolated transactional function getTimelineStepsWithResultWatchers() returns int[]|error {
-    stream<record {int stepId;}, sql:Error?> stepWatchers = testDB->query(
+    stream<record {int stepId;}, sql:Error?> stepWatchers = experimentDB->query(
         `SELECT stepId FROM ResultWatchers;`
     );
     int[]|error|() result = from var watcher in stepWatchers
@@ -732,14 +796,14 @@ public isolated transactional function createTimelineStepResultWatcher(int stepI
     if resultEndpoint == "" {
         return error("Result endpoint cannot be empty!");
     }
-    var insertResult = check testDB->execute(
+    var insertResult = check experimentDB->execute(
         `INSERT INTO ResultWatchers (stepId, resultEndpoint) 
          VALUES (${stepId}, ${resultEndpoint});`
     );
 }
 
 public isolated transactional function getTimelineStepResultEndpoint(int stepId) returns string?|error {
-    stream<record {string resultEndpoint;}, sql:Error?> result = testDB->query(
+    stream<record {string resultEndpoint;}, sql:Error?> result = experimentDB->query(
         `SELECT resultEndpoint FROM ResultWatchers WHERE stepId = ${stepId};`
     );
     var first = result.next();
@@ -753,7 +817,7 @@ public isolated transactional function getTimelineStepResultEndpoint(int stepId)
 }
 
 public isolated transactional function deleteTimelineStepResultWatcher(int stepId) returns error? {
-    _ = check testDB->execute(
+    _ = check experimentDB->execute(
         `DELETE FROM ResultWatchers WHERE stepId = ${stepId};`
     );
 }

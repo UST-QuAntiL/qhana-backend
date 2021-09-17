@@ -2,3 +2,4 @@ target
 qhana-backend.db
 qhana-backend.db-journal
 experimentData
+Config.toml
