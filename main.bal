@@ -27,7 +27,8 @@ configurable (decimal|int)[] watcherIntervallConfig = [2, 10, 5, 10, 10, 60, 30,
     cors: {
         allowOrigins: corsDomains,
         allowMethods: ["OPTIONS", "GET", "PUT", "POST", "DELETE"],
-        //allowCredentials: false,
+        allowHeaders: ["Content-Type", "Depth", "User-Agent", "X-File-Size", "X-Requested-With", "If-Modified-Since", "X-File-Name", "Cache-ControlAccess-Control-Allow-Origin"],
+        allowCredentials: true,
         maxAge: 84900
     }
 }
