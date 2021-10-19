@@ -2,7 +2,7 @@
 
 [![GitHub license](https://img.shields.io/github/license/UST-QuAntiL/qhana-backend)](https://github.com/UST-QuAntiL/qhana-backend/blob/main/LICENSE)
 
-The QHAna Backend API is implemented in [Ballerina](https://ballerina.io) (swan-lake Beta 2).
+The QHAna Backend API is implemented in [Ballerina](https://ballerina.io) (swan-lake Beta 3).
 
 Please use the following resources to make yourself familiar with Ballerina:
 
@@ -18,6 +18,9 @@ VSCode is the recommended editor for Ballerina projects.
 Install Ballerina using the instructions linked above.
 Then use the `bal` cli or vscode to run the project.
 Before the first run create a sqlite database with the provided schema.
+
+:warning: When updating from `slbeta2` it can happen that the dependency resolution of ballerina fails.
+In these cases try deleting the ballerina repository cache in the folder `~/.ballerina/repositories/`.
 
 ```bash
 # first time only

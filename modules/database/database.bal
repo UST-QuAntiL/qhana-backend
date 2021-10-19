@@ -178,7 +178,7 @@ public type StepToData record {|
 
 
 public isolated transactional function getPluginEndpointsCount() returns int|error {
-    stream<RowCount, sql:Error?>  result = experimentDB->query("SELECT count(*) AS rowCount FROM PluginEndpoints;");
+    stream<RowCount, sql:Error?>  result = experimentDB->query(`SELECT count(*) AS rowCount FROM PluginEndpoints;`);
     var count = result.next();
     check result.close();
     if count is error {
@@ -271,7 +271,7 @@ public isolated transactional function deletePluginEndpoint(int endpointId) retu
 #
 # + return - The number of experiments or the encountered error
 public isolated transactional function getExperimentCount() returns int|error {
-    stream<RowCount, sql:Error?>  result = experimentDB->query("SELECT count(*) AS rowCount FROM Experiment;");
+    stream<RowCount, sql:Error?>  result = experimentDB->query(`SELECT count(*) AS rowCount FROM Experiment;`);
     var count = result.next();
     check result.close();
     if count is error {
@@ -520,20 +520,22 @@ public isolated transactional function getTimelineStepCount(int experimentId) re
 }
 
 public isolated transactional function castToTimelineStepFull(TimelineStepSQL step) returns TimelineStepFull|error {
-    var startString = step.'start;
+    var startString = step.'start; // needed for correct type narrowing
     if startString is string {
+        var utcString = startString; // needed for correct type narrowing
         if !startString.endsWith("Z") {
-            startString += ".00Z";
+            utcString += ".00Z";
         }
-        time:Utc 'start = check time:utcFromString(startString);
+        time:Utc 'start = check time:utcFromString(utcString);
         step.'start = 'start;
     }
     var endString = step.end; // needed for correct type narrowing
     if endString is string {
+        var utcString = endString; // needed for correct type narrowing
         if !endString.endsWith("Z") {
-            endString += ".00Z";
+            utcString += ".00Z";
         }
-        time:Utc end = check time:utcFromString(endString);
+        time:Utc end = check time:utcFromString(utcString);
         step.end = end;
     }
     return step.cloneWithType();

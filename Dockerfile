@@ -16,9 +16,9 @@ RUN ln -s /usr/lib/jvm/adoptopenjdk-11-hotspot* /usr/lib/jvm/java-11
 ENV JAVA_HOME="/usr/lib/jvm/java-11"
 
 # install ballerina
-RUN wget https://dist.ballerina.io/downloads/swan-lake-beta2/ballerina-swan-lake-beta2.zip
-RUN unzip ballerina-swan-lake-beta2.zip
-ENV PATH="${PATH}:/app/ballerina-swan-lake-beta2/bin"
+RUN wget https://dist.ballerina.io/downloads/swan-lake-beta3/ballerina-swan-lake-beta3.zip
+RUN unzip ballerina-swan-lake-beta3.zip
+ENV PATH="${PATH}:/app/ballerina-swan-lake-beta3/bin"
 
 # copy files
 COPY . /app
