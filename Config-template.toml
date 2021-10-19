@@ -8,7 +8,7 @@ corsDomains = ["http://localhost:4200", "*"]
 
 
 [qhana.qhana_backend.database]
-
+# make sure to include all config keys! (the headlines in [])
 
 # Either "sqlite" or "mariadb"
 dbType = "sqlite"
