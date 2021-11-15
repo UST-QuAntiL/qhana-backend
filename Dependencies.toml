@@ -31,14 +31,6 @@ dependencies = [
 
 [[package]]
 org = "ballerina"
-name = "cloud"
-version = "2.0.0-beta.3"
-modules = [
-	{org = "ballerina", packageName = "cloud", moduleName = "cloud"}
-]
-
-[[package]]
-org = "ballerina"
 name = "crypto"
 version = "2.0.0"
 dependencies = [
@@ -373,7 +365,6 @@ org = "qhana"
 name = "qhana_backend"
 version = "0.1.0"
 dependencies = [
-	{org = "ballerina", name = "cloud"},
 	{org = "ballerina", name = "file"},
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "io"},

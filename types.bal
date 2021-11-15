@@ -213,6 +213,10 @@ public type TimelineStepNotesResponse record {|
     string notes;
 |};
 
+public type TimelineStepNotesPost record {|
+    string notes;
+|};
+
 
 public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull step) returns TimelineStepMinResponse {
     var end = step.end;

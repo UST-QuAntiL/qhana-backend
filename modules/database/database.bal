@@ -756,7 +756,7 @@ public isolated transactional function saveTimelineStepOutputData(int stepId, in
 }
 
 public isolated transactional function getTimelineStepNotes(int experimentId, int sequence) returns string|error {
-    stream<record {|string notes;|}, sql:Error?> note = experimentDB->query(
+    stream<record {|string? notes;|}, sql:Error?> note = experimentDB->query(
         `SELECT notes
          FROM TimelineStep WHERE experimentId=${experimentId} AND sequence=${sequence} LIMIT 1;`
     );
@@ -765,7 +765,12 @@ public isolated transactional function getTimelineStepNotes(int experimentId, in
     check note.close();
 
     if !(result is sql:Error) && (result != ()) {
-        return result.value.notes;
+        var notesText = result.value.notes;
+        if notesText == () {
+            return "";
+        } else {
+            return notesText;
+        }
     }
 
     return error(string `Notes for timeline step with experimentId: ${experimentId} and sequence: ${sequence} were not found!`);

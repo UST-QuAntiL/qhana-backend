@@ -350,8 +350,16 @@ service / on new http:Listener(port) {
             notes: result
         };
     }
-    resource function put experiments/[int experimentId]/timeline/[int timelineStep]/notes() returns http:Ok {
-        return {};
+    resource function put experiments/[int experimentId]/timeline/[int timelineStep]/notes(@http:Payload TimelineStepNotesPost notes) returns http:Ok|http:InternalServerError {
+        transaction {
+            check database:updateTimelineStepNotes(experimentId, timelineStep, notes.notes);
+            check commit;
+        } on fail error err {
+            io:println(err);
+            return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
+        }
+
+        return <http:Ok>{};
     }
 }
 
