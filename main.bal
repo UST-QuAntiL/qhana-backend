@@ -14,6 +14,7 @@
 
 import ballerina/http;
 import ballerina/io;
+import ballerina/regex;
 import qhana_backend.database;
 
 
@@ -21,6 +22,22 @@ configurable string[] corsDomains = ["http://localhost:4200"];
 configurable int port = 9090;
 
 configurable (decimal|int)[] watcherIntervallConfig = [2, 10, 5, 10, 10, 60, 30, 20, 60, 10, 600];
+
+// URL map that can be used to map plugin endpoint watcher urls t URLs reachable for the backend
+// Intended for use in a dockerized dev setup where localhost is used as outside URL
+configurable map<string>&readonly internalUrlMap = {};
+
+isolated function mapToInternalUrl(string url) returns string {
+    if internalUrlMap.length() == 0 {
+        return url; // fast exit
+    }
+    // apply all replacements specified in the url map, keys are interpreted as regex
+    var replacedUrl = url;
+    foreach var key in internalUrlMap {
+        replacedUrl = regex:replaceFirst(url, key, internalUrlMap.get(key));
+    }
+    return replacedUrl;
+}
 
 # The QHAna backend api service.
 @http:ServiceConfig {
@@ -297,7 +314,7 @@ service / on new http:Listener(port) {
                 processorLocation=stepData.processorLocation
             );
             check database:saveTimelineStepInputData(createdStep.stepId, experimentId, inputData);
-            check database:createTimelineStepResultWatcher(createdStep.stepId, stepData.resultLocation);
+            check database:createTimelineStepResultWatcher(createdStep.stepId, mapToInternalUrl(stepData.resultLocation));
             check commit;
         } on fail error err {
             io:println(err);
