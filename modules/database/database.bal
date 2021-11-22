@@ -130,6 +130,7 @@ public type TimelineStep record {|
     time:Utc 'start;
     time:Utc? end=();
     string status="PENDING";
+    string resultQuality="UNKNOWN";
     string? resultLog=();
     string processorName;
     string? processorVersion=();
@@ -152,6 +153,7 @@ public type TimelineStepSQL record {|
     string|time:Utc 'start;
     string|time:Utc|() end=();
     string status="PENDING";
+    string resultQuality="UNKNOWN";
     string? resultLog=();
     string processorName;
     string? processorVersion=();
@@ -165,6 +167,15 @@ public type TimelineStepSQL record {|
 public type TimelineStepWithParams record {|
     *TimelineStepFull;
     string parameters;
+|};
+
+public type TimelineSubstepSQL record {|
+    int stepId;
+    int substepNr;
+    string substepId;
+    string href;
+    string? hrefUi;
+    int cleared;
 |};
 
 // Timeline to Data links //////////////////////////////////////////////////////
@@ -554,7 +565,7 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
 
 
     if allAttributes {
-        query.push(`, resultLog, parameters, parametersContentType, notes `);
+        query.push(`, resultQuality, resultLog, parameters, parametersContentType, notes `);
     } else {
         query.push(`, NULL AS resultLog `);
     }
@@ -627,10 +638,10 @@ public isolated transactional function createTimelineStep(
 
 
 public isolated transactional function getTimelineStep(int? experimentId=(), int? sequence=(), int? stepId=()) returns TimelineStepWithParams|error {
-    var baseQuery = `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultLog, processorName, processorVersion, processorLocation, parametersDescriptionLocation, parameters, parametersContentType
+    var baseQuery = `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parametersDescriptionLocation, parameters, parametersContentType
                      FROM TimelineStep `;
     if dbType != "sqlite" {
-        baseQuery = `SELECT stepId, experimentId, sequence, DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, status, resultLog, processorName, processorVersion, processorLocation, parametersDescriptionLocation, parameters, parametersContentType
+        baseQuery = `SELECT stepId, experimentId, sequence, DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parametersDescriptionLocation, parameters, parametersContentType
                      FROM TimelineStep `;
     }
     
@@ -756,7 +767,7 @@ public isolated transactional function saveTimelineStepOutputData(int stepId, in
 }
 
 public isolated transactional function getTimelineStepNotes(int experimentId, int sequence) returns string|error {
-    stream<record {|string? notes;|}, sql:Error?> note = experimentDB->query(
+    stream<record {|string? notes; |}, sql:Error?> note = experimentDB->query(
         `SELECT notes
          FROM TimelineStep WHERE experimentId=${experimentId} AND sequence=${sequence} LIMIT 1;`
     );
@@ -780,6 +791,14 @@ public isolated transactional function updateTimelineStepNotes(int experimentId,
     stream<Experiment, sql:Error?> experiments;
     var test = check experimentDB->execute(
         `UPDATE TimelineStep SET notes=${notes} WHERE experimentId = ${experimentId} AND sequence=${sequence};`
+    );
+    io:println(test);
+}
+
+public isolated transactional function updateTimelineStepResultQuality(int experimentId, int sequence, string resultQuality) returns error? {
+    stream<Experiment, sql:Error?> experiments;
+    var test = check experimentDB->execute(
+        `UPDATE TimelineStep SET resultQuality=${resultQuality} WHERE experimentId = ${experimentId} AND sequence=${sequence};`
     );
     io:println(test);
 }
@@ -829,4 +848,37 @@ public isolated transactional function deleteTimelineStepResultWatcher(int stepI
     );
 }
 
+
+public isolated transactional function getTimelineSubsteps(int stepId) returns TimelineSubstepSQL[]|error {
+    stream<TimelineSubstepSQL, sql:Error?> substeps = experimentDB->query(
+        `SELECT stepId, substepNr, substepId, href, hrefUi, cleared FROM TimelineSubstep WHERE stepId=${stepId};;`
+    );
+    TimelineSubstepSQL[]|error|() result = check from var substep in substeps select substep;
+    check substeps.close();
+
+    if result is () {
+        return [];
+    } else {
+        return result;
+    }
+}
+
+
+public isolated transactional function createTimelineSubstep(int stepId, string href, string? hrefUi, string? substepId) returns error? {
+    if href == "" {
+        return error("Href cannot be empty!");
+    }
+    //stepId"	INTEGER NOT NULL,
+	//"substepNr"	INTEGER NOT NULL,
+	//"substepId"	VARCHAR(500) NOT NULL,
+	//"href"	TEXT NOT NULL,
+	//"hrefUi"	TEXT,
+	//"cleared"	INTEGER DEF
+    int count = check experimentDB->queryRow(`SELECT count(*) FROM TimelineSubstep WHERE stepId=${stepId};`);
+    count += 1;
+    var insertResult = check experimentDB->execute(
+        `INSERT INTO TimelineSubstep (stepId, substepNr, substepId, href, hrefUi, cleared) 
+         VALUES (${stepId}, ${count}, ${substepId != () ? substepId : count.toString()}, ${href}, ${hrefUi});`
+    );
+}
 
