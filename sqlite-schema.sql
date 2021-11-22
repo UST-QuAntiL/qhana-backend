@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS "TimelineStep" (
 	"start"	DATETIME NOT NULL,
 	"end"	DATETIME,
 	"status"	VARCHAR(50) DEFAULT 'PENDING',
+	"resultQuality"	VARCHAR(50) NOT NULL DEFAULT 'UNKNOWN',
 	"resultLog"	TEXT,
 	"processorName"	VARCHAR(500) NOT NULL,
 	"processorVersion"	VARCHAR(150),
@@ -70,6 +71,10 @@ CREATE TABLE IF NOT EXISTS "TimelineStep" (
 	"parameters"	TEXT NOT NULL,
 	"parametersContentType"	VARCHAR(500) NOT NULL DEFAULT 'application/x-www-form-urlencoded',
 	"parametersDescriptionLocation"	TEXT,
+	"pStart"	REAL,
+	"pTarget"	REAL,
+	"pValue"	REAL,
+	"pUnit"	VARCHAR(500),
 	"notes"	TEXT,
 	FOREIGN KEY("experimentId") REFERENCES "Experiment"("experimentId"),
 	CONSTRAINT "ux_experiment_step" UNIQUE("experimentId","sequence"),
@@ -108,6 +113,28 @@ CREATE INDEX IF NOT EXISTS "ix_fk_step_data_to_data" ON "StepData" (
 );
 CREATE INDEX IF NOT EXISTS "ix_fk_step_data_relation" ON "StepData" (
 	"relationType"
+);
+
+CREATE TABLE "TimelineSubstep" (
+	"stepId"	INTEGER NOT NULL,
+	"substepNr"	INTEGER NOT NULL,
+	"substepId"	VARCHAR(500) NOT NULL,
+	"href"	TEXT NOT NULL,
+	"hrefUi"	TEXT,
+	"cleared"	INTEGER DEFAULT 0 CHECK(cleared=0 or cleared=1),
+	"parameters"	TEXT NOT NULL,
+	"parametersContentType"	VARCHAR(500) NOT NULL DEFAULT 'application/x-www-form-urlencoded',
+	FOREIGN KEY("stepId") REFERENCES "TimelineStep"("stepId"),
+	PRIMARY KEY("stepId","substepNr")
+)
+CREATE INDEX IF NOT EXISTS "ix_pk_substep_to_step" ON "TimelineSubstep" (
+	"stepId"	ASC
+);
+CREATE INDEX IF NOT EXISTS "ix_pk_substep_nr" ON "TimelineSubstep" (
+	"substepNr"	ASC
+);
+CREATE INDEX IF NOT EXISTS "ix_substep_id" ON "TimelineSubstep" (
+	"substepId"	ASC
 );
 
 CREATE TABLE IF NOT EXISTS "ResultWatchers" (
