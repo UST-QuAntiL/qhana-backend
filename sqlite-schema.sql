@@ -115,7 +115,7 @@ CREATE INDEX IF NOT EXISTS "ix_fk_step_data_relation" ON "StepData" (
 	"relationType"
 );
 
-CREATE TABLE "TimelineSubstep" (
+CREATE TABLE IF NOT EXISTS "TimelineSubstep" (
 	"stepId"	INTEGER NOT NULL,
 	"substepNr"	INTEGER NOT NULL,
 	"substepId"	VARCHAR(500) NOT NULL,
@@ -126,7 +126,7 @@ CREATE TABLE "TimelineSubstep" (
 	"parametersContentType"	VARCHAR(500) NOT NULL DEFAULT 'application/x-www-form-urlencoded',
 	FOREIGN KEY("stepId") REFERENCES "TimelineStep"("stepId"),
 	PRIMARY KEY("stepId","substepNr")
-)
+);
 CREATE INDEX IF NOT EXISTS "ix_pk_substep_to_step" ON "TimelineSubstep" (
 	"stepId"	ASC
 );
@@ -135,6 +135,28 @@ CREATE INDEX IF NOT EXISTS "ix_pk_substep_nr" ON "TimelineSubstep" (
 );
 CREATE INDEX IF NOT EXISTS "ix_substep_id" ON "TimelineSubstep" (
 	"substepId"	ASC
+);
+
+CREATE TABLE IF NOT EXISTS "SubstepData" (
+	"id"	INTEGER NOT NULL,
+	"stepId"	INTEGER NOT NULL,
+	"dataId"	INTEGER NOT NULL,
+	"relationType"	VARCHAR(50) NOT NULL COLLATE NOCASE,
+	FOREIGN KEY("stepId") REFERENCES "TimelineSubstep"("stepId"),
+	FOREIGN KEY("dataId") REFERENCES "ExperimentData"("dataId"),
+	PRIMARY KEY("id" AUTOINCREMENT)
+);
+CREATE INDEX IF NOT EXISTS "ix_pk_substep_data" ON "SubstepData" (
+	"id"	ASC
+);
+CREATE INDEX IF NOT EXISTS "ix_fk_substep_data_to_step" ON "SubstepData" (
+	"stepId"
+);
+CREATE INDEX IF NOT EXISTS "ix_fk_substep_data_to_data" ON "SubstepData" (
+	"dataId"
+);
+CREATE INDEX IF NOT EXISTS "ix_fk_substep_data_relation" ON "SubstepData" (
+	"relationType"
 );
 
 CREATE TABLE IF NOT EXISTS "ResultWatchers" (
