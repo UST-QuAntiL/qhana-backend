@@ -21,7 +21,6 @@ import qhana_backend.database;
 
 configurable string storageLocation = "experimentData";
 
-
 type TaskDataOutput record {
     string href;
     string outputType;
@@ -36,7 +35,6 @@ type TaskStatusResponse record {
     string? taskLog?;
     TaskDataOutput[]? outputs?;
 };
-
 
 isolated class ResultProcessor {
 
@@ -74,7 +72,7 @@ isolated class ResultProcessor {
                     }
                 } on fail var compensationError {
                     // TODO actual error logging (and periodic cleanup job looking for files not in a database)
-                    io:println(string`Error during deletion of file ${processed.location}, while compensating on error importing result for task ${self.result.taskId}!`, compensationError);
+                    io:println(string `Error during deletion of file ${processed.location}, while compensating on error importing result for task ${self.result.taskId}!`, compensationError);
                 }
             }
         }
@@ -82,7 +80,7 @@ isolated class ResultProcessor {
 
     private isolated function saveSuccessfullResult() returns error? {
         var outputs = self.result?.outputs;
-        
+
         transaction {
 
             'transaction:onRollback(self.compensateFileCreation);
@@ -149,7 +147,6 @@ isolated class ResultProcessor {
     }
 }
 
-
 public isolated class ResultWatcher {
 
     *task:Job;
@@ -157,9 +154,9 @@ public isolated class ResultWatcher {
     final http:Client httpClient;
     final int experimentId;
     final int stepId;
-    private final string&readonly resultEndpoint;
+    private final string & readonly resultEndpoint;
     private int errorCounter;
-    private task:JobId? jobId=();
+    private task:JobId? jobId = ();
     private decimal[] scheduleIntervals = [5];
     private int[] backoffCounters = [];
     private int? currentBackoffCounter = ();
@@ -172,7 +169,7 @@ public isolated class ResultWatcher {
         if currentErrorCounter > 5 {
             var err = self.unschedule();
             if err is error {
-                io:println(string`Failed to unsubscribe step result watcher for step ${self.stepId}`, err);
+                io:println(string `Failed to unsubscribe step result watcher for step ${self.stepId}`, err);
             }
         }
 
@@ -230,17 +227,17 @@ public isolated class ResultWatcher {
 
         lock {
             self.jobId = check task:scheduleJobRecurByFrequency(self, interval);
-            io:println(string`Scheduled watcher for step ${self.stepId} with interval ${interval}. JobId: ${self.jobId.toString()}`);
+            io:println(string `Scheduled watcher for step ${self.stepId} with interval ${interval}. JobId: ${self.jobId.toString()}`);
         }
     }
 
     # Schedule this background job periodically with the given interval in seconds.
-    # 
+    #
     # If more than one number is given every second number starting from the first is
     # interpreted as an interval. The number following the intervall is the number of
     # times this background job is scheduled with that intervall. If no number follows
     # an intervall, then the job will not unschedule itself.
-    # 
+    #
     # If the number of times is exceeded, then the job will reschedule itself
     # with the next intervall in the list. If no intervall is left, then the job 
     # will unschedule itself.
@@ -249,21 +246,21 @@ public isolated class ResultWatcher {
     #
     # + intervals - usage: `[intervall1, backoffCounter1, intervall2, backoffCounter2, ..., [intervallLast]]`
     # + return - The error encountered while (re)scheduling this job (or parsing the intervals)
-    public isolated function schedule(decimal|int ...intervals) returns error? {
+    public isolated function schedule(decimal|int... intervals) returns error? {
         if intervals.length() <= 0 {
             return error("Must specify at least one inteval!");
         }
         decimal[] scheduleIntervals = [];
         int[] backoffCounters = [];
-        foreach int i in 0..<intervals.length() {
+        foreach int i in 0 ..< intervals.length() {
             if i % 2 == 0 {
-                scheduleIntervals.push(<decimal> intervals[i]);
+                scheduleIntervals.push(<decimal>intervals[i]);
             } else {
                 var counter = intervals[i];
                 if counter is int {
                     backoffCounters.push(counter);
                 } else {
-                    backoffCounters.push(<int> counter.ceiling());
+                    backoffCounters.push(<int>counter.ceiling());
                 }
             }
         }
@@ -273,16 +270,16 @@ public isolated class ResultWatcher {
             self.backoffCounters = backoffCounters.clone().reverse();
 
             var startingIntervall = self.scheduleIntervals.pop(); // list always contains >1 entries at this point (see guard at top)
-            self.currentBackoffCounter = self.backoffCounters.length()>0 ? self.backoffCounters.pop() : ();
+            self.currentBackoffCounter = self.backoffCounters.length() > 0 ? self.backoffCounters.pop() : ();
 
             check self.reschedule(startingIntervall);
         }
     }
 
     # Unschedule the job.
-    # 
+    #
     # Only works if the job was scheduled using the `schedule` method of the job.
-    # 
+    #
     # + return - The error encountered.
     public isolated function unschedule() returns error? {
         task:JobId? jobId;
@@ -291,12 +288,13 @@ public isolated class ResultWatcher {
         }
         if jobId is task:JobId {
             check task:unscheduleJob(jobId);
-            io:println(string`Unscheduled watcher for step ${self.stepId}. JobId: ${jobId.toString()}`);
+            io:println(string `Unscheduled watcher for step ${self.stepId}. JobId: ${jobId.toString()}`);
         }
     }
 
     private isolated function checkTaskResult(TaskStatusResponse result) {
         if result.status == "UNKNOWN" || result.status == "PENDING" {
+            // In case of pending, check if new substep... progress and step list auslesen, vergleiche substeps... mit fehler abbrechen, wenn plugin blödsinn macht (substeps löscht), oder warning in log von step
             return; // nothing to do, still waiting for result
         }
         do {
@@ -311,7 +309,6 @@ public isolated class ResultWatcher {
         }
     }
 
-
     isolated function init(int stepId) returns error? {
         self.errorCounter = 0;
 
@@ -321,12 +318,12 @@ public isolated class ResultWatcher {
 
         if transactional {
             resultEndpoint = check database:getTimelineStepResultEndpoint(stepId);
-            var step = check database:getTimelineStep(stepId=stepId);
+            var step = check database:getTimelineStep(stepId = stepId);
             self.experimentId = step.experimentId;
         } else {
             transaction {
                 resultEndpoint = check database:getTimelineStepResultEndpoint(stepId);
-                var step = check database:getTimelineStep(stepId=stepId);
+                var step = check database:getTimelineStep(stepId = stepId);
                 self.experimentId = step.experimentId;
                 check commit;
             }
@@ -344,7 +341,7 @@ public isolated class ResultWatcher {
 }
 
 isolated function prepareStorageLocation(int experimentId) returns string|error {
-    var relPath = check file:joinPath(storageLocation, string`${experimentId}`);
+    var relPath = check file:joinPath(storageLocation, string `${experimentId}`);
     var normalizedPath = check file:normalizePath(relPath, file:CLEAN);
     var abspath = check file:getAbsolutePath(normalizedPath);
     check file:createDir(abspath, file:RECURSIVE);

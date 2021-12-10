@@ -17,7 +17,6 @@ import ballerina/io;
 import ballerina/regex;
 import qhana_backend.database;
 
-
 configurable string[] corsDomains = ["http://localhost:4200"];
 configurable int port = 9090;
 
@@ -25,7 +24,7 @@ configurable (decimal|int)[] watcherIntervallConfig = [2, 10, 5, 10, 10, 60, 30,
 
 // URL map that can be used to map plugin endpoint watcher urls t URLs reachable for the backend
 // Intended for use in a dockerized dev setup where localhost is used as outside URL
-configurable map<string>&readonly internalUrlMap = {};
+configurable map<string> & readonly internalUrlMap = {};
 
 isolated function mapToInternalUrl(string url) returns string {
     if internalUrlMap.length() == 0 {
@@ -211,8 +210,8 @@ service / on new http:Listener(port) {
         database:ExperimentDataFull[] data;
 
         transaction {
-            dataCount = check database: getExperimentDataCount(experimentId, all=includeAllVersions);
-            data = check database:getDataList(experimentId, all=includeAllVersions);
+            dataCount = check database:getExperimentDataCount(experimentId, all = includeAllVersions);
+            data = check database:getDataList(experimentId, all = includeAllVersions);
             check commit;
         } on fail error err {
             io:println(err);
@@ -222,7 +221,7 @@ service / on new http:Listener(port) {
         }
 
         var dataList = from var d in data
-            select mapToExperimentDataResponse(d); 
+            select mapToExperimentDataResponse(d);
         return {'\@self: string `/experiments/${experimentId}/data/?allVersions=${includeAllVersions}`, items: dataList, itemCount: dataCount};
     }
 
@@ -263,12 +262,12 @@ service / on new http:Listener(port) {
 
         resp.statusCode = http:STATUS_OK;
         var cType = data.contentType;
-        if cType.startsWith("text/") || cType.startsWith("application/json") || cType.startsWith("application/X-lines+json"){
-            resp.addHeader("Content-Disposition", string`inline; filename="${data.name}"`);
+        if cType.startsWith("text/") || cType.startsWith("application/json") || cType.startsWith("application/X-lines+json") {
+            resp.addHeader("Content-Disposition", string `inline; filename="${data.name}"`);
         } else {
-            resp.addHeader("Content-Disposition", string`attachment; filename="${data.name}"`);
+            resp.addHeader("Content-Disposition", string `attachment; filename="${data.name}"`);
         }
-        resp.setFileAsPayload(data.location, contentType=data.contentType);
+        resp.setFileAsPayload(data.location, contentType = data.contentType);
 
         check caller->respond(resp);
     }
@@ -293,7 +292,7 @@ service / on new http:Listener(port) {
         }
 
         var stepList = from var s in steps
-            select mapToTimelineStepMinResponse(s); 
+            select mapToTimelineStepMinResponse(s); // TODO: add progress to min response
         return {'\@self: string `/experiments/${experimentId}/timeline`, items: stepList, itemCount: stepCount};
     }
 
@@ -303,15 +302,15 @@ service / on new http:Listener(port) {
 
         transaction {
             inputData = from var inputUrl in stepData.inputData
-                        select check mapFileUrlToDataRef(experimentId, inputUrl);
-            createdStep = check database:createTimelineStep(
-                experimentId=experimentId,
-                parameters=stepData.parameters,
-                parametersContentType=stepData.parametersContentType,
-                parametersDescriptionLocation=stepData.parametersDescriptionLocation,
-                processorName=stepData.processorName,
-                processorVersion=stepData.processorVersion,
-                processorLocation=stepData.processorLocation
+                select check mapFileUrlToDataRef(experimentId, inputUrl);
+            createdStep = check database:createTimelineStep( // TODO: add progress and substeps - how to add TimelineSubstepInputData??? this is just input data for a step -> does stepData.parameters also contain status etc of ProcessingTask?
+                experimentId = experimentId,
+                parameters = stepData.parameters,
+                parametersContentType = stepData.parametersContentType,
+                parametersDescriptionLocation = stepData.parametersDescriptionLocation,
+                processorName = stepData.processorName,
+                processorVersion = stepData.processorVersion,
+                processorLocation = stepData.processorLocation
             );
             check database:saveTimelineStepInputData(createdStep.stepId, experimentId, inputData);
             check database:createTimelineStepResultWatcher(createdStep.stepId, mapToInternalUrl(stepData.resultLocation));
@@ -331,16 +330,18 @@ service / on new http:Listener(port) {
             http:InternalServerError resultErr = {body: "Failed to start watcher."};
             return resultErr;
         }
-        return mapToTimelineStepResponse(createdStep, inputData, []);
+        return mapToTimelineStepResponse(createdStep, inputData, []); //TODO: make sure this also returns substeps?
     }
+
+    // TODO: add resource to post input data for substep (parameters und parametersContentType), kein eigenen watcher starten... 
 
     resource function get experiments/[int experimentId]/timeline/[int timelineStep]() returns TimelineStepResponse|http:InternalServerError {
         database:TimelineStepWithParams result;
         database:ExperimentDataReference[] inputData;
         database:ExperimentDataReference[] outputData;
-        
+
         transaction {
-            result = check database:getTimelineStep(experimentId=experimentId, sequence=timelineStep);
+            result = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep); // TODO: make sure this now also includes progress data and substeps
             inputData = check database:getStepInputData(result);
             outputData = check database:getStepOutputData(result);
             check commit;
@@ -349,13 +350,13 @@ service / on new http:Listener(port) {
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
-        return mapToTimelineStepResponse(result, inputData, outputData);
+        return mapToTimelineStepResponse(result, inputData, outputData); // TODO: add progress data and substeps
     }
     resource function get experiments/[int experimentId]/timeline/[int timelineStep]/notes() returns TimelineStepNotesResponse|http:InternalServerError {
         string result;
-        
+
         transaction {
-            result = check database:getTimelineStepNotes(experimentId, timelineStep);
+            result = check database:getTimelineStepNotes(experimentId, timelineStep); // TODO: what is notes? change needed???
             check commit;
         } on fail error err {
             io:println(err);
@@ -369,7 +370,7 @@ service / on new http:Listener(port) {
     }
     resource function put experiments/[int experimentId]/timeline/[int timelineStep]/notes(@http:Payload TimelineStepNotesPost notes) returns http:Ok|http:InternalServerError {
         transaction {
-            check database:updateTimelineStepNotes(experimentId, timelineStep, notes.notes);
+            check database:updateTimelineStepNotes(experimentId, timelineStep, notes.notes); // TODO: what is notes? change needed???
             check commit;
         } on fail error err {
             io:println(err);
@@ -379,7 +380,6 @@ service / on new http:Listener(port) {
         return <http:Ok>{};
     }
 }
-
 
 public function main() {
     // registering background tasks

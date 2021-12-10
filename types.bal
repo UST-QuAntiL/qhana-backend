@@ -46,19 +46,17 @@ public type RootResponse record {|
     string tasks;
 |};
 
-
 public type PluginEndpointPost record {|
     string url;
-    string 'type="PluginRunner";
+    string 'type = "PluginRunner";
 |};
 
 public type PluginEndpointResponse record {|
     *ApiResponse;
     int endpointId;
     string url;
-    string 'type="PluginRunner";
+    string 'type = "PluginRunner";
 |};
-
 
 public type PluginEndpointsListResponse record {|
     *ApiResponse;
@@ -75,14 +73,12 @@ public isolated function mapToPluginEndpointResponse(database:PluginEndpointFull
     };
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
 // Experiments /////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
-
 # Api response for a single experiment.
-# 
+#
 # + experimentId - The database id of the experiment
 public type ExperimentResponse record {|
     *ApiResponse;
@@ -113,11 +109,9 @@ public isolated function mapToExperimentResponse(database:ExperimentFull experim
     };
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
 // Data ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
-
 
 public type ExperimentDataResponse record {|
     *ApiResponse;
@@ -132,15 +126,13 @@ public type ExperimentDataResponse record {|
     string contentType;
 |};
 
-
 public type ExperimentDataListResponse record {|
     *ApiResponse;
     ExperimentDataResponse[] items;
     int itemCount;
 |};
 
-
-public isolated function mapToExperimentDataResponse(database:ExperimentDataFull data, int? producingStep=(), int[]? inputFor=()) returns ExperimentDataResponse {
+public isolated function mapToExperimentDataResponse(database:ExperimentDataFull data, int? producingStep = (), int[]? inputFor = ()) returns ExperimentDataResponse {
     ExperimentDataResponse dataMapped = {
         '\@self: string `/experiments/${data.experimentId}/data/${data.name}?version=${data.'version}`,
         download: string `/experiments/${data.experimentId}/data/${data.name}/download?version=${data.'version}`,
@@ -155,40 +147,51 @@ public isolated function mapToExperimentDataResponse(database:ExperimentDataFull
     }
     if (inputFor != ()) {
         dataMapped.inputFor = inputFor;
-        dataMapped.inputForLinks = from var step in inputFor select string `/experiments/${data.experimentId}/timeline/${step}`;
+        dataMapped.inputForLinks = from var step in inputFor
+            select string `/experiments/${data.experimentId}/timeline/${step}`;
     }
     return dataMapped;
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // Timeline ////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
+public type TimelineSubstep record {|
+    string stepID;
+    string href;
+    string uiHref;
+    int number;
+    boolean cleared;
+|};
+
 public type TimelineStepPost record {|
     string resultLocation;
     string[] inputData;
-
     string processorName;
-    string? processorVersion=();
-    string? processorLocation=();
+    string? processorVersion = ();
+    string? processorLocation = ();
     string? parameters;
-    string parametersContentType=mime:APPLICATION_FORM_URLENCODED;
-    string? parametersDescriptionLocation=();
-|};
+    string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
+    string? parametersDescriptionLocation = ();
+|}; // TODO: not sure if sth needs to be changed here
 
 public type TimelineStepMinResponse record {|
     *ApiResponse;
     string notes;
     int sequence;
     string 'start;
-    string? end=();
+    string? end = ();
     string status;
     string processorName;
-    string? processorVersion=();
-    string? processorLocation=();
-    string? parametersContentType=();
-    string? parametersDescriptionLocation=();
+    string? processorVersion = ();
+    string? processorLocation = ();
+    string? parametersContentType = ();
+    string? parametersDescriptionLocation = ();
+    int? progressValue = ();
+    int? progressStart = ();
+    int? progressTarget = ();
+    string? progressUnit = ();
 |};
 
 public type TimelineStepResponse record {|
@@ -199,8 +202,8 @@ public type TimelineStepResponse record {|
     string[] inputDataLinks;
     database:ExperimentDataReference[] outputData;
     string[] outputDataLinks;
+    TimelineSubstep[]? substeps = ();
 |};
-
 
 public type TimelineStepListResponse record {|
     *ApiResponse;
@@ -217,11 +220,10 @@ public type TimelineStepNotesPost record {|
     string notes;
 |};
 
-
 public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull step) returns TimelineStepMinResponse {
     var end = step.end;
     return {
-        '\@self: string`/experiments/${step.experimentId}/timeline/${step.sequence}`,
+        '\@self: string `/experiments/${step.experimentId}/timeline/${step.sequence}`,
         notes: string `./notes`,
         sequence: step.sequence,
         'start: time:utcToString(step.'start),
@@ -230,21 +232,26 @@ public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull 
         processorName: step.processorName,
         processorVersion: step.processorVersion,
         processorLocation: step.processorLocation,
-        parametersDescriptionLocation: step.parametersDescriptionLocation
-    };
+        parametersDescriptionLocation: step.parametersDescriptionLocation,
+        progressValue: step.progressValue,
+        progressStart: step.progressStart,
+        progressTarget: step.progressTarget,
+        progressUnit: step.progressUnit
+};
 }
 
 public isolated function mapToTimelineStepResponse(
-        database:TimelineStepWithParams step, 
-        database:ExperimentDataReference[] inputData=[], 
-        database:ExperimentDataReference[] outputData=[]
+        database:TimelineStepWithParams step,
+        database:ExperimentDataReference[] inputData = [],
+        database:ExperimentDataReference[] outputData = []
     ) returns TimelineStepResponse {
     var end = step.end;
     var log = step.resultLog;
-    var inputDataLinks = from var dataRef in inputData 
-        select string`/experiments/${step.experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
-    var outputDataLinks = from var dataRef in outputData 
-        select string`/experiments/${step.experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
+    var inputDataLinks = from var dataRef in inputData
+        select string `/experiments/${step.experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
+    var outputDataLinks = from var dataRef in outputData
+        select string `/experiments/${step.experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
+    var substeps = (); // TODO: retrieve all substeps for step from db? How?
     return {
         '\@self: string `/experiments/${step.experimentId}/timeline/${step.sequence}`,
         notes: string `./notes`,
@@ -262,12 +269,17 @@ public isolated function mapToTimelineStepResponse(
         inputData: inputData,
         inputDataLinks: inputDataLinks,
         outputData: outputData,
-        outputDataLinks: outputDataLinks
+        outputDataLinks: outputDataLinks,
+        progressValue: step.progressValue,
+        progressStart: step.progressStart,
+        progressTarget: step.progressTarget,
+        progressUnit: step.progressUnit,
+        substeps: substeps
     };
 }
 
 public isolated function mapFileUrlToDataRef(int experimentId, string url) returns database:ExperimentDataReference|error {
-    var regex = string`^(https?:\/\/)?[^\/]*\/experiments\/${experimentId}\/data\/[^\/]+\/download\?version=(latest|[0-9]+)$`;
+    var regex = string `^(https?:\/\/)?[^\/]*\/experiments\/${experimentId}\/data\/[^\/]+\/download\?version=(latest|[0-9]+)$`;
     if !regex:matches(url, regex) {
         return error("url does not match any file from the experiment.");
     }
@@ -279,7 +291,7 @@ public isolated function mapFileUrlToDataRef(int experimentId, string url) retur
         return error("A malformed url slipped through the regex test.");
     } else {
         var filename = url.substring(dataStart + 6, filenameEnd);
-        var versionNumber = url.substring(versionStart+1, url.length());
+        var versionNumber = url.substring(versionStart + 1, url.length());
         return {
             name: check url:decode(filename, "UTF-8"),
             'version: check int:fromString(versionNumber)
