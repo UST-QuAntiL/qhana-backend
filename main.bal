@@ -300,6 +300,8 @@ service / on new http:Listener(port) {
         database:TimelineStepWithParams createdStep;
         database:ExperimentDataReference[] inputData;
 
+        // TODO: extract substeps from stepData
+        // change TimelineStepPost to include substeps
         transaction {
             inputData = from var inputUrl in stepData.inputData
                 select check mapFileUrlToDataRef(experimentId, inputUrl);
@@ -330,7 +332,7 @@ service / on new http:Listener(port) {
             http:InternalServerError resultErr = {body: "Failed to start watcher."};
             return resultErr;
         }
-        return mapToTimelineStepResponse(createdStep, inputData, []); //TODO: make sure this also returns substeps?
+        return mapToTimelineStepResponse(createdStep, (), inputData, []); //TODO: make sure this also returns substeps?
     }
 
     // TODO: add resource to post input data for substep (parameters und parametersContentType), kein eigenen watcher starten... 
@@ -339,18 +341,19 @@ service / on new http:Listener(port) {
         database:TimelineStepWithParams result;
         database:ExperimentDataReference[] inputData;
         database:ExperimentDataReference[] outputData;
-
+        database:TimelineSubstep[]? substeps;
         transaction {
             result = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep); // TODO: make sure this now also includes progress data and substeps
             inputData = check database:getStepInputData(result);
             outputData = check database:getStepOutputData(result);
+            substeps = check database:getTimelineSubstepList(timelineStep);
             check commit;
         } on fail error err {
             io:println(err);
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
-        return mapToTimelineStepResponse(result, inputData, outputData); // TODO: add progress data and substeps
+        return mapToTimelineStepResponse(result, substeps, inputData, outputData);
     }
     resource function get experiments/[int experimentId]/timeline/[int timelineStep]/notes() returns TimelineStepNotesResponse|http:InternalServerError {
         string result;

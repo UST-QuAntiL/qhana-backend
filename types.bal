@@ -157,14 +157,6 @@ public isolated function mapToExperimentDataResponse(database:ExperimentDataFull
 // Timeline ////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
-public type TimelineSubstep record {|
-    string stepID;
-    string href;
-    string uiHref;
-    int number;
-    boolean cleared;
-|};
-
 public type TimelineStepPost record {|
     string resultLocation;
     string[] inputData;
@@ -202,7 +194,7 @@ public type TimelineStepResponse record {|
     string[] inputDataLinks;
     database:ExperimentDataReference[] outputData;
     string[] outputDataLinks;
-    TimelineSubstep[]? substeps = ();
+    database:TimelineSubstep[]? substeps = ();
 |};
 
 public type TimelineStepListResponse record {|
@@ -242,16 +234,16 @@ public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull 
 
 public isolated function mapToTimelineStepResponse(
         database:TimelineStepWithParams step,
+        database:TimelineSubstep[]? substeps,
         database:ExperimentDataReference[] inputData = [],
         database:ExperimentDataReference[] outputData = []
-    ) returns TimelineStepResponse {
+) returns TimelineStepResponse {
     var end = step.end;
     var log = step.resultLog;
     var inputDataLinks = from var dataRef in inputData
         select string `/experiments/${step.experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
     var outputDataLinks = from var dataRef in outputData
         select string `/experiments/${step.experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
-    var substeps = (); // TODO: retrieve all substeps for step from db? How?
     return {
         '\@self: string `/experiments/${step.experimentId}/timeline/${step.sequence}`,
         notes: string `./notes`,

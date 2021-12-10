@@ -115,6 +115,14 @@ public type ExperimentDataFull record {|
 
 // Timeline ////////////////////////////////////////////////////////////////////
 
+public type TimelineSubstep record {|
+    string substepId;
+    int substepNr;
+    string href;
+    string? hrefUi;
+    int cleared;
+|};
+
 public type TimelineStepRef record {|
     readonly int experimentId;
     readonly int sequence;
@@ -529,6 +537,39 @@ public isolated transactional function getTimelineStepCount(int experimentId) re
     }
 }
 
+public isolated transactional function getTimelineSubstepList(int stepId) returns TimelineSubstep[]|()|error {
+    object:RawTemplate[] query = [`SELECT stepId, substepNr, substepId, href, hrefUi, cleared`];
+
+    query.push(`FROM TimelineSubstep WHERE stepId=${stepId} ORDER BY substepNr ASC;`);
+
+    stream<TimelineSubstepSQL, sql:Error?> timelineSubsteps = experimentDB->query(check new ConcatQuery(...query));
+
+    (TimelineSubstepSQL)[]|error|() tempList = from var substep in timelineSubsteps
+        select substep;
+
+    check timelineSubsteps.close();
+
+    TimelineSubstep[] substepList = [];
+    if tempList is error {
+        return tempList;
+    } else if tempList is () {
+        return [];
+    } else {
+        // convert timestamps to correct utc type if timestamps come from sqlite
+        foreach var tempSubstep in tempList {
+            TimelineSubstep substep = {
+                substepId: tempSubstep.substepId,
+                substepNr: tempSubstep.substepNr,
+                href: tempSubstep.href,
+                hrefUi: tempSubstep.hrefUi,
+                cleared: tempSubstep.cleared
+            };
+            substepList.push(substep);
+        }
+    }
+    return substepList;
+}
+
 public isolated transactional function castToTimelineStepFull(TimelineStepSQL step) returns TimelineStepFull|error {
     var startString = step.'start; // needed for correct type narrowing
     if startString is string {
@@ -574,6 +615,8 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
 
     (TimelineStepSQL|TimelineStepFull)[]|error|() tempList = from var step in timelineSteps
         select step;
+
+    // TODO: retrieve associated substeps for each step
 
     check timelineSteps.close();
 
