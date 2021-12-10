@@ -140,9 +140,11 @@ CREATE INDEX IF NOT EXISTS "ix_substep_id" ON "TimelineSubstep" (
 CREATE TABLE IF NOT EXISTS "SubstepData" (
 	"id"	INTEGER NOT NULL,
 	"stepId"	INTEGER NOT NULL,
+	"substepNr"	INTEGER NOT NULL,
 	"dataId"	INTEGER NOT NULL,
 	"relationType"	VARCHAR(50) NOT NULL COLLATE NOCASE,
 	FOREIGN KEY("stepId") REFERENCES "TimelineSubstep"("stepId"),
+	FOREIGN KEY("substepNr") REFERENCES "TimelineSubstep"("substepNr"),
 	FOREIGN KEY("dataId") REFERENCES "ExperimentData"("dataId"),
 	PRIMARY KEY("id" AUTOINCREMENT)
 );
@@ -151,6 +153,9 @@ CREATE INDEX IF NOT EXISTS "ix_pk_substep_data" ON "SubstepData" (
 );
 CREATE INDEX IF NOT EXISTS "ix_fk_substep_data_to_step" ON "SubstepData" (
 	"stepId"
+);
+CREATE INDEX IF NOT EXISTS "ix_fk_substep_data2_to_step" ON "SubstepData" (
+	"substepNr"
 );
 CREATE INDEX IF NOT EXISTS "ix_fk_substep_data_to_data" ON "SubstepData" (
 	"dataId"

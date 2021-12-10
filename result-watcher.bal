@@ -53,6 +53,10 @@ isolated class ResultProcessor {
         self.processedOutputs = [];
     }
 
+    public isolated function processSubstep() returns error? {
+        // TODO
+    }
+
     public isolated function processResult() returns error? {
         if self.result.status == "SUCCESS" {
             check self.saveSuccessfullResult();
@@ -295,6 +299,7 @@ public isolated class ResultWatcher {
     private isolated function checkTaskResult(TaskStatusResponse result) {
         if result.status == "UNKNOWN" || result.status == "PENDING" {
             // In case of pending, check if new substep... progress and step list auslesen, vergleiche substeps... mit fehler abbrechen, wenn plugin blödsinn macht (substeps löscht), oder warning in log von step
+            // TODO check processor.processSubstep()
             return; // nothing to do, still waiting for result
         }
         do {

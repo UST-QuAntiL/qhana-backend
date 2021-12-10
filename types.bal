@@ -166,6 +166,10 @@ public type TimelineStepPost record {|
     string? parameters;
     string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
     string? parametersDescriptionLocation = ();
+    int? progressValue = ();
+    int? progressStart = ();
+    int? progressTarget = ();
+    string? progressUnit = ();
 |}; // TODO: not sure if sth needs to be changed here
 
 public type TimelineStepMinResponse record {|
@@ -194,13 +198,30 @@ public type TimelineStepResponse record {|
     string[] inputDataLinks;
     database:ExperimentDataReference[] outputData;
     string[] outputDataLinks;
-    database:TimelineSubstep[]? substeps = ();
+    database:TimelineSubstepSQL[]? substeps = ();
 |};
 
 public type TimelineStepListResponse record {|
     *ApiResponse;
     TimelineStepMinResponse[] items;
     int itemCount;
+|};
+
+public type TimelineSubstepResponse record {|
+    *ApiResponse;
+    int stepId;
+    string substepId;
+    string href;
+    string? hrefUi;
+    int cleared;
+    string parameters;
+    database:ExperimentDataReference[] inputData;
+    string[] inputDataLinks;
+|};
+
+public type TimelineSubstepListResponse record {|
+    *ApiResponse;
+    database:TimelineSubstepSQL[] items;
 |};
 
 public type TimelineStepNotesResponse record {|
@@ -234,7 +255,7 @@ public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull 
 
 public isolated function mapToTimelineStepResponse(
         database:TimelineStepWithParams step,
-        database:TimelineSubstep[]? substeps,
+        database:TimelineSubstepSQL[]? substeps,
         database:ExperimentDataReference[] inputData = [],
         database:ExperimentDataReference[] outputData = []
 ) returns TimelineStepResponse {
@@ -267,6 +288,26 @@ public isolated function mapToTimelineStepResponse(
         progressTarget: step.progressTarget,
         progressUnit: step.progressUnit,
         substeps: substeps
+    };
+}
+
+public isolated function mapToTimelineSubstepResponse( // TODO
+        int experimentId,
+        database:TimelineSubstepWithParams substep,
+        database:ExperimentDataReference[] inputData = []
+) returns TimelineSubstepResponse {
+    var inputDataLinks = from var dataRef in inputData
+        select string `/experiments/${experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
+    return {
+        '\@self: string `/experiments/${experimentId}/timeline/${substep.substepNr}`,
+        stepId: substep.stepId,
+        substepId: substep.substepId,
+        href: substep.href,
+        hrefUi: substep.hrefUi,
+        cleared: substep.cleared,
+        parameters: substep?.parameters,
+        inputData: inputData,
+        inputDataLinks: inputDataLinks
     };
 }
 
