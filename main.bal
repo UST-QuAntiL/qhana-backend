@@ -211,16 +211,32 @@ service / on new http:Listener(port) {
     // Data ////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
 
-    resource function get experiments/[int experimentId]/data(boolean? allVersions) returns ExperimentDataListResponse|http:InternalServerError {
+    resource function get experiments/[int experimentId]/data(boolean? allVersions, int page=0, int item\-count=0) returns ExperimentDataListResponse|http:NotFound|http:InternalServerError|http:BadRequest {
         boolean includeAllVersions = allVersions == true || allVersions == ();
+
+        if (page < 0) {
+            return <http:BadRequest>{body: "Cannot retrieve a negative page number!"};
+        }
+
+        if (item\-count < 5 || item\-count > 500) {
+            return <http:BadRequest>{body: "Item count must be between 5 and 500 (both inclusive)!"};
+        }
+
+        var offset = page*item\-count;
 
         int dataCount;
         database:ExperimentDataFull[] data;
 
         transaction {
-            dataCount = check database:getExperimentDataCount(experimentId, all = includeAllVersions);
-            data = check database:getDataList(experimentId, all = includeAllVersions);
-            check commit;
+            dataCount = check database: getExperimentDataCount(experimentId, all=includeAllVersions);
+            if (offset >= dataCount) {
+                // page is out of range!
+                check commit;
+                return <http:NotFound>{};
+            } else {
+                data = check database:getDataList(experimentId, all=includeAllVersions, 'limit=item\-count, offset=offset);
+                check commit;
+            }
         } on fail error err {
             io:println(err);
             // if with return does not correctly narrow type for rest of function... this does.
