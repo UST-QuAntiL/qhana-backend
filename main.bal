@@ -33,7 +33,7 @@ isolated function mapToInternalUrl(string url) returns string {
     }
     // apply all replacements specified in the url map, keys are interpreted as regex
     var replacedUrl = url;
-    foreach var key in internalUrlMap {
+    foreach var key in internalUrlMap.keys() {
         replacedUrl = regex:replaceFirst(url, key, internalUrlMap.get(key));
     }
     return replacedUrl;
