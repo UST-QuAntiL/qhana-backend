@@ -37,6 +37,7 @@ isolated function mapToInternalUrl(string url) returns string {
         string strippedKey = key;
 
         // remove enclosing quotes if necessary
+        // FIXME: This is a workaround for a possible bug in Ballerina. Can be removed if the bug is fixed.
         if key[0] == "\"" || key[0] == "'" {
             strippedKey = key.substring(1, key.length() - 1);
         }
