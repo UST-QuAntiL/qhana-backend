@@ -300,6 +300,8 @@ public isolated class ResultWatcher {
         if result.status == "UNKNOWN" || result.status == "PENDING" {
             // In case of pending, check if new substep... progress and step list auslesen, vergleiche substeps... mit fehler abbrechen, wenn plugin blödsinn macht (substeps löscht), oder warning in log von step
             // TODO check processor.processSubstep()
+            // write progress into db
+            // save current task log
             return; // nothing to do, still waiting for result
         }
         do {

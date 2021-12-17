@@ -300,18 +300,13 @@ service / on new http:Listener(port) {
         database:TimelineStepWithParams createdStep;
         database:ExperimentDataReference[] inputData;
 
-        // TODO: add progress
         transaction {
             inputData = from var inputUrl in stepData.inputData
                 select check mapFileUrlToDataRef(experimentId, inputUrl);
             createdStep = check database:createTimelineStep(
                 experimentId = experimentId,
                 parameters = stepData.parameters,
-                parametersContentType = stepData.parametersContentType,
-                parametersDescriptionLocation = stepData.parametersDescriptionLocation,
-                processorName = stepData.processorName,
-                processorVersion = stepData.processorVersion,
-                processorLocation = stepData.processorLocation
+                processorName = stepData.processorName
             );
             check database:saveTimelineStepInputData(createdStep.stepId, experimentId, inputData);
             check database:createTimelineStepResultWatcher(createdStep.stepId, mapToInternalUrl(stepData.resultLocation));
@@ -333,8 +328,6 @@ service / on new http:Listener(port) {
         }
         return mapToTimelineStepResponse(createdStep, (), inputData, []);
     }
-
-    // TODO: add resource to post input data for substep (parameters und parametersContentType), kein eigenen watcher starten... maybe reschedule top-level-task watcher to find changes faster
 
     resource function get experiments/[int experimentId]/timeline/[int timelineStep]() returns TimelineStepResponse|http:InternalServerError {
         database:TimelineStepWithParams result;
@@ -382,6 +375,39 @@ service / on new http:Listener(port) {
         return <http:Ok>{};
     }
 
+    // TODO: doesn't create substep, substep must be created by result watcher
+    resource function post experiments/[int experimentId]/timeline/[int timelineStep]/substeps/[int substepNr](@http:Payload TimelineSubstepPost substepData) returns TimelineSubstepResponse|http:InternalServerError {
+        database:TimelineStepWithParams step;
+        database:TimelineSubstepWithParams substep;
+        database:ExperimentDataReference[] inputData;
+
+        transaction {
+            inputData = from var inputUrl in substepData.inputData
+                select check mapFileUrlToDataRef(experimentId, inputUrl);
+            step = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep);
+            substep = check database:getTimelineSubstepWithParams(step.stepId, substepNr); // TODO: not sure if this is needed
+            check database:saveTimelineSubstepInputData(step.stepId, substepNr, experimentId, inputData);
+            // check database:updateTimelineProgress(step.stepId, substepData.progressStart, substepData.progressTarget, substepData.progressValue, substepData.progressUnit); // TODO: should probably be handled by ResultWatcher...
+            check commit;
+        } on fail error err {
+            io:println(err);
+            // if with return does not correctly narrow type for rest of function... this does.
+            http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
+            return resultErr;
+        }
+        do {
+            // reschedule result watcher (already running for the timeline step the substep is associated with)
+            ResultWatcher watcher = check new (step.stepId);
+            check watcher.schedule(...watcherIntervallConfig);
+        } on fail error err {
+            io:println(err);
+            // if with return does not correctly narrow type for rest of function... this does.
+            http:InternalServerError resultErr = {body: "Failed to start watcher."};
+            return resultErr;
+        }
+        return mapToTimelineSubstepResponse(experimentId, substep, inputData);
+    }
+
     resource function get experiments/[int experimentId]/timeline/[int timelineStep]/substeps() returns TimelineSubstepListResponse|http:InternalServerError {
         // no pagination
         database:TimelineSubstepSQL[] steps;
@@ -415,8 +441,6 @@ service / on new http:Listener(port) {
         }
         return mapToTimelineSubstepResponse(experimentId, step, inputData);
     }
-
-    // TODO update progress
 }
 
 public function main() {

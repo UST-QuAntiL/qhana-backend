@@ -138,11 +138,7 @@ public type TimelineStep record {|
     string resultQuality = "UNKNOWN";
     string? resultLog = ();
     string processorName;
-    string? processorVersion = ();
-    string? processorLocation = ();
     string parameters?; // optional for small requests
-    string? parametersContentType = ();
-    string? parametersDescriptionLocation = ();
     string notes?; // optional for small requests
     *Progress; // TODO how are these set? -> change needed
 |};
@@ -162,11 +158,7 @@ public type TimelineStepSQL record {|
     string resultQuality = "UNKNOWN";
     string? resultLog = ();
     string processorName;
-    string? processorVersion = ();
-    string? processorLocation = ();
     string parameters?; // optional for small requests
-    string? parametersContentType = ();
-    string? parametersDescriptionLocation = ();
     string notes?; // optional for small requests
     *Progress; // TODO how are these set? -> change needed
 |};
@@ -567,10 +559,10 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
         query.push(`DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, `);
     }
 
-    query.push(`status, processorName, processorVersion, processorLocation, parametersDescriptionLocation`);
+    query.push(`status, processorName`);
 
     if allAttributes {
-        query.push(`, resultQuality, resultLog, parameters, parametersContentType, notes `);
+        query.push(`, resultQuality, resultLog, parameters, notes `);
     } else {
         query.push(`, NULL AS resultLog `);
     }
@@ -605,17 +597,9 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
 public isolated transactional function createTimelineStep(
         int experimentId,
         string processorName,
-        string? processorVersion = (),
-        string? processorLocation = (),
-        string? parameters = (),
-        string? parametersContentType = mime:APPLICATION_FORM_URLENCODED,
-        string? parametersDescriptionLocation = ()
+        string? parameters = ()
     ) returns TimelineStepWithParams|error {
     TimelineStepWithParams? result = ();
-
-    if parameters == () && parametersContentType == () {
-        return error("When parameters are given the parameters content type is required!");
-    }
 
     stream<TimelineStepSQL, sql:Error?> createdStep;
     sql:ParameterizedQuery currentTime = `strftime('%Y-%m-%dT%H:%M:%S', 'now')`;
@@ -624,10 +608,10 @@ public isolated transactional function createTimelineStep(
     }
     var insertResult = check experimentDB->execute(
         check new ConcatQuery(
-            `INSERT INTO TimelineStep (experimentId, sequence, start, end, processorName, processorVersion, processorLocation, parameters, parametersContentType, parametersDescriptionLocation) 
+            `INSERT INTO TimelineStep (experimentId, sequence, start, end, processorName, parameters) 
             VALUES (${experimentId}, (SELECT sequence from (SELECT count(*)+1 AS sequence FROM TimelineStep WHERE experimentId = ${experimentId}) subquery), `,
             currentTime,
-            `, NULL, ${processorName}, ${processorVersion}, ${processorLocation}, ${parameters}, ${parametersContentType}, ${parametersDescriptionLocation};`
+            `, NULL, ${processorName}, ${parameters};`
         )
     );
 
@@ -644,10 +628,10 @@ public isolated transactional function createTimelineStep(
 }
 
 public isolated transactional function getTimelineStep(int? experimentId = (), int? sequence = (), int? stepId = ()) returns TimelineStepWithParams|error {
-    var baseQuery = `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parametersDescriptionLocation, parameters, parametersContentType
+    var baseQuery = `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultQuality, resultLog, processorName, parameters
                      FROM TimelineStep `;
     if dbType != "sqlite" {
-        baseQuery = `SELECT stepId, experimentId, sequence, DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parametersDescriptionLocation, parameters, parametersContentType
+        baseQuery = `SELECT stepId, experimentId, sequence, DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, status, resultQuality, resultLog, processorName, parameters
                      FROM TimelineStep `;
     }
 
@@ -692,7 +676,7 @@ public isolated transactional function getTimelineStep(int? experimentId = (), i
 
 public isolated transactional function updateTimelineStepStatus(int|TimelineStepFull step, string status, string? resultLog) returns error? {
     var stepId = step is int ? step : step.stepId;
-
+    // TODO: change something here with progress?
     sql:ParameterizedQuery currentTime = `strftime('%Y-%m-%dT%H:%M:%S', 'now')`;
     if dbType != "sqlite" {
         currentTime = `DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%S')`;
@@ -892,7 +876,7 @@ public isolated transactional function getTimelineSubstep(int stepId, int subste
 public isolated transactional function getTimelineSubstepWithParams(int stepId, int substepNr) returns TimelineSubstepWithParams|error {
     // as in getTimelineStep
     stream<TimelineSubstepWithParams, sql:Error?> substeps = experimentDB->query(
-        `SELECT stepId, substepNr, substepId, href, hrefUi, cleared, parameters, parametersContentType FROM TimelineSubstep WHERE stepId=${stepId} AND substepNr=${substepNr};`
+        `SELECT stepId, substepNr, substepId, href, hrefUi, cleared, parameters FROM TimelineSubstep WHERE stepId=${stepId} AND substepNr=${substepNr};`
     );
     var result = substeps.next();
     check substeps.close();
@@ -927,7 +911,7 @@ public isolated transactional function createTimelineSubstep(int stepId, string 
     );
 }
 
-public isolated transactional function updateTimelineProgress(int stepId, int? progressStart, int? progressTarget, int? progressValue, string? progressUnit) returns error? {
+public isolated transactional function updateTimelineProgress(int stepId, float? progressStart, float? progressTarget, float? progressValue, string? progressUnit) returns error? {
     var insertResult = check experimentDB->execute(
         `UPDATE TimelineStep SET pStart = ${progressStart}, pTarget = ${progressTarget}, pValue = ${progressValue}, pUnit = ${progressUnit} WHERE stepId = ${stepId};`
     );
@@ -952,4 +936,11 @@ public isolated transactional function getSubstepInputData(int stepId, int subst
     }
 
     return error(string `Failed to retrieve input data for experiment step with stepId ${stepId} and substepNr ${substepNr}!`);
+}
+
+public isolated transactional function saveTimelineSubstepInputData(int stepId, int substepNr, int experimentId, ExperimentDataReference[] inputData) returns error? {
+    foreach var data in inputData {
+        var experimentData = check getData(experimentId, data.name, data.'version);
+        _ = check experimentDB->execute(`INSERT INTO SubstepData (stepId, substepNr, dataId, relationType) VALUES (${stepId}, ${substepNr}, ${experimentData.dataId}, ${"input"});`);
+    }
 }

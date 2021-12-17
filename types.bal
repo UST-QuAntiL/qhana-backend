@@ -161,13 +161,9 @@ public type TimelineStepPost record {|
     string resultLocation;
     string[] inputData;
     string processorName;
-    string? processorVersion = ();
-    string? processorLocation = ();
     string? parameters;
-    string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
-    string? parametersDescriptionLocation = ();
     *database:Progress;
-|}; // TODO: not sure if sth needs to be changed here
+|};
 
 public type TimelineStepMinResponse record {|
     *ApiResponse;
@@ -177,10 +173,6 @@ public type TimelineStepMinResponse record {|
     string? end = ();
     string status;
     string processorName;
-    string? processorVersion = ();
-    string? processorLocation = ();
-    string? parametersContentType = ();
-    string? parametersDescriptionLocation = ();
     *database:Progress;
 |};
 
@@ -199,6 +191,13 @@ public type TimelineStepListResponse record {|
     *ApiResponse;
     TimelineStepMinResponse[] items;
     int itemCount;
+|};
+
+public type TimelineSubstepPost record {|
+    string resultLocation;
+    string[] inputData;
+    string? parameters;
+    *database:Progress;
 |};
 
 public type TimelineSubstepResponse record {|
@@ -239,9 +238,6 @@ public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull 
         end: end == () ? () : time:utcToString(end),
         status: step.status,
         processorName: step.processorName,
-        processorVersion: step.processorVersion,
-        processorLocation: step.processorLocation,
-        parametersDescriptionLocation: step.parametersDescriptionLocation,
         progressValue: step.progressValue,
         progressStart: step.progressStart,
         progressTarget: step.progressTarget,
@@ -270,10 +266,6 @@ public isolated function mapToTimelineStepResponse(
         status: step.status,
         resultLog: log == () ? "" : log,
         processorName: step.processorName,
-        processorVersion: step.processorVersion,
-        processorLocation: step.processorLocation,
-        parametersDescriptionLocation: step.parametersDescriptionLocation,
-        parametersContentType: step.parametersContentType,
         parameters: step?.parameters,
         inputData: inputData,
         inputDataLinks: inputDataLinks,
