@@ -34,7 +34,15 @@ isolated function mapToInternalUrl(string url) returns string {
     // apply all replacements specified in the url map, keys are interpreted as regex
     var replacedUrl = url;
     foreach var key in internalUrlMap.keys() {
-        replacedUrl = regex:replaceFirst(url, key, internalUrlMap.get(key));
+        string strippedKey = key;
+
+        // remove enclosing quotes if necessary
+        // FIXME: This is a workaround for a possible bug in Ballerina. Can be removed if the bug is fixed.
+        if key[0] == "\"" || key[0] == "'" {
+            strippedKey = key.substring(1, key.length() - 1);
+        }
+        
+        replacedUrl = regex:replaceFirst(url, strippedKey, internalUrlMap.get(key));
     }
     return replacedUrl;
 }
