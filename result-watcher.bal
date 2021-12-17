@@ -348,7 +348,7 @@ public isolated class ResultWatcher {
                 do {
                     check self.unschedule();
                     // TODO: Better way to reschedule this???
-                    (decimal|int)[] initialIntervals = [2, 10, 5, 10, 10, 60, 30, 20, 60, 10, 600]
+                    (decimal|int)[] initialIntervals = [2, 10, 5, 10, 10, 60, 30, 20, 60, 10, 600];
                     check self.schedule(...initialIntervals);
                 } on fail error e {
                     lock {
