@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import ballerina/time;
-import ballerina/mime;
 import ballerina/regex;
 import ballerina/url;
 import qhana_backend.database;
@@ -203,7 +202,7 @@ public type TimelineSubstepPost record {|
 public type TimelineSubstepResponse record {|
     *ApiResponse;
     int stepId;
-    string substepId;
+    string? substepId;
     int substepNr;
     string href;
     string? hrefUi;

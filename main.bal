@@ -333,12 +333,13 @@ service / on new http:Listener(port) {
         database:TimelineStepWithParams result;
         database:ExperimentDataReference[] inputData;
         database:ExperimentDataReference[] outputData;
-        database:TimelineSubstepSQL[]? substeps;
+        database:TimelineSubstepSQL[] substeps;
         transaction {
-            result = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep); // TODO: make sure this now also includes progress data and substeps
+            result = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep);
             inputData = check database:getStepInputData(result);
             outputData = check database:getStepOutputData(result);
-            substeps = check database:getTimelineSubsteps(timelineStep);
+            // duplicates input data for substeps, but overhead is negligible 
+            substeps = check database:getTimelineSubstepsWithInputData(timelineStep);
             check commit;
         } on fail error err {
             io:println(err);

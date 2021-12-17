@@ -15,7 +15,6 @@
 import ballerina/io;
 import ballerina/time;
 import ballerina/sql;
-import ballerina/mime;
 import ballerinax/java.jdbc;
 
 sql:ConnectionPool sqlitePool = {
@@ -168,13 +167,18 @@ public type TimelineStepWithParams record {|
     string parameters;
 |};
 
-public type TimelineSubstepSQL record {|
-    int stepId;
-    int substepNr;
-    string substepId;
+public type TimelineSubstep record {|
+    string? substepId;
     string href;
     string? hrefUi;
     int cleared;
+|};
+
+public type TimelineSubstepSQL record {|
+    *TimelineSubstep;
+    int substepNr;
+    int stepId;
+    ExperimentDataReference[] inputData?;
 |};
 
 public type TimelineSubstepWithParams record {|
@@ -402,7 +406,6 @@ public isolated transactional function getExperimentDataCount(int experimentId, 
     var count = result.next();
 
     check result.close();
-
     if count is record {RowCount value;} {
         return count.value.rowCount;
     } else if count is error {
@@ -628,10 +631,10 @@ public isolated transactional function createTimelineStep(
 }
 
 public isolated transactional function getTimelineStep(int? experimentId = (), int? sequence = (), int? stepId = ()) returns TimelineStepWithParams|error {
-    var baseQuery = `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultQuality, resultLog, processorName, parameters
+    var baseQuery = `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultQuality, resultLog, processorName, parameters, pStart, pTarget, pValue, pUnit
                      FROM TimelineStep `;
     if dbType != "sqlite" {
-        baseQuery = `SELECT stepId, experimentId, sequence, DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, status, resultQuality, resultLog, processorName, parameters
+        baseQuery = `SELECT stepId, experimentId, sequence, DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, status, resultQuality, resultLog, processorName, parameters, pStart, pTarget, pValue, pUnit
                      FROM TimelineStep `;
     }
 
@@ -676,7 +679,6 @@ public isolated transactional function getTimelineStep(int? experimentId = (), i
 
 public isolated transactional function updateTimelineStepStatus(int|TimelineStepFull step, string status, string? resultLog) returns error? {
     var stepId = step is int ? step : step.stepId;
-    // TODO: change something here with progress?
     sql:ParameterizedQuery currentTime = `strftime('%Y-%m-%dT%H:%M:%S', 'now')`;
     if dbType != "sqlite" {
         currentTime = `DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%S')`;
@@ -692,6 +694,13 @@ public isolated transactional function updateTimelineStepStatus(int|TimelineStep
                 WHERE stepId = ${stepId} AND end IS NULL;`
         )
     );
+}
+
+public isolated transactional function updateTimelineTaskLog(int|TimelineStepFull step, string? resultLog) returns error? {
+    var stepId = step is int ? step : step.stepId;
+    _ = check experimentDB->execute(`UPDATE TimelineStep 
+            SET resultLog=${resultLog}
+            WHERE stepId = ${stepId};`);
 }
 
 public isolated transactional function getStepInputData(int|TimelineStepFull step) returns ExperimentDataReference[]|error {
@@ -855,6 +864,30 @@ public isolated transactional function getTimelineSubsteps(int stepId) returns T
     }
 }
 
+public isolated transactional function getTimelineSubstepsWithInputData(int stepId) returns TimelineSubstepSQL[]|error {
+    TimelineSubstepSQL[]|error tempSubsteps = getTimelineSubsteps(stepId);
+    // add mapping of input data to substeps
+    if !(tempSubsteps is error) {
+        TimelineSubstepSQL[] substeps = [];
+        foreach TimelineSubstepSQL tempSubstep in tempSubsteps {
+            ExperimentDataReference[] substepInputData = check getSubstepInputData(stepId, tempSubstep.substepNr);
+            TimelineSubstepSQL substep = {
+                stepId: tempSubstep.stepId,
+                substepNr: tempSubstep.substepNr,
+                substepId: tempSubstep.substepId,
+                href: tempSubstep.href,
+                hrefUi: tempSubstep.hrefUi,
+                cleared: tempSubstep.cleared,
+                inputData: substepInputData
+            };
+            substeps.push(substep);
+        }
+        return substeps;
+    } else {
+        return tempSubsteps;
+    }
+}
+
 public isolated transactional function getTimelineSubstep(int stepId, int substepNr) returns TimelineSubstepSQL|error {
     stream<TimelineSubstepSQL, sql:Error?> substeps = experimentDB->query(
         `SELECT stepId, substepNr, substepId, href, hrefUi, cleared FROM TimelineSubstep WHERE stepId=${stepId} AND substepNr=${substepNr};`
@@ -899,21 +932,56 @@ public isolated transactional function getTimelineSubstepWithParams(int stepId, 
     }
 }
 
-public isolated transactional function createTimelineSubstep(int stepId, string href, string? hrefUi, string? substepId) returns error? {
-    if href == "" {
+public isolated transactional function createTimelineSubstep(int stepId, TimelineSubstep substep) returns error? {
+    if substep.href == "" {
         return error("Href cannot be empty!");
     }
     int count = check experimentDB->queryRow(`SELECT count(*) FROM TimelineSubstep WHERE stepId=${stepId};`);
     count += 1;
+    string? substepId = substep.substepId;
     var insertResult = check experimentDB->execute(
         `INSERT INTO TimelineSubstep (stepId, substepNr, substepId, href, hrefUi, cleared) 
-         VALUES (${stepId}, ${count}, ${substepId != () ? substepId : count.toString()}, ${href}, ${hrefUi});`
+         VALUES (${stepId}, ${count}, ${substep.substepId != () ? substepId : count.toString()}, ${substep.href}, ${substep.hrefUi}, ${substep.cleared});`
     );
 }
 
-public isolated transactional function updateTimelineProgress(int stepId, float? progressStart, float? progressTarget, float? progressValue, string? progressUnit) returns error? {
+# Checks if substep is already in database and updates cleared field in case it is. Otherwise calls createTimelineSubstep. 
+#
+# + stepId - stepId
+# + substep - substep
+# + return - error or ()
+public isolated transactional function updateTimelineSubstep(int stepId, TimelineSubstep substep) returns error? {
+    TimelineSubstepSQL[] substeps = check getTimelineSubsteps(stepId);
+    TimelineSubstepSQL[] duplicates;
+    if substep.substepId != () {
+        duplicates = from var tmpSubstep in substeps
+            where tmpSubstep.href == substep.href && tmpSubstep.hrefUi == substep.hrefUi
+                && tmpSubstep.substepId == substep.substepId
+            select tmpSubstep;
+        if duplicates.length() > 0 {
+            var result = check experimentDB->execute(
+                `UPDATE TimelineSubstep SET cleared=${substep.cleared} WHERE stepId=${stepId} AND href=${substep.href} AND hrefUi=${substep.hrefUi} AND substepId=${substep.substepId};`
+            );
+            return;
+        }
+    } else {
+        // a bit unlucky having to use href and hrefUi as primary key here...
+        duplicates = from var tmpSubstep in substeps
+            where tmpSubstep.href == substep.href && tmpSubstep.hrefUi == substep.hrefUi
+            select tmpSubstep;
+        if duplicates.length() > 0 {
+            var result = check experimentDB->execute(
+                `UPDATE TimelineSubstep SET cleared=${substep.cleared} WHERE stepId=${stepId} AND href=${substep.href} AND hrefUi=${substep.hrefUi};`
+            );
+            return;
+        }
+    }
+    check createTimelineSubstep(stepId, substep);
+}
+
+public isolated transactional function updateTimelineProgress(int stepId, Progress progress) returns error? {
     var insertResult = check experimentDB->execute(
-        `UPDATE TimelineStep SET pStart = ${progressStart}, pTarget = ${progressTarget}, pValue = ${progressValue}, pUnit = ${progressUnit} WHERE stepId = ${stepId};`
+        `UPDATE TimelineStep SET pStart = ${progress.progressStart}, pTarget = ${progress.progressTarget}, pValue = ${progress.progressValue}, pUnit = ${progress.progressUnit} WHERE stepId = ${stepId};`
     );
 }
 
@@ -935,7 +1003,7 @@ public isolated transactional function getSubstepInputData(int stepId, int subst
         return inputDataList;
     }
 
-    return error(string `Failed to retrieve input data for experiment step with stepId ${stepId} and substepNr ${substepNr}!`);
+    return error(string `Failed to retrieve input data for experiment substep with stepId ${stepId} and substepNr ${substepNr}!`);
 }
 
 public isolated transactional function saveTimelineSubstepInputData(int stepId, int substepNr, int experimentId, ExperimentDataReference[] inputData) returns error? {

@@ -34,6 +34,8 @@ type TaskStatusResponse record {
     string status;
     string? taskLog?;
     TaskDataOutput[]? outputs?;
+    database:TimelineSubstep[] substeps?;
+    database:Progress progress?;
 };
 
 isolated class ResultProcessor {
@@ -299,10 +301,65 @@ public isolated class ResultWatcher {
     private isolated function checkTaskResult(TaskStatusResponse result) {
         if result.status == "UNKNOWN" || result.status == "PENDING" {
             // In case of pending, check if new substep... progress and step list auslesen, vergleiche substeps... mit fehler abbrechen, wenn plugin blödsinn macht (substeps löscht), oder warning in log von step
-            // TODO check processor.processSubstep()
-            // write progress into db
-            // save current task log
-            return; // nothing to do, still waiting for result
+
+            // TODO: update progress in any case???
+            database:TimelineSubstep[]? resultSubsteps = result?.substeps;
+            database:Progress? progress = result?.progress;
+            string? taskLog = result?.taskLog;
+            if resultSubsteps != () {
+                transaction {
+                    database:TimelineSubstepSQL[] substeps = check database:getTimelineSubsteps(self.stepId);
+                    // cast db substeps to format in result
+                    database:TimelineSubstep[] tempSubsteps = [];
+                    foreach var substep in substeps {
+                        database:TimelineSubstep tempSubstep = {
+                            substepId: substep.substepId,
+                            href: substep.href,
+                            hrefUi: substep.hrefUi,
+                            cleared: substep.cleared
+                        };
+                        tempSubsteps.push(tempSubstep);
+                    }
+                    // find new/changed substeps
+                    database:TimelineSubstep[] newSubsteps = from var substep in tempSubsteps
+                        where tempSubsteps.indexOf(substep) == ()
+                        select substep;
+                    // add in db
+                    foreach var substep in newSubsteps {
+                        check database:updateTimelineSubstep(self.stepId, substep); // TODO: perhaps nicer to pass TimelineSubstep
+                    }
+
+                    // TODO: check that UI didn't delete substeps
+
+                    // write progress into db - 
+                    if progress != () && newSubsteps.length() > 0 {
+                        check database:updateTimelineProgress(self.stepId, progress);
+                    }
+
+                    // save current task log
+                    if taskLog != () {
+                        check database:updateTimelineTaskLog(self.stepId, taskLog);
+                    }
+                    check commit;
+                } on fail error err {
+                    io:println(err);
+                }
+
+                do {
+                    check self.unschedule();
+                    // TODO: Better way to reschedule this???
+                    (decimal|int)[] initialIntervals = [2, 10, 5, 10, 10, 60, 30, 20, 60, 10, 600]
+                    check self.schedule(...initialIntervals);
+                } on fail error e {
+                    lock {
+                        self.errorCounter += 1;
+                    }
+                    io:println(e);
+                }
+            } else {
+                // TODO: update progress?
+                return; // nothing to do, still waiting for result
+            }
         }
         do {
             ResultProcessor processor = new (result, self.experimentId, self.stepId, self.resultEndpoint);
