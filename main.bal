@@ -311,11 +311,7 @@ service / on new http:Listener(port) {
                 parametersDescriptionLocation = stepData.parametersDescriptionLocation,
                 processorName = stepData.processorName,
                 processorVersion = stepData.processorVersion,
-                processorLocation = stepData.processorLocation,
-                progressStart = stepData.progressStart,
-                progressTarget = stepData.progressTarget,
-                progressValue = stepData.progressValue,
-                progressUnit = stepData.progressUnit
+                processorLocation = stepData.processorLocation
             );
             check database:saveTimelineStepInputData(createdStep.stepId, experimentId, inputData);
             check database:createTimelineStepResultWatcher(createdStep.stepId, mapToInternalUrl(stepData.resultLocation));
@@ -338,7 +334,7 @@ service / on new http:Listener(port) {
         return mapToTimelineStepResponse(createdStep, (), inputData, []);
     }
 
-    // TODO: add resource to post input data for substep (parameters und parametersContentType), kein eigenen watcher starten... 
+    // TODO: add resource to post input data for substep (parameters und parametersContentType), kein eigenen watcher starten... maybe reschedule top-level-task watcher to find changes faster
 
     resource function get experiments/[int experimentId]/timeline/[int timelineStep]() returns TimelineStepResponse|http:InternalServerError {
         database:TimelineStepWithParams result;

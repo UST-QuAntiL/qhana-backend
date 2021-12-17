@@ -116,9 +116,9 @@ public type ExperimentDataFull record {|
 // Timeline ////////////////////////////////////////////////////////////////////
 
 public type Progress record {|
-    int? progressStart = ();
-    int? progressTarget = ();
-    int? progressValue = ();
+    float? progressStart = ();
+    float? progressTarget = ();
+    float? progressValue = ();
     string? progressUnit = ();
 |};
 
@@ -144,10 +144,7 @@ public type TimelineStep record {|
     string? parametersContentType = ();
     string? parametersDescriptionLocation = ();
     string notes?; // optional for small requests
-    int? progressStart = ();
-    int? progressTarget = ();
-    int? progressValue = ();
-    string? progressUnit = (); // TODO how are these set? -> change needed
+    *Progress; // TODO how are these set? -> change needed
 |};
 
 public type TimelineStepFull record {|
@@ -171,10 +168,7 @@ public type TimelineStepSQL record {|
     string? parametersContentType = ();
     string? parametersDescriptionLocation = ();
     string notes?; // optional for small requests
-    int? progressValue = ();
-    int? progressStart = ();
-    int? progressTarget = ();
-    string? progressUnit = (); // TODO how are these set? -> change needed
+    *Progress; // TODO how are these set? -> change needed
 |};
 
 public type TimelineStepWithParams record {|
@@ -194,6 +188,7 @@ public type TimelineSubstepSQL record {|
 public type TimelineSubstepWithParams record {|
     *TimelineSubstepSQL;
     string parameters;
+    string parametersContentType;
 |};
 
 // Timeline to Data links //////////////////////////////////////////////////////
@@ -614,11 +609,7 @@ public isolated transactional function createTimelineStep(
         string? processorLocation = (),
         string? parameters = (),
         string? parametersContentType = mime:APPLICATION_FORM_URLENCODED,
-        string? parametersDescriptionLocation = (),
-        int? progressStart = (),
-        int? progressTarget = (),
-        int? progressValue = (),
-        string? progressUnit = ()
+        string? parametersDescriptionLocation = ()
     ) returns TimelineStepWithParams|error {
     TimelineStepWithParams? result = ();
 
@@ -633,10 +624,10 @@ public isolated transactional function createTimelineStep(
     }
     var insertResult = check experimentDB->execute(
         check new ConcatQuery(
-            `INSERT INTO TimelineStep (experimentId, sequence, start, end, processorName, processorVersion, processorLocation, parameters, parametersContentType, parametersDescriptionLocation, pStart, pTarget, pValue, pUnit) 
+            `INSERT INTO TimelineStep (experimentId, sequence, start, end, processorName, processorVersion, processorLocation, parameters, parametersContentType, parametersDescriptionLocation) 
             VALUES (${experimentId}, (SELECT sequence from (SELECT count(*)+1 AS sequence FROM TimelineStep WHERE experimentId = ${experimentId}) subquery), `,
             currentTime,
-            `, NULL, ${processorName}, ${processorVersion}, ${processorLocation}, ${parameters}, ${parametersContentType}, ${parametersDescriptionLocation}, ${progressStart}, ${progressTarget}, ${progressValue}, ${progressUnit});`
+            `, NULL, ${processorName}, ${processorVersion}, ${processorLocation}, ${parameters}, ${parametersContentType}, ${parametersDescriptionLocation};`
         )
     );
 
@@ -900,13 +891,13 @@ public isolated transactional function getTimelineSubstep(int stepId, int subste
 // TODO
 public isolated transactional function getTimelineSubstepWithParams(int stepId, int substepNr) returns TimelineSubstepWithParams|error {
     // as in getTimelineStep
-    stream<TimelineSubstepSQL, sql:Error?> substeps = experimentDB->query(
-        `SELECT stepId, substepNr, substepId, href, hrefUi, cleared FROM TimelineSubstep WHERE stepId=${stepId} AND substepNr=${substepNr};`
+    stream<TimelineSubstepWithParams, sql:Error?> substeps = experimentDB->query(
+        `SELECT stepId, substepNr, substepId, href, hrefUi, cleared, parameters, parametersContentType FROM TimelineSubstep WHERE stepId=${stepId} AND substepNr=${substepNr};`
     );
     var result = substeps.next();
     check substeps.close();
 
-    if result is record {|TimelineSubstepSQL value;|} {
+    if result is record {|TimelineSubstepWithParams value;|} {
         return {
             stepId: result.value.stepId,
             substepNr: result.value.substepNr,
@@ -914,7 +905,8 @@ public isolated transactional function getTimelineSubstepWithParams(int stepId, 
             href: result.value.href,
             hrefUi: result.value.hrefUi,
             cleared: result.value.cleared,
-            parameters: "" // TODO: how to get those??? -> maybe need to change Step table in plugin runner
+            parameters: result.value.parameters,
+            parametersContentType: result.value.parametersContentType
         };
     } else if result is error {
         return result;
@@ -927,12 +919,6 @@ public isolated transactional function createTimelineSubstep(int stepId, string 
     if href == "" {
         return error("Href cannot be empty!");
     }
-    //stepId"	INTEGER NOT NULL,
-    //"substepNr"	INTEGER NOT NULL,
-    //"substepId"	VARCHAR(500) NOT NULL,
-    //"href"	TEXT NOT NULL,
-    //"hrefUi"	TEXT,
-    //"cleared"	INTEGER DEF
     int count = check experimentDB->queryRow(`SELECT count(*) FROM TimelineSubstep WHERE stepId=${stepId};`);
     count += 1;
     var insertResult = check experimentDB->execute(
@@ -951,7 +937,7 @@ public isolated transactional function getSubstepInputData(int stepId, int subst
     stream<ExperimentDataReference, sql:Error?> inputData;
 
     inputData = experimentDB->query(
-        `SELECT name, version FROM SubstepData JOIN ExperimentData ON StepData.dataId = ExperimentData.dataId 
+        `SELECT name, version FROM SubstepData JOIN ExperimentData ON SubstepData.dataId = ExperimentData.dataId 
          WHERE relationType = "input" and stepId = ${stepId} and substepNr = ${substepNr};`
     );
 

@@ -146,7 +146,7 @@ public isolated function mapToExperimentDataResponse(database:ExperimentDataFull
         dataMapped.producingStepLink = string `/experiments/${data.experimentId}/timeline/${producingStep}`;
     }
     if (inputFor != ()) {
-        dataMapped.inputFor = inputFor;
+        dataMapped.inputFor = inputFor; // TODO: refactor how this attribute is handled with substeps
         dataMapped.inputForLinks = from var step in inputFor
             select string `/experiments/${data.experimentId}/timeline/${step}`;
     }
@@ -166,10 +166,7 @@ public type TimelineStepPost record {|
     string? parameters;
     string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
     string? parametersDescriptionLocation = ();
-    int? progressValue = ();
-    int? progressStart = ();
-    int? progressTarget = ();
-    string? progressUnit = ();
+    *database:Progress;
 |}; // TODO: not sure if sth needs to be changed here
 
 public type TimelineStepMinResponse record {|
@@ -184,10 +181,7 @@ public type TimelineStepMinResponse record {|
     string? processorLocation = ();
     string? parametersContentType = ();
     string? parametersDescriptionLocation = ();
-    int? progressValue = ();
-    int? progressStart = ();
-    int? progressTarget = ();
-    string? progressUnit = ();
+    *database:Progress;
 |};
 
 public type TimelineStepResponse record {|
@@ -211,10 +205,12 @@ public type TimelineSubstepResponse record {|
     *ApiResponse;
     int stepId;
     string substepId;
+    int substepNr;
     string href;
     string? hrefUi;
     int cleared;
     string parameters;
+    string parametersContentType;
     database:ExperimentDataReference[] inputData;
     string[] inputDataLinks;
 |};
@@ -302,10 +298,12 @@ public isolated function mapToTimelineSubstepResponse( // TODO
         '\@self: string `/experiments/${experimentId}/timeline/${substep.substepNr}`,
         stepId: substep.stepId,
         substepId: substep.substepId,
+        substepNr: substep.substepNr,
         href: substep.href,
         hrefUi: substep.hrefUi,
         cleared: substep.cleared,
         parameters: substep?.parameters,
+        parametersContentType: substep?.parametersContentType,
         inputData: inputData,
         inputDataLinks: inputDataLinks
     };
