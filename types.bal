@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import ballerina/time;
+import ballerina/mime;
 import ballerina/regex;
 import ballerina/url;
 import qhana_backend.database;
@@ -160,7 +161,10 @@ public type TimelineStepPost record {|
     string resultLocation;
     string[] inputData;
     string processorName;
+    string? processorVersion = ();
+    string? processorLocation = ();
     string? parameters;
+    string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
     *database:Progress;
 |};
 
@@ -172,6 +176,9 @@ public type TimelineStepMinResponse record {|
     string? end = ();
     string status;
     string processorName;
+    string? processorVersion = ();
+    string? processorLocation = ();
+    string? parametersContentType = ();
     *database:Progress;
 |};
 
@@ -237,6 +244,9 @@ public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull 
         end: end == () ? () : time:utcToString(end),
         status: step.status,
         processorName: step.processorName,
+        processorVersion: step.processorVersion,
+        processorLocation: step.processorLocation,
+        parametersContentType: step.parametersContentType,
         progressValue: step.progressValue,
         progressStart: step.progressStart,
         progressTarget: step.progressTarget,
@@ -265,6 +275,9 @@ public isolated function mapToTimelineStepResponse(
         status: step.status,
         resultLog: log == () ? "" : log,
         processorName: step.processorName,
+        processorVersion: step.processorVersion,
+        processorLocation: step.processorLocation,
+        parametersContentType: step.parametersContentType,
         parameters: step?.parameters,
         inputData: inputData,
         inputDataLinks: inputDataLinks,

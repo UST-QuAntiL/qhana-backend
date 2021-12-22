@@ -306,7 +306,10 @@ service / on new http:Listener(port) {
             createdStep = check database:createTimelineStep(
                 experimentId = experimentId,
                 parameters = stepData.parameters,
-                processorName = stepData.processorName
+                parametersContentType = stepData.parametersContentType,
+                processorName = stepData.processorName,
+                processorVersion = stepData.processorVersion,
+                processorLocation = stepData.processorLocation
             );
             check database:saveTimelineStepInputData(createdStep.stepId, experimentId, inputData);
             check database:createTimelineStepResultWatcher(createdStep.stepId, mapToInternalUrl(stepData.resultLocation));

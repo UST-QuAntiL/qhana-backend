@@ -16,6 +16,7 @@ import ballerina/io;
 import ballerina/time;
 import ballerina/sql;
 import ballerinax/java.jdbc;
+import ballerina/mime;
 
 sql:ConnectionPool sqlitePool = {
     maxOpenConnections: 5,
@@ -137,7 +138,10 @@ public type TimelineStep record {|
     string resultQuality = "UNKNOWN";
     string? resultLog = ();
     string processorName;
+    string? processorVersion = ();
+    string? processorLocation = ();
     string parameters?; // optional for small requests
+    string? parametersContentType = ();
     string notes?; // optional for small requests
     *Progress; // TODO how are these set? -> change needed
 |};
@@ -157,7 +161,10 @@ public type TimelineStepSQL record {|
     string resultQuality = "UNKNOWN";
     string? resultLog = ();
     string processorName;
+    string? processorVersion = ();
+    string? processorLocation = ();
     string parameters?; // optional for small requests
+    string? parametersContentType = ();
     string notes?; // optional for small requests
     *Progress; // TODO how are these set? -> change needed
 |};
@@ -562,10 +569,10 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
         query.push(`DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, `);
     }
 
-    query.push(`status, processorName`);
+    query.push(`status, processorName, processorVersion, processorLocation, `);
 
     if allAttributes {
-        query.push(`, resultQuality, resultLog, parameters, notes `);
+        query.push(`, resultQuality, resultLog, parameters, parametersContentType, notes `);
     } else {
         query.push(`, NULL AS resultLog `);
     }
@@ -600,9 +607,16 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
 public isolated transactional function createTimelineStep(
         int experimentId,
         string processorName,
-        string? parameters = ()
-    ) returns TimelineStepWithParams|error {
+        string? processorVersion = (),
+        string? processorLocation = (),
+        string? parameters = (),
+        string? parametersContentType = mime:APPLICATION_FORM_URLENCODED
+) returns TimelineStepWithParams|error {
     TimelineStepWithParams? result = ();
+
+    if parameters == () && parametersContentType == () {
+        return error("When parameters are given the parameters content type is required!");
+    }
 
     stream<TimelineStepSQL, sql:Error?> createdStep;
     sql:ParameterizedQuery currentTime = `strftime('%Y-%m-%dT%H:%M:%S', 'now')`;
@@ -611,10 +625,10 @@ public isolated transactional function createTimelineStep(
     }
     var insertResult = check experimentDB->execute(
         check new ConcatQuery(
-            `INSERT INTO TimelineStep (experimentId, sequence, start, end, processorName, parameters) 
+            `INSERT INTO TimelineStep (experimentId, sequence, start, end, processorName, processorVersion, processorLocation, parameters, parametersContentType) 
             VALUES (${experimentId}, (SELECT sequence from (SELECT count(*)+1 AS sequence FROM TimelineStep WHERE experimentId = ${experimentId}) subquery), `,
             currentTime,
-            `, NULL, ${processorName}, ${parameters};`
+            `, NULL, ${processorName}, ${processorVersion}, ${processorLocation}, ${parameters}, ${parametersContentType});`
         )
     );
 
@@ -631,10 +645,10 @@ public isolated transactional function createTimelineStep(
 }
 
 public isolated transactional function getTimelineStep(int? experimentId = (), int? sequence = (), int? stepId = ()) returns TimelineStepWithParams|error {
-    var baseQuery = `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultQuality, resultLog, processorName, parameters, pStart, pTarget, pValue, pUnit
+    var baseQuery = `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart, pTarget, pValue, pUnit
                      FROM TimelineStep `;
     if dbType != "sqlite" {
-        baseQuery = `SELECT stepId, experimentId, sequence, DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, status, resultQuality, resultLog, processorName, parameters, pStart, pTarget, pValue, pUnit
+        baseQuery = `SELECT stepId, experimentId, sequence, DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart, pTarget, pValue, pUnit
                      FROM TimelineStep `;
     }
 

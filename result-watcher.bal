@@ -330,6 +330,9 @@ public isolated class ResultWatcher {
                     }
 
                     // TODO: check that UI didn't delete substeps
+                    // TODO: neuer substep -> alle davor auf cleared setzen und optional warning/error
+                    // TODO: checken ob welche rausfliegen oder daziwschen welche eingefügt werden... -> error, hrefs vergleichen, substep
+                    // wenn substepid nicht gesetzt darf auch nicht nachträglich gesetzt werden... 
 
                     // write progress into db - 
                     if progress != () && newSubsteps.length() > 0 {

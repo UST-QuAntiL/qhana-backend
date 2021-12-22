@@ -65,8 +65,11 @@ CREATE TABLE IF NOT EXISTS "TimelineStep" (
 	"status"	VARCHAR(50) DEFAULT 'PENDING',
 	"resultQuality"	VARCHAR(50) NOT NULL DEFAULT 'UNKNOWN',
 	"resultLog"	TEXT,
-	"processorName"	VARCHAR(500) NOT NULL
+	"processorName"	VARCHAR(500) NOT NULL,
+	"processorVersion"	VARCHAR(150),
+	"processorLocation"	TEXT,
 	"parameters"	TEXT NOT NULL,
+	"parametersContentType"	VARCHAR(500) NOT NULL DEFAULT 'application/x-www-form-urlencoded',
 	"pStart"	REAL,
 	"pTarget"	REAL,
 	"pValue"	REAL,
