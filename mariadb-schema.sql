@@ -122,7 +122,7 @@ CREATE TABLE `TimelineSubstep` (
 	`href`	TEXT NOT NULL,
 	`hrefUi`	TEXT,
 	`cleared`	INTEGER DEFAULT 0 CHECK(cleared=0 or cleared=1),
-	`parameters`	TEXT NOT NULL,
+	`parameters`	TEXT,
 	`parametersContentType`	VARCHAR(500) NOT NULL DEFAULT 'application/x-www-form-urlencoded',
 	FOREIGN KEY(`stepId`) REFERENCES `TimelineStep`(`stepId`),
 	PRIMARY KEY(`stepId`,`substepNr`)

@@ -116,10 +116,10 @@ public type ExperimentDataFull record {|
 // Timeline ////////////////////////////////////////////////////////////////////
 
 public type Progress record {|
-    float? progressStart = ();
-    float? progressTarget = ();
+    float? progressStart = 0;
+    float? progressTarget = 100;
     float? progressValue = ();
-    string? progressUnit = ();
+    string? progressUnit = "%";
 |};
 
 public type TimelineStepRef record {|
@@ -143,7 +143,7 @@ public type TimelineStep record {|
     string parameters?; // optional for small requests
     string? parametersContentType = ();
     string notes?; // optional for small requests
-    *Progress; // TODO how are these set? -> change needed
+    *Progress;
 |};
 
 public type TimelineStepFull record {|
@@ -166,7 +166,7 @@ public type TimelineStepSQL record {|
     string parameters?; // optional for small requests
     string? parametersContentType = ();
     string notes?; // optional for small requests
-    *Progress; // TODO how are these set? -> change needed
+    *Progress;
 |};
 
 public type TimelineStepWithParams record {|
@@ -1018,6 +1018,12 @@ public isolated transactional function getSubstepInputData(int stepId, int subst
     }
 
     return error(string `Failed to retrieve input data for experiment substep with stepId ${stepId} and substepNr ${substepNr}!`);
+}
+
+public isolated transactional function saveTimelineSubstepParams(int stepId, int substepNr, string? parameters, string parametersContentType) returns error? {
+    var result = check experimentDB->execute(
+                `UPDATE TimelineSubstep SET parameters=${parameters}, parametersContentType=${parametersContentType} WHERE stepId=${stepId} AND substepNr=${substepNr};`
+            );
 }
 
 public isolated transactional function saveTimelineSubstepInputData(int stepId, int substepNr, int experimentId, ExperimentDataReference[] inputData) returns error? {

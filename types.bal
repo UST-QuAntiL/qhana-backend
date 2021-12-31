@@ -203,6 +203,7 @@ public type TimelineSubstepPost record {|
     string resultLocation;
     string[] inputData;
     string? parameters;
+    string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
     *database:Progress;
 |};
 
@@ -214,8 +215,8 @@ public type TimelineSubstepResponse record {|
     string href;
     string? hrefUi;
     int cleared;
-    string parameters;
-    string parametersContentType;
+    string? parameters;
+    string? parametersContentType = ();
     database:ExperimentDataReference[] inputData;
     string[] inputDataLinks;
 |};

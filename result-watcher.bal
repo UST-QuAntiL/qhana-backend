@@ -21,6 +21,38 @@ import qhana_backend.database;
 
 configurable string storageLocation = "experimentData";
 
+isolated ResultWatcher[] resultWatcherRegistry = [];
+
+isolated function addResultWatcherToRegistry(ResultWatcher watcher) {
+    lock {
+        resultWatcherRegistry.push(watcher);
+    }
+}
+
+isolated function getResultWatcherFromRegistry(int stepId) returns ResultWatcher|error {
+    lock {
+        ResultWatcher[] result = resultWatcherRegistry.filter(watcher => watcher.stepId == stepId);
+        if result == [] {
+            return error(string `No ResultWatcher with stepId ${stepId}`);
+        } else {
+            return result.pop();
+        }
+    }
+}
+
+isolated function removeResultWatcherFromRegistry(int stepId) returns ResultWatcher|error {
+    lock {
+        int i = -1;
+        foreach var watcher in resultWatcherRegistry {
+            i += 1;
+            if watcher.stepId == stepId {
+                return trap resultWatcherRegistry.remove(i); // not sure if this is best way to deal with panic error
+            }
+        }
+        return error(string `No ResultWatcher with stepId ${stepId}`);
+    }
+}
+
 type TaskDataOutput record {
     string href;
     string outputType;
@@ -87,6 +119,9 @@ isolated class ResultProcessor {
     private isolated function saveSuccessfullResult() returns error? {
         var outputs = self.result?.outputs;
 
+        lock {
+            _ = check removeResultWatcherFromRegistry(self.stepId);
+        }
         transaction {
 
             'transaction:onRollback(self.compensateFileCreation);
@@ -140,6 +175,9 @@ isolated class ResultProcessor {
     }
 
     private isolated function saveErrorResult() returns error? {
+        lock {
+            _ = check removeResultWatcherFromRegistry(self.stepId);
+        }
         transaction {
             var r = self.result;
             var status = r.status;
@@ -176,6 +214,12 @@ public isolated class ResultWatcher {
             var err = self.unschedule();
             if err is error {
                 io:println(string `Failed to unsubscribe step result watcher for step ${self.stepId}`, err);
+            } else {
+                // not sure if this is needed here
+                var err2 = removeResultWatcherFromRegistry(self.stepId);
+                if err2 is error {
+                    io:println(string `Failed to remove result watcher from registry for step ${self.stepId}`, err2);
+                }
             }
         }
 
@@ -214,6 +258,7 @@ public isolated class ResultWatcher {
                     }
                     if newInterval == () {
                         check self.unschedule();
+                        _ = check removeResultWatcherFromRegistry(self.stepId); // not sure if this is needed here
                         io:println(`finally finish executing job for step ${self.stepId}`);
                         return;
                     } else {
@@ -403,6 +448,9 @@ public isolated class ResultWatcher {
         } else {
             self.resultEndpoint = resultEndpoint;
             self.httpClient = check new (self.resultEndpoint);
+        }
+        lock {
+            resultWatcherRegistry.push(self);
         }
     }
 }

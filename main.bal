@@ -379,7 +379,6 @@ service / on new http:Listener(port) {
         return <http:Ok>{};
     }
 
-    // TODO: doesn't create substep, substep must be created by result watcher
     resource function post experiments/[int experimentId]/timeline/[int timelineStep]/substeps/[int substepNr](@http:Payload TimelineSubstepPost substepData) returns TimelineSubstepResponse|http:InternalServerError {
         database:TimelineStepWithParams step;
         database:TimelineSubstepWithParams substep;
@@ -389,9 +388,18 @@ service / on new http:Listener(port) {
             inputData = from var inputUrl in substepData.inputData
                 select check mapFileUrlToDataRef(experimentId, inputUrl);
             step = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep);
-            substep = check database:getTimelineSubstepWithParams(step.stepId, substepNr); // TODO: not sure if this is needed
+            // verify that substep is in database
+            substep = check database:getTimelineSubstepWithParams(step.stepId, substepNr);
+            // save input data and update progress
+            database:Progress progress = {
+                progressStart: substepData.progressStart,
+                progressTarget: substepData.progressTarget,
+                progressValue: substepData.progressValue,
+                progressUnit: substepData.progressUnit
+            };
+            check database:saveTimelineSubstepParams(step.stepId, substepNr, substepData.parameters, substepData.parametersContentType);
             check database:saveTimelineSubstepInputData(step.stepId, substepNr, experimentId, inputData);
-            // check database:updateTimelineProgress(step.stepId, substepData.progressStart, substepData.progressTarget, substepData.progressValue, substepData.progressUnit); // TODO: should probably be handled by ResultWatcher...
+            check database:updateTimelineProgress(step.stepId, progress);
             check commit;
         } on fail error err {
             io:println(err);
@@ -401,12 +409,16 @@ service / on new http:Listener(port) {
         }
         do {
             // reschedule result watcher (already running for the timeline step the substep is associated with)
-            ResultWatcher watcher = check new (step.stepId);
+            ResultWatcher watcher;
+            lock {
+                watcher = check getResultWatcherFromRegistry(step.stepId);
+            }
+            check watcher.unschedule();
             check watcher.schedule(...watcherIntervallConfig);
         } on fail error err {
             io:println(err);
             // if with return does not correctly narrow type for rest of function... this does.
-            http:InternalServerError resultErr = {body: "Failed to start watcher."};
+            http:InternalServerError resultErr = {body: "Failed to restart watcher."};
             return resultErr;
         }
         return mapToTimelineSubstepResponse(experimentId, substep, inputData);
