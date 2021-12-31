@@ -399,7 +399,7 @@ service / on new http:Listener(port) {
             };
             check database:saveTimelineSubstepParams(step.stepId, substepNr, substepData.parameters, substepData.parametersContentType);
             check database:saveTimelineSubstepInputData(step.stepId, substepNr, experimentId, inputData);
-            check database:updateTimelineProgress(step.stepId, progress);
+            check database:updateTimelineProgress(step.stepId, progress, step.resultLog);
             check commit;
         } on fail error err {
             io:println(err);

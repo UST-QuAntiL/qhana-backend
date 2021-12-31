@@ -569,7 +569,7 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
         query.push(`DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, `);
     }
 
-    query.push(`status, processorName, processorVersion, processorLocation, `);
+    query.push(`status, processorName, processorVersion, processorLocation `);
 
     if allAttributes {
         query.push(`, resultQuality, resultLog, parameters, parametersContentType, notes `);
@@ -645,10 +645,10 @@ public isolated transactional function createTimelineStep(
 }
 
 public isolated transactional function getTimelineStep(int? experimentId = (), int? sequence = (), int? stepId = ()) returns TimelineStepWithParams|error {
-    var baseQuery = `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart, pTarget, pValue, pUnit
+    var baseQuery = `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart AS progressStart, pTarget AS progressTarget, pValue AS progressValue, pUnit AS progressUnit
                      FROM TimelineStep `;
     if dbType != "sqlite" {
-        baseQuery = `SELECT stepId, experimentId, sequence, DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart, pTarget, pValue, pUnit
+        baseQuery = `SELECT stepId, experimentId, sequence, DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart AS progressStart, pTarget AS progressTarget, pValue AS progressValue, pUnit AS progressUnit
                      FROM TimelineStep `;
     }
 
@@ -965,38 +965,144 @@ public isolated transactional function createTimelineSubstep(int stepId, Timelin
 # + substep - substep
 # + return - error or ()
 public isolated transactional function updateTimelineSubstep(int stepId, TimelineSubstep substep) returns error? {
-    TimelineSubstepSQL[] substeps = check getTimelineSubsteps(stepId);
-    TimelineSubstepSQL[] duplicates;
-    if substep.substepId != () {
-        duplicates = from var tmpSubstep in substeps
-            where tmpSubstep.href == substep.href && tmpSubstep.hrefUi == substep.hrefUi
-                && tmpSubstep.substepId == substep.substepId
-            select tmpSubstep;
-        if duplicates.length() > 0 {
+    if substep.href == "" {
+        return error("Href cannot be empty!");
+    }
+    if substep.substepId == () {
+        if substep.hrefUi == () {
             var result = check experimentDB->execute(
-                `UPDATE TimelineSubstep SET cleared=${substep.cleared} WHERE stepId=${stepId} AND href=${substep.href} AND hrefUi=${substep.hrefUi} AND substepId=${substep.substepId};`
+                `UPDATE TimelineSubstep SET cleared=${substep.cleared} WHERE stepId=${stepId} AND href=${substep.href};`
             );
-            return;
+        } else {
+            var result = check experimentDB->execute(
+                `UPDATE TimelineSubstep SET cleared=${substep.cleared} WHERE stepId=${stepId} AND href=${substep.href} AND hrefUi=${substep.hrefUi}`
+            );
         }
     } else {
-        // a bit unlucky having to use href and hrefUi as primary key here...
-        duplicates = from var tmpSubstep in substeps
-            where tmpSubstep.href == substep.href && tmpSubstep.hrefUi == substep.hrefUi
-            select tmpSubstep;
-        if duplicates.length() > 0 {
+        if substep.hrefUi == () {
             var result = check experimentDB->execute(
-                `UPDATE TimelineSubstep SET cleared=${substep.cleared} WHERE stepId=${stepId} AND href=${substep.href} AND hrefUi=${substep.hrefUi};`
+                `UPDATE TimelineSubstep SET cleared=${substep.cleared} WHERE stepId=${stepId} AND href=${substep.href} AND substepId=${substep.substepId};`
             );
-            return;
+        } else {
+            var result = check experimentDB->execute(
+                `UPDATE TimelineSubstep SET cleared=${substep.cleared} WHERE stepId=${stepId} AND href=${substep.href} AND hrefUi=${substep.hrefUi} AND substepId=${substep.substepId}`
+            );
         }
     }
-    check createTimelineSubstep(stepId, substep);
 }
 
-public isolated transactional function updateTimelineProgress(int stepId, Progress progress) returns error? {
-    var insertResult = check experimentDB->execute(
-        `UPDATE TimelineStep SET pStart = ${progress.progressStart}, pTarget = ${progress.progressTarget}, pValue = ${progress.progressValue}, pUnit = ${progress.progressUnit} WHERE stepId = ${stepId};`
-    );
+# Description
+#
+# + stepId - Timeline step id
+# + receivedSubsteps - list of received substeps
+# + return - Returns true if something changed else false
+public isolated transactional function updateTimelineSubsteps(int stepId, TimelineSubstep[] receivedSubsteps) returns boolean|error {
+    TimelineSubstepSQL[] tempDBSubsteps = check getTimelineSubsteps(stepId);
+    // cast db substeps to TimelineSubstep
+    TimelineSubstep[] oldDBSubsteps = [];
+    foreach var tempDBsubstep in tempDBSubsteps {
+        TimelineSubstep tempDBSubstep = {
+            substepId: tempDBsubstep.substepId,
+            href: tempDBsubstep.href,
+            hrefUi: tempDBsubstep.hrefUi,
+            cleared: tempDBsubstep.cleared
+        };
+        oldDBSubsteps.push(tempDBSubstep);
+    }
+
+    TimelineSubstep[] newSubsteps = [];
+    TimelineSubstep[] updatedSubsteps = [];
+    TimelineSubstep[] oldUnclearedSubsteps = [];
+    TimelineSubstep oldDBSubstep;
+
+    // find new/changed substeps
+    int oldOrUpdatedCounter = 0;
+    int unclearedCounter = 0;
+    foreach var receivedSubstep in receivedSubsteps {
+        if receivedSubstep.cleared == 0 {
+            unclearedCounter += 1;
+        }
+        if oldDBSubsteps.indexOf(receivedSubstep) != () {
+            oldOrUpdatedCounter += 1;
+            if receivedSubstep.cleared == 0 {
+                oldUnclearedSubsteps.push(receivedSubstep);
+            }
+        } else {
+            TimelineSubstep[] tmp = from var tempSubstep in oldDBSubsteps
+                where tempSubstep.href == receivedSubstep.href
+                select tempSubstep; // hrefs must be unique in each step
+            if tmp.length() > 0 {
+                oldDBSubstep = tmp.pop();
+                // updated step
+                oldOrUpdatedCounter += 1;
+                if receivedSubstep.substepId != () && receivedSubstep.substepId != oldDBSubstep.substepId {
+                    string? substepId = receivedSubstep.substepId;
+                    return error(string `UI set or changed substepId a posteriori (stepId: ${stepId}, new substepId: ${substepId != () ? substepId : ""}).`);
+                }
+                if receivedSubstep.hrefUi != () && receivedSubstep.hrefUi != oldDBSubstep.hrefUi {
+                    string? hrefUi = receivedSubstep.hrefUi;
+                    return error(string `UI set or changed hrefUi a posteriori (stepId: ${stepId}, new hrefUi: ${hrefUi != () ? hrefUi : ""}).`);
+                }
+                if receivedSubstep.cleared == 0 && oldDBSubstep.cleared == 1 {
+                    return error(string `Previously cleared substep was set to cleared=false (stepId: ${stepId}, href: ${receivedSubstep.href})!`);
+                }
+                // now only cleared could have been changed
+                updatedSubsteps.push(receivedSubstep);
+            } else {
+                // new step or UI did some arbitrary things that we cannot discriminate here
+                newSubsteps.push(receivedSubstep);
+            }
+        }
+    }
+    if oldOrUpdatedCounter < oldDBSubsteps.length() {
+        return error(string `UI deleted ${oldDBSubsteps.length() - oldOrUpdatedCounter} substep(s) (stepId: ${stepId}`);
+    }
+    if newSubsteps.length() > 0 {
+        // set all previous to cleared
+        foreach var substep in oldUnclearedSubsteps {
+            substep.cleared = 1;
+            check updateTimelineSubstep(stepId, substep);
+            // compensate for errors in UI
+            unclearedCounter -= 1;
+        }
+    }
+    if unclearedCounter > 1 {
+        return error(string `More than one new substeps are not cleared (stepId: ${stepId})!`);
+    }
+    if newSubsteps.length() > 1 {
+        // Should be okay as at most one substep is not cleared
+        io:println(`WARNING: more than one new substep was added (stepId: ${stepId})!`);
+    }
+    foreach var substep in newSubsteps {
+        check createTimelineSubstep(stepId, substep);
+    }
+    foreach var substep in updatedSubsteps {
+        if newSubsteps.length() > 0 {
+            if substep.cleared == 0 {
+                // Should not happen as that would result in more than one substeps not being cleared which results in an error (see above)
+                substep.cleared = 1;
+                io:println(`WARNING: new substep was added without clearing previous substeps (stepId: ${stepId}, href of uncleared substep: ${substep.href})!`);
+            }
+        }
+        check updateTimelineSubstep(stepId, substep);
+    }
+    if newSubsteps.length() + updatedSubsteps.length() > 0 {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+public isolated transactional function updateTimelineProgress(int stepId, Progress progress, string? taskLog) returns error? {
+    if taskLog != () {
+        var insertResult = check experimentDB->execute(
+            `UPDATE TimelineStep SET pStart = ${progress.progressStart}, pTarget = ${progress.progressTarget}, pValue = ${progress.progressValue}, pUnit = ${progress.progressUnit}, resultLog = ${taskLog} WHERE stepId = ${stepId};`
+        );
+    } else {
+        var insertResult = check experimentDB->execute(
+            `UPDATE TimelineStep SET pStart = ${progress.progressStart}, pTarget = ${progress.progressTarget}, pValue = ${progress.progressValue}, pUnit = ${progress.progressUnit} WHERE stepId = ${stepId};`
+        );
+    }
 }
 
 public isolated transactional function getSubstepInputData(int stepId, int substepNr) returns ExperimentDataReference[]|error {

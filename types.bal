@@ -200,7 +200,6 @@ public type TimelineStepListResponse record {|
 |};
 
 public type TimelineSubstepPost record {|
-    string resultLocation;
     string[] inputData;
     string? parameters;
     string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
