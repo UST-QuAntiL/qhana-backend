@@ -87,8 +87,28 @@ isolated class ResultProcessor {
         self.processedOutputs = [];
     }
 
-    public isolated function processSubstep() returns error? {
-        // TODO
+    # Processes intermediate task result for progress and task log updates as well as for timeline substep updates
+    #
+    # + return - true if timeline substeps were updated (new timeline step added), else false
+    public isolated function processIntermediateResult() returns boolean|error {
+        database:TimelineSubstep[]? receivedSubsteps = self.result?.substeps;
+        database:Progress? progress = self.result?.progress;
+        string? taskLog = self.result?.taskLog;
+        // write progress and taskLog into db 
+        boolean isChanged = false;
+        transaction {
+            if progress != () {
+                check database:updateTimelineProgress(self.stepId, progress, taskLog);
+            } else if taskLog != () {
+                check database:updateTimelineTaskLog(self.stepId, taskLog);
+            }
+            if receivedSubsteps != () {
+                // write changes in timeline substeps into db
+                isChanged = check database:updateTimelineSubsteps(self.stepId, receivedSubsteps);
+            }
+            check commit;
+        }
+        return isChanged;
     }
 
     public isolated function processResult() returns error? {
@@ -345,56 +365,32 @@ public isolated class ResultWatcher {
 
     private isolated function checkTaskResult(TaskStatusResponse result) {
         if result.status == "UNKNOWN" || result.status == "PENDING" {
-            database:TimelineSubstep[]? receivedSubsteps = result?.substeps;
-            database:Progress? progress = result?.progress;
-            string? taskLog = result?.taskLog;
-            // write progress and taskLog into db 
-            transaction {
-                if progress != () {
-                    check database:updateTimelineProgress(self.stepId, progress, taskLog);
-                } else if taskLog != () {
-                    check database:updateTimelineTaskLog(self.stepId, taskLog);
-                }
-                check commit;
-            } on fail error err {
-                io:println(err);
-            }
-            if receivedSubsteps != () {
-                // write changes in timeline substeps into db
-                boolean isChanged;
-                transaction {
-                    isChanged = check database:updateTimelineSubsteps(self.stepId, receivedSubsteps);
-                    check commit;
-                } on fail error err {
-                    io:println(err);
-                }
+            do {
+                ResultProcessor processor = new (result, self.experimentId, self.stepId, self.resultEndpoint);
+                boolean isChanged = check processor.processIntermediateResult();
                 if isChanged {
-                    do {
-                        check self.unschedule();
-                        // TODO: Maybe change this in the future
-                        (decimal|int)[] initialIntervals = [2, 10, 5, 10, 10, 60, 30, 20, 60, 10, 600];
-                        check self.schedule(...initialIntervals);
-                    } on fail error e {
-                        lock {
-                            self.errorCounter += 1;
-                        }
-                        io:println(e);
-                    }
+                    check self.unschedule();
+                    // TODO: Probably needs to be changed in the future
+                    (decimal|int)[] initialIntervals = [2, 10, 5, 10, 10, 60, 30, 20, 60, 10, 600];
+                    check self.schedule(...initialIntervals);
                 }
-
-            } else {
-                return; // nothing to do, still waiting for result
+            } on fail error e {
+                lock {
+                    self.errorCounter += 1;
+                }
+                io:println(e);
             }
-        }
-        do {
-            ResultProcessor processor = new (result, self.experimentId, self.stepId, self.resultEndpoint);
-            check processor.processResult();
-            check self.unschedule();
-        } on fail error e {
-            lock {
-                self.errorCounter += 1;
+        } else {
+            do {
+                ResultProcessor processor = new (result, self.experimentId, self.stepId, self.resultEndpoint);
+                check processor.processResult();
+                check self.unschedule();
+            } on fail error e {
+                lock {
+                    self.errorCounter += 1;
+                }
+                io:println(e);
             }
-            io:println(e);
         }
     }
 

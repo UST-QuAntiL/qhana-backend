@@ -292,7 +292,7 @@ service / on new http:Listener(port) {
         }
 
         var stepList = from var s in steps
-            select mapToTimelineStepMinResponse(s); // TODO: add progress to min response
+            select mapToTimelineStepMinResponse(s);
         return {'\@self: string `/experiments/${experimentId}/timeline`, items: stepList, itemCount: stepCount};
     }
 

@@ -141,7 +141,7 @@ public type TimelineStep record {|
     string? processorVersion = ();
     string? processorLocation = ();
     string parameters?; // optional for small requests
-    string? parametersContentType = ();
+    string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
     string notes?; // optional for small requests
     *Progress;
 |};
@@ -164,7 +164,7 @@ public type TimelineStepSQL record {|
     string? processorVersion = ();
     string? processorLocation = ();
     string parameters?; // optional for small requests
-    string? parametersContentType = ();
+    string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
     string notes?; // optional for small requests
     *Progress;
 |};
@@ -191,7 +191,7 @@ public type TimelineSubstepSQL record {|
 public type TimelineSubstepWithParams record {|
     *TimelineSubstepSQL;
     string parameters;
-    string parametersContentType;
+    string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
 |};
 
 // Timeline to Data links //////////////////////////////////////////////////////
@@ -584,8 +584,6 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
     (TimelineStepSQL|TimelineStepFull)[]|error|() tempList = from var step in timelineSteps
         select step;
 
-    // TODO: retrieve associated substeps for each step
-
     check timelineSteps.close();
 
     TimelineStepFull[] stepList = [];
@@ -902,6 +900,11 @@ public isolated transactional function getTimelineSubstepsWithInputData(int step
     }
 }
 
+# Returns timeline substep with available experiment data reference if available
+#
+# + stepId - Parameter Description  
+# + substepNr - Parameter Description
+# + return - substep with experiment data or error
 public isolated transactional function getTimelineSubstep(int stepId, int substepNr) returns TimelineSubstepSQL|error {
     stream<TimelineSubstepSQL, sql:Error?> substeps = experimentDB->query(
         `SELECT stepId, substepNr, substepId, href, hrefUi, cleared FROM TimelineSubstep WHERE stepId=${stepId} AND substepNr=${substepNr};`
@@ -909,9 +912,14 @@ public isolated transactional function getTimelineSubstep(int stepId, int subste
     var result = substeps.next();
     check substeps.close();
 
-    // TODO: get associated input data
+    ExperimentDataReference[]|error inputData = check getSubstepInputData(stepId, substepNr);
     if result is record {|TimelineSubstepSQL value;|} {
-        return result.value;
+        if inputData is error {
+            return inputData;
+        } else {
+            result.value.inputData = inputData;
+            return result.value;
+        }
     } else if result is error {
         return result;
     } else {
@@ -919,26 +927,16 @@ public isolated transactional function getTimelineSubstep(int stepId, int subste
     }
 }
 
-// TODO
 public isolated transactional function getTimelineSubstepWithParams(int stepId, int substepNr) returns TimelineSubstepWithParams|error {
     // as in getTimelineStep
     stream<TimelineSubstepWithParams, sql:Error?> substeps = experimentDB->query(
-        `SELECT stepId, substepNr, substepId, href, hrefUi, cleared, parameters FROM TimelineSubstep WHERE stepId=${stepId} AND substepNr=${substepNr};`
+        `SELECT stepId, substepNr, substepId, href, hrefUi, cleared, parameters, parametersContentType FROM TimelineSubstep WHERE stepId=${stepId} AND substepNr=${substepNr};`
     );
     var result = substeps.next();
     check substeps.close();
 
     if result is record {|TimelineSubstepWithParams value;|} {
-        return {
-            stepId: result.value.stepId,
-            substepNr: result.value.substepNr,
-            substepId: result.value.substepId,
-            href: result.value.href,
-            hrefUi: result.value.hrefUi,
-            cleared: result.value.cleared,
-            parameters: result.value.parameters,
-            parametersContentType: result.value.parametersContentType
-        };
+        return result.value;
     } else if result is error {
         return result;
     } else {
@@ -959,43 +957,48 @@ public isolated transactional function createTimelineSubstep(int stepId, Timelin
     );
 }
 
-# Checks if substep is already in database and updates cleared field in case it is. Otherwise calls createTimelineSubstep. 
+# Updates cleared field of timeline substep
 #
 # + stepId - stepId
 # + substep - substep
-# + return - error or ()
+# + return - error in case no update or multiple updated
 public isolated transactional function updateTimelineSubstep(int stepId, TimelineSubstep substep) returns error? {
     if substep.href == "" {
         return error("Href cannot be empty!");
     }
+    sql:ExecutionResult result;
     if substep.substepId == () {
         if substep.hrefUi == () {
-            var result = check experimentDB->execute(
+            result = check experimentDB->execute(
                 `UPDATE TimelineSubstep SET cleared=${substep.cleared} WHERE stepId=${stepId} AND href=${substep.href};`
             );
         } else {
-            var result = check experimentDB->execute(
+            result = check experimentDB->execute(
                 `UPDATE TimelineSubstep SET cleared=${substep.cleared} WHERE stepId=${stepId} AND href=${substep.href} AND hrefUi=${substep.hrefUi}`
             );
         }
     } else {
         if substep.hrefUi == () {
-            var result = check experimentDB->execute(
+            result = check experimentDB->execute(
                 `UPDATE TimelineSubstep SET cleared=${substep.cleared} WHERE stepId=${stepId} AND href=${substep.href} AND substepId=${substep.substepId};`
             );
         } else {
-            var result = check experimentDB->execute(
+            result = check experimentDB->execute(
                 `UPDATE TimelineSubstep SET cleared=${substep.cleared} WHERE stepId=${stepId} AND href=${substep.href} AND hrefUi=${substep.hrefUi} AND substepId=${substep.substepId}`
             );
         }
     }
+    if result?.affectedRowCount != 1 {
+        int? rowCount = result?.affectedRowCount;
+        return error(string `Update not successful. Affected rows: ${rowCount != () ? rowCount : 0}`);
+    }
 }
 
-# Description
+# Updates database from a list of received substeps. First checks received list against old list of substeps for the given step in the database to find updated and new substeps. If steps are missing or illegal changes were made (apart from setting cleared to 1) or multiple new uncleared substeps are added an appropriate error is returned. If at least one new substep is added, all old substeps are automatically cleared (in case they are not cleared in the received list). A warning is printed if more than one new substep is added. 
 #
 # + stepId - Timeline step id
 # + receivedSubsteps - list of received substeps
-# + return - Returns true if something changed else false
+# + return - Returns true if changes were made successfully and false if no changes were made. Else raises an error.
 public isolated transactional function updateTimelineSubsteps(int stepId, TimelineSubstep[] receivedSubsteps) returns boolean|error {
     TimelineSubstepSQL[] tempDBSubsteps = check getTimelineSubsteps(stepId);
     // cast db substeps to TimelineSubstep

@@ -146,7 +146,7 @@ public isolated function mapToExperimentDataResponse(database:ExperimentDataFull
         dataMapped.producingStepLink = string `/experiments/${data.experimentId}/timeline/${producingStep}`;
     }
     if (inputFor != ()) {
-        dataMapped.inputFor = inputFor; // TODO: refactor how this attribute is handled with substeps
+        dataMapped.inputFor = inputFor;
         dataMapped.inputForLinks = from var step in inputFor
             select string `/experiments/${data.experimentId}/timeline/${step}`;
     }
@@ -178,7 +178,7 @@ public type TimelineStepMinResponse record {|
     string processorName;
     string? processorVersion = ();
     string? processorLocation = ();
-    string? parametersContentType = ();
+    string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
     *database:Progress;
 |};
 
@@ -215,7 +215,7 @@ public type TimelineSubstepResponse record {|
     string? hrefUi;
     int cleared;
     string? parameters;
-    string? parametersContentType = ();
+    string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
     database:ExperimentDataReference[] inputData;
     string[] inputDataLinks;
 |};
@@ -291,7 +291,7 @@ public isolated function mapToTimelineStepResponse(
     };
 }
 
-public isolated function mapToTimelineSubstepResponse( // TODO
+public isolated function mapToTimelineSubstepResponse(
         int experimentId,
         database:TimelineSubstepWithParams substep,
         database:ExperimentDataReference[] inputData = []
