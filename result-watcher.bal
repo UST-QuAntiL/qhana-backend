@@ -55,14 +55,12 @@ isolated function removeResultWatcherFromRegistry(int stepId) returns ResultWatc
 
 type TaskDataOutput record {
     string href;
-    string outputType;
+    string dataType;
     string contentType;
     string? name?;
 };
 
 type TaskStatusResponse record {
-    string name;
-    string taskId;
     string status;
     string? taskLog?;
     TaskDataOutput[]? outputs?;
@@ -130,7 +128,7 @@ isolated class ResultProcessor {
                     }
                 } on fail var compensationError {
                     // TODO actual error logging (and periodic cleanup job looking for files not in a database)
-                    io:println(string `Error during deletion of file ${processed.location}, while compensating on error importing result for task ${self.result.taskId}!`, compensationError);
+                    io:println(string `Error during deletion of file ${processed.location}, while compensating on error importing result for step ${self.stepId}!`, compensationError);
                 }
             }
         }
@@ -163,7 +161,7 @@ isolated class ResultProcessor {
                             name: filename != () ? filename : fileId,
                             'version: -1,
                             location: filePath,
-                            'type: output.outputType,
+                            'type: output.dataType,
                             contentType: output.contentType
                         });
                     }
@@ -231,6 +229,7 @@ public isolated class ResultWatcher {
             currentErrorCounter = self.errorCounter;
         }
         if currentErrorCounter > 5 {
+            io:println(string `Unscheduling watcher for step ${self.stepId} because of repeated errors.`);
             var err = self.unschedule();
             if err is error {
                 io:println(string `Failed to unsubscribe step result watcher for step ${self.stepId}`, err);
@@ -249,6 +248,7 @@ public isolated class ResultWatcher {
             lock {
                 self.errorCounter += 1;
             }
+            io:println(result);
         } else {
             lock {
                 if self.errorCounter > 0 {
@@ -288,6 +288,7 @@ public isolated class ResultWatcher {
                     lock {
                         self.errorCounter += 1;
                     }
+                    io:println(err);
                 }
             }
         }
