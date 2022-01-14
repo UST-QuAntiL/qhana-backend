@@ -36,7 +36,7 @@ bal run
 The API is available at the configured port in `main.bal` (currently 9090).
 
 ## Troubleshooting
-- running ballerina in a directory with a space in it's name currently doesn't work. Issue should be resolved soon.  
+- Running ballerina in a directory with a space in it's name currently doesn't work. Issue should be resolved soon.  
 
 ## Configuration
 
