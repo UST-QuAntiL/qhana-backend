@@ -391,15 +391,8 @@ service / on new http:Listener(port) {
             // verify that substep is in database
             substep = check database:getTimelineSubstepWithParams(step.stepId, substepNr);
             // save input data and update progress
-            database:Progress progress = {
-                progressStart: substepData.progressStart,
-                progressTarget: substepData.progressTarget,
-                progressValue: substepData.progressValue,
-                progressUnit: substepData.progressUnit
-            };
             check database:saveTimelineSubstepParams(step.stepId, substepNr, substepData.parameters, substepData.parametersContentType);
             check database:saveTimelineSubstepInputData(step.stepId, substepNr, experimentId, inputData);
-            check database:updateTimelineProgress(step.stepId, progress, step.resultLog);
             check commit;
         } on fail error err {
             io:println(err);

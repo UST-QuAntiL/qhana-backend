@@ -902,8 +902,8 @@ public isolated transactional function getTimelineSubstepsWithInputData(int step
 
 # Returns timeline substep with available experiment data reference if available
 #
-# + stepId - Parameter Description  
-# + substepNr - Parameter Description
+# + stepId - ID of step 
+# + substepNr - number of substep
 # + return - substep with experiment data or error
 public isolated transactional function getTimelineSubstep(int stepId, int substepNr) returns TimelineSubstepSQL|error {
     stream<TimelineSubstepSQL, sql:Error?> substeps = experimentDB->query(
@@ -963,6 +963,7 @@ public isolated transactional function createTimelineSubstep(int stepId, Timelin
 # + substep - substep
 # + return - error in case no update or multiple updated
 public isolated transactional function updateTimelineSubstep(int stepId, TimelineSubstep substep) returns error? {
+    // TODO: refactor
     if substep.href == "" {
         return error("Href cannot be empty!");
     }
@@ -974,7 +975,7 @@ public isolated transactional function updateTimelineSubstep(int stepId, Timelin
             );
         } else {
             result = check experimentDB->execute(
-                `UPDATE TimelineSubstep SET cleared=${substep.cleared} WHERE stepId=${stepId} AND href=${substep.href} AND hrefUi=${substep.hrefUi}`
+                `UPDATE TimelineSubstep SET cleared=${substep.cleared} WHERE stepId=${stepId} AND href=${substep.href} AND hrefUi=${substep.hrefUi};`
             );
         }
     } else {
@@ -984,7 +985,7 @@ public isolated transactional function updateTimelineSubstep(int stepId, Timelin
             );
         } else {
             result = check experimentDB->execute(
-                `UPDATE TimelineSubstep SET cleared=${substep.cleared} WHERE stepId=${stepId} AND href=${substep.href} AND hrefUi=${substep.hrefUi} AND substepId=${substep.substepId}`
+                `UPDATE TimelineSubstep SET cleared=${substep.cleared} WHERE stepId=${stepId} AND href=${substep.href} AND hrefUi=${substep.hrefUi} AND substepId=${substep.substepId};`
             );
         }
     }
@@ -992,6 +993,17 @@ public isolated transactional function updateTimelineSubstep(int stepId, Timelin
         int? rowCount = result?.affectedRowCount;
         return error(string `Update not successful. Affected rows: ${rowCount != () ? rowCount : 0}`);
     }
+}
+
+# Updates cleared field of all timeline substeps with substepNr <= substepNrBound
+#
+# + stepId - stepId
+# + substepNrBound - bound of substepNr's
+# + return - error
+public isolated transactional function clearTimelineSubsteps(int stepId, int substepNrBound) returns error? {
+    _ = check experimentDB->execute(
+        `UPDATE TimelineSubstep SET cleared=1 WHERE stepId=${stepId} AND substepNr<=${substepNrBound};`
+    );
 }
 
 # Updates database from a list of received substeps. First checks received list against old list of substeps for the given step in the database to find updated and new substeps. If steps are missing or illegal changes were made (apart from setting cleared to 1) or multiple new uncleared substeps are added an appropriate error is returned. If at least one new substep is added, all old substeps are automatically cleared (in case they are not cleared in the received list). A warning is printed if more than one new substep is added. 
@@ -1002,16 +1014,15 @@ public isolated transactional function updateTimelineSubstep(int stepId, Timelin
 public isolated transactional function updateTimelineSubsteps(int stepId, TimelineSubstep[] receivedSubsteps) returns boolean|error {
     TimelineSubstepSQL[] tempDBSubsteps = check getTimelineSubsteps(stepId);
     // cast db substeps to TimelineSubstep
-    TimelineSubstep[] oldDBSubsteps = [];
-    foreach var tempDBsubstep in tempDBSubsteps {
-        TimelineSubstep tempDBSubstep = {
+    // TODO: refactor
+
+    TimelineSubstep[] oldDBSubsteps = from TimelineSubstepSQL tempDBsubstep in tempDBSubsteps
+        select {
             substepId: tempDBsubstep.substepId,
             href: tempDBsubstep.href,
             hrefUi: tempDBsubstep.hrefUi,
             cleared: tempDBsubstep.cleared
         };
-        oldDBSubsteps.push(tempDBSubstep);
-    }
 
     TimelineSubstep[] newSubsteps = [];
     TimelineSubstep[] updatedSubsteps = [];
@@ -1040,11 +1051,11 @@ public isolated transactional function updateTimelineSubsteps(int stepId, Timeli
                 oldOrUpdatedCounter += 1;
                 if receivedSubstep.substepId != () && receivedSubstep.substepId != oldDBSubstep.substepId {
                     string? substepId = receivedSubstep.substepId;
-                    return error(string `UI set or changed substepId a posteriori (stepId: ${stepId}, new substepId: ${substepId != () ? substepId : ""}).`);
+                    return error(string `UI illegally set or changed the substepId of a substep (stepId: ${stepId}, new substepId: ${substepId != () ? substepId : ""}).`);
                 }
                 if receivedSubstep.hrefUi != () && receivedSubstep.hrefUi != oldDBSubstep.hrefUi {
                     string? hrefUi = receivedSubstep.hrefUi;
-                    return error(string `UI set or changed hrefUi a posteriori (stepId: ${stepId}, new hrefUi: ${hrefUi != () ? hrefUi : ""}).`);
+                    return error(string `UI illegally set or changed the hrefUi of a substep (stepId: ${stepId}, new hrefUi: ${hrefUi != () ? hrefUi : ""}).`);
                 }
                 if receivedSubstep.cleared == 0 && oldDBSubstep.cleared == 1 {
                     return error(string `Previously cleared substep was set to cleared=false (stepId: ${stepId}, href: ${receivedSubstep.href})!`);
@@ -1079,16 +1090,18 @@ public isolated transactional function updateTimelineSubsteps(int stepId, Timeli
     foreach var substep in newSubsteps {
         check createTimelineSubstep(stepId, substep);
     }
-    foreach var substep in updatedSubsteps {
-        if newSubsteps.length() > 0 {
-            if substep.cleared == 0 {
-                // Should not happen as that would result in more than one substeps not being cleared which results in an error (see above)
-                substep.cleared = 1;
-                io:println(`WARNING: new substep was added without clearing previous substeps (stepId: ${stepId}, href of uncleared substep: ${substep.href})!`);
-            }
-        }
-        check updateTimelineSubstep(stepId, substep);
-    }
+    // set cleared flag to 1 for all previous substeps (with substepNr > #receivedSubsteps) by default -> make sure that if more than one new substep was added, they are added with the correct substepNr and only the newest may be uncleared
+    check clearTimelineSubsteps(stepId, receivedSubsteps.length() - 1);
+    // foreach var substep in updatedSubsteps {
+    //     if newSubsteps.length() > 0 {
+    //         if substep.cleared == 0 {
+    //             // Should not happen as that would result in more than one substeps not being cleared which results in an error (see above)
+    //             substep.cleared = 1;
+    //             io:println(`WARNING: new substep was added without clearing previous substeps (stepId: ${stepId}, href of uncleared substep: ${substep.href})!`);
+    //         }
+    //     }
+    //     check updateTimelineSubstep(stepId, substep);
+    // }
     if newSubsteps.length() + updatedSubsteps.length() > 0 {
         return true;
     } else {
@@ -1096,16 +1109,10 @@ public isolated transactional function updateTimelineSubsteps(int stepId, Timeli
     }
 }
 
-public isolated transactional function updateTimelineProgress(int stepId, Progress progress, string? taskLog) returns error? {
-    if taskLog != () {
-        var insertResult = check experimentDB->execute(
-            `UPDATE TimelineStep SET pStart = ${progress.progressStart}, pTarget = ${progress.progressTarget}, pValue = ${progress.progressValue}, pUnit = ${progress.progressUnit}, resultLog = ${taskLog} WHERE stepId = ${stepId};`
-        );
-    } else {
-        var insertResult = check experimentDB->execute(
-            `UPDATE TimelineStep SET pStart = ${progress.progressStart}, pTarget = ${progress.progressTarget}, pValue = ${progress.progressValue}, pUnit = ${progress.progressUnit} WHERE stepId = ${stepId};`
-        );
-    }
+public isolated transactional function updateTimelineProgress(int stepId, Progress progress) returns error? {
+    var insertResult = check experimentDB->execute(
+        `UPDATE TimelineStep SET pStart = ${progress.progressStart}, pTarget = ${progress.progressTarget}, pValue = ${progress.progressValue}, pUnit = ${progress.progressUnit} WHERE stepId = ${stepId};`
+    );
 }
 
 public isolated transactional function getSubstepInputData(int stepId, int substepNr) returns ExperimentDataReference[]|error {

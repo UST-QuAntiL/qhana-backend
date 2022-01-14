@@ -21,35 +21,28 @@ import qhana_backend.database;
 
 configurable string storageLocation = "experimentData";
 
-isolated ResultWatcher[] resultWatcherRegistry = [];
+isolated map<ResultWatcher> resultWatcherRegistry = {};
 
 isolated function addResultWatcherToRegistry(ResultWatcher watcher) {
     lock {
-        resultWatcherRegistry.push(watcher);
+        resultWatcherRegistry[watcher.stepId.toString()] = watcher;
     }
 }
 
 isolated function getResultWatcherFromRegistry(int stepId) returns ResultWatcher|error {
     lock {
-        ResultWatcher[] result = resultWatcherRegistry.filter(watcher => watcher.stepId == stepId);
-        if result == [] {
-            return error(string `No ResultWatcher with stepId ${stepId}`);
+        ResultWatcher? w = resultWatcherRegistry[stepId.toString()];
+        if w != () {
+            return w;
         } else {
-            return result.pop();
+            return error(string `No ResultWatcher with stepId ${stepId}`);
         }
     }
 }
 
 isolated function removeResultWatcherFromRegistry(int stepId) returns ResultWatcher|error {
     lock {
-        int i = -1;
-        foreach var watcher in resultWatcherRegistry {
-            i += 1;
-            if watcher.stepId == stepId {
-                return trap resultWatcherRegistry.remove(i); // not sure if this is best way to deal with panic error
-            }
-        }
-        return error(string `No ResultWatcher with stepId ${stepId}`);
+        return resultWatcherRegistry.remove(stepId.toString());
     }
 }
 
@@ -98,10 +91,9 @@ isolated class ResultProcessor {
         boolean isChanged = false;
         transaction {
             if progress != () {
-                check database:updateTimelineProgress(self.stepId, progress, taskLog);
-            } else if taskLog != () {
-                check database:updateTimelineTaskLog(self.stepId, taskLog);
+                check database:updateTimelineProgress(self.stepId, progress);
             }
+            check database:updateTimelineTaskLog(self.stepId, taskLog);
             if receivedSubsteps != () {
                 // write changes in timeline substeps into db
                 isChanged = check database:updateTimelineSubsteps(self.stepId, receivedSubsteps);
@@ -116,6 +108,28 @@ isolated class ResultProcessor {
             check self.saveSuccessfullResult();
         } else {
             check self.saveErrorResult();
+        }
+    }
+
+    private isolated function deleteResultWatcher('transaction:Info info) {
+        ResultWatcher|error watcher = removeResultWatcherFromRegistry(self.stepId);
+        if watcher is error {
+            io:println(watcher.toString());
+        }
+    }
+
+    private isolated function rescheduleResultWatcher('transaction:Info info, error? cause, boolean willRetry) {
+        io:println("Rolling back the transaction");
+        // compensate by rescheduling the result watcher
+        ResultWatcher|error watcher = getResultWatcherFromRegistry(self.stepId);
+        if watcher is error {
+            io:println(watcher.toString());
+        } else {
+            // TODO: reschedule result watcher
+            // error? unschedule = watcher.reschedule();
+            // if unschedule is error {
+            //     io:println(unschedule.toString());
+            // }
         }
     }
 
@@ -134,16 +148,14 @@ isolated class ResultProcessor {
                 }
             }
         }
+        self.rescheduleResultWatcher(info, cause, willRetry);
     }
 
     private isolated function saveSuccessfullResult() returns error? {
         var outputs = self.result?.outputs;
 
-        lock {
-            _ = check removeResultWatcherFromRegistry(self.stepId);
-        }
         transaction {
-
+            'transaction:onCommit(self.deleteResultWatcher);
             'transaction:onRollback(self.compensateFileCreation);
 
             if outputs is TaskDataOutput[] {
@@ -195,10 +207,9 @@ isolated class ResultProcessor {
     }
 
     private isolated function saveErrorResult() returns error? {
-        lock {
-            _ = check removeResultWatcherFromRegistry(self.stepId);
-        }
         transaction {
+            'transaction:onCommit(self.deleteResultWatcher);
+            'transaction:onRollback(self.rescheduleResultWatcher);
             var r = self.result;
             var status = r.status;
             var resultLog = r["resultLog"];
@@ -278,7 +289,7 @@ public isolated class ResultWatcher {
                     }
                     if newInterval == () {
                         check self.unschedule();
-                        _ = check removeResultWatcherFromRegistry(self.stepId); // not sure if this is needed here
+                        _ = check removeResultWatcherFromRegistry(self.stepId);
                         io:println(`finally finish executing job for step ${self.stepId}`);
                         return;
                     } else {
@@ -422,9 +433,7 @@ public isolated class ResultWatcher {
             self.resultEndpoint = resultEndpoint;
             self.httpClient = check new (self.resultEndpoint);
         }
-        lock {
-            resultWatcherRegistry.push(self);
-        }
+        addResultWatcherToRegistry(self);
     }
 }
 
