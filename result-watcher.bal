@@ -109,13 +109,6 @@ isolated class ResultProcessor {
         }
     }
 
-    private isolated function deleteResultWatcher('transaction:Info info) {
-        ResultWatcher|error watcher = removeResultWatcherFromRegistry(self.stepId);
-        if watcher is error {
-            io:println(watcher.toString());
-        }
-    }
-
     private isolated function rescheduleResultWatcher('transaction:Info info, error? cause, boolean willRetry) {
         io:println("Rolling back the transaction");
         // compensate by rescheduling the result watcher
@@ -153,7 +146,6 @@ isolated class ResultProcessor {
         var outputs = self.result?.outputs;
 
         transaction {
-            'transaction:onCommit(self.deleteResultWatcher);
             'transaction:onRollback(self.compensateFileCreation);
 
             if outputs is TaskDataOutput[] {
@@ -206,7 +198,6 @@ isolated class ResultProcessor {
 
     private isolated function saveErrorResult() returns error? {
         transaction {
-            'transaction:onCommit(self.deleteResultWatcher);
             'transaction:onRollback(self.rescheduleResultWatcher);
             var r = self.result;
             var status = r.status;
@@ -397,6 +388,7 @@ public isolated class ResultWatcher {
                 ResultProcessor processor = new (result, self.experimentId, self.stepId, self.resultEndpoint);
                 check processor.processResult();
                 check self.unschedule();
+                _ = check removeResultWatcherFromRegistry(self.stepId);
             } on fail error e {
                 lock {
                     self.errorCounter += 1;
@@ -434,7 +426,7 @@ public isolated class ResultWatcher {
             self.resultEndpoint = resultEndpoint;
             self.httpClient = check new (self.resultEndpoint);
         }
-        addResultWatcherToRegistry(self);
+        addResultWatcherToRegistry(self); // TODO: perhaps refactor into helper function creating watcher and adding it into registry
     }
 }
 
