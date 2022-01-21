@@ -1031,42 +1031,45 @@ public isolated transactional function updateTimelineSubsteps(int stepId, Timeli
         return error(string `Received substeps list smaller than stored substep list in database (stepId: ${stepId}).`);
     }
 
-    int oldSubstepNr = 0;
-    int newSubstepNr = 0;
+    int substepNr = 0;
     var oldDBSubstepsIterator = oldDBSubsteps.iterator();
     boolean changes = false;
+    // nUncleared is for the case that receivedSubsteps.length() == oldDBSubsteps.length() and the last substep is cleared
+    int nUncleared = 1;
 
     // we assume that index in receivedSubsteps corresponds to substepNr
     foreach TimelineSubstep receivedSubstep in receivedSubsteps {
 
         var tmp = oldDBSubstepsIterator.next();
         if tmp != () {
-            oldSubstepNr += 1;
+            substepNr += 1;
             TimelineSubstepSQL oldDBSubstep = tmp.value;
             // make sure that no invalid changes have been made
             if receivedSubstep.href != oldDBSubstep.href {
-                return error(string `UI illegally changed the href of a substep or changed the order of substeps (stepId: ${stepId}, substep index: ${oldSubstepNr}, new hrefUi: ${receivedSubstep.href}).`);
+                return error(string `UI illegally changed the href of a substep or changed the order of substeps (stepId: ${stepId}, substep index: ${substepNr}, new hrefUi: ${receivedSubstep.href}).`);
             }
             if receivedSubstep.substepId != () && receivedSubstep.substepId != oldDBSubstep.substepId {
                 string? substepId = receivedSubstep.substepId;
-                return error(string `UI illegally set or changed the substepId of a substep  or changed the order of substeps (stepId: ${stepId}, substep index: ${oldSubstepNr}, new substepId: ${substepId != () ? substepId : ""}).`);
+                return error(string `UI illegally set or changed the substepId of a substep  or changed the order of substeps (stepId: ${stepId}, substep index: ${substepNr}, new substepId: ${substepId != () ? substepId : ""}).`);
             }
             if receivedSubstep.hrefUi != () && receivedSubstep.hrefUi != oldDBSubstep.hrefUi {
                 string? hrefUi = receivedSubstep.hrefUi;
-                return error(string `UI illegally set or changed the hrefUi of a substep or changed the order of substeps (stepId: ${stepId}, substep index: ${oldSubstepNr}, new hrefUi: ${hrefUi != () ? hrefUi : ""}).`);
+                return error(string `UI illegally set or changed the hrefUi of a substep or changed the order of substeps (stepId: ${stepId}, substep index: ${substepNr}, new hrefUi: ${hrefUi != () ? hrefUi : ""}).`);
             }
             if receivedSubstep.cleared == 0 && oldDBSubstep.cleared == 1 {
-                return error(string `Previously cleared substep was set to cleared=false or changed the order of substeps (stepId: ${stepId}, substep index: ${oldSubstepNr}, href: ${receivedSubstep.href})!`);
+                return error(string `Previously cleared substep was set to cleared=false or changed the order of substeps (stepId: ${stepId}, substep index: ${substepNr}, href: ${receivedSubstep.href})!`);
+            }
+            if receivedSubstep.cleared == 1 && substepNr == receivedSubsteps.length() {
+                nUncleared = 0;
             }
         } else {
             // new substep
             check createTimelineSubstep(stepId, receivedSubstep);
-            newSubstepNr += 1;
             changes = true;
         }
     }
     // set all previous substeps except the latest one to cleared by default (should have been done, but we don't care here). The latest one should only be set manually. 
-    boolean someCleared = check clearTimelineSubsteps(stepId, oldSubstepNr + newSubstepNr - 1);
+    boolean someCleared = check clearTimelineSubsteps(stepId, receivedSubsteps.length() - nUncleared);
     if someCleared {
         return true;
     }
