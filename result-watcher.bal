@@ -53,12 +53,19 @@ type TaskDataOutput record {
     string? name?;
 };
 
+type Progress record {|
+    float? 'start = 0;
+    float? target = 100;
+    float? value = ();
+    string? unit = "%";
+|};
+
 type TaskStatusResponse record {
     string status;
     string? taskLog?;
     TaskDataOutput[]? outputs?;
     database:TimelineSubstep[] substeps?;
-    database:Progress progress?;
+    Progress progress?;
 };
 
 isolated class ResultProcessor {
@@ -83,7 +90,16 @@ isolated class ResultProcessor {
     # + return - true if timeline substeps were updated (new timeline step added), else false
     public isolated function processIntermediateResult() returns boolean|error {
         database:TimelineSubstep[]? receivedSubsteps = self.result?.substeps;
-        database:Progress? progress = self.result?.progress;
+        Progress? tmpProgress = self.result?.progress;
+        database:Progress? progress = ();
+        if tmpProgress != () {
+            progress = {
+                progressStart: tmpProgress.'start,
+                progressTarget: tmpProgress.target,
+                progressValue: tmpProgress.value,
+                progressUnit: tmpProgress.unit
+            };
+        }
         string? taskLog = self.result?.taskLog;
         // write progress and taskLog into db 
         boolean isChanged = false;
