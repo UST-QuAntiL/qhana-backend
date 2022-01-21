@@ -4,7 +4,7 @@
 corsDomains = ["*"]
 
 [qhana.qhana_backend.internalUrlMap]
-"localhost:5000" = "host.docker.internal:5000"
+"(?<=^|https?://)localhost(:[0-9]+)?" = "host.docker.internal$1"
 
 [qhana.qhana_backend.database]
 # The config key must be present or ballerina crashes

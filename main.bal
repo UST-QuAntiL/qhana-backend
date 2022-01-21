@@ -17,7 +17,6 @@ import ballerina/io;
 import ballerina/regex;
 import qhana_backend.database;
 
-
 configurable string[] corsDomains = ["http://localhost:4200"];
 configurable int port = 9090;
 
@@ -25,7 +24,7 @@ configurable (decimal|int)[] watcherIntervallConfig = [2, 10, 5, 10, 10, 60, 30,
 
 // URL map that can be used to map plugin endpoint watcher urls t URLs reachable for the backend
 // Intended for use in a dockerized dev setup where localhost is used as outside URL
-configurable map<string>&readonly internalUrlMap = {};
+configurable map<string> & readonly internalUrlMap = {};
 
 isolated function mapToInternalUrl(string url) returns string {
     if internalUrlMap.length() == 0 {
@@ -33,8 +32,16 @@ isolated function mapToInternalUrl(string url) returns string {
     }
     // apply all replacements specified in the url map, keys are interpreted as regex
     var replacedUrl = url;
-    foreach var key in internalUrlMap {
-        replacedUrl = regex:replaceFirst(url, key, internalUrlMap.get(key));
+    foreach var key in internalUrlMap.keys() {
+        string strippedKey = key;
+
+        // remove enclosing quotes if necessary
+        // FIXME: This is a workaround for a possible bug in Ballerina. Can be removed if the bug is fixed.
+        if key[0] == "\"" || key[0] == "'" {
+            strippedKey = key.substring(1, key.length() - 1);
+        }
+
+        replacedUrl = regex:replaceFirst(replacedUrl, strippedKey, internalUrlMap.get(key));
     }
     return replacedUrl;
 }
@@ -211,8 +218,8 @@ service / on new http:Listener(port) {
         database:ExperimentDataFull[] data;
 
         transaction {
-            dataCount = check database: getExperimentDataCount(experimentId, all=includeAllVersions);
-            data = check database:getDataList(experimentId, all=includeAllVersions);
+            dataCount = check database:getExperimentDataCount(experimentId, all = includeAllVersions);
+            data = check database:getDataList(experimentId, all = includeAllVersions);
             check commit;
         } on fail error err {
             io:println(err);
@@ -222,7 +229,7 @@ service / on new http:Listener(port) {
         }
 
         var dataList = from var d in data
-            select mapToExperimentDataResponse(d); 
+            select mapToExperimentDataResponse(d);
         return {'\@self: string `/experiments/${experimentId}/data/?allVersions=${includeAllVersions}`, items: dataList, itemCount: dataCount};
     }
 
@@ -263,12 +270,12 @@ service / on new http:Listener(port) {
 
         resp.statusCode = http:STATUS_OK;
         var cType = data.contentType;
-        if cType.startsWith("text/") || cType.startsWith("application/json") || cType.startsWith("application/X-lines+json"){
-            resp.addHeader("Content-Disposition", string`inline; filename="${data.name}"`);
+        if cType.startsWith("text/") || cType.startsWith("application/json") || cType.startsWith("application/X-lines+json") {
+            resp.addHeader("Content-Disposition", string `inline; filename="${data.name}"`);
         } else {
-            resp.addHeader("Content-Disposition", string`attachment; filename="${data.name}"`);
+            resp.addHeader("Content-Disposition", string `attachment; filename="${data.name}"`);
         }
-        resp.setFileAsPayload(data.location, contentType=data.contentType);
+        resp.setFileAsPayload(data.location, contentType = data.contentType);
 
         check caller->respond(resp);
     }
@@ -293,7 +300,7 @@ service / on new http:Listener(port) {
         }
 
         var stepList = from var s in steps
-            select mapToTimelineStepMinResponse(s); 
+            select mapToTimelineStepMinResponse(s);
         return {'\@self: string `/experiments/${experimentId}/timeline`, items: stepList, itemCount: stepCount};
     }
 
@@ -303,15 +310,14 @@ service / on new http:Listener(port) {
 
         transaction {
             inputData = from var inputUrl in stepData.inputData
-                        select check mapFileUrlToDataRef(experimentId, inputUrl);
+                select check mapFileUrlToDataRef(experimentId, inputUrl);
             createdStep = check database:createTimelineStep(
-                experimentId=experimentId,
-                parameters=stepData.parameters,
-                parametersContentType=stepData.parametersContentType,
-                parametersDescriptionLocation=stepData.parametersDescriptionLocation,
-                processorName=stepData.processorName,
-                processorVersion=stepData.processorVersion,
-                processorLocation=stepData.processorLocation
+                experimentId = experimentId,
+                parameters = stepData.parameters,
+                parametersContentType = stepData.parametersContentType,
+                processorName = stepData.processorName,
+                processorVersion = stepData.processorVersion,
+                processorLocation = stepData.processorLocation
             );
             check database:saveTimelineStepInputData(createdStep.stepId, experimentId, inputData);
             check database:createTimelineStepResultWatcher(createdStep.stepId, mapToInternalUrl(stepData.resultLocation));
@@ -331,29 +337,31 @@ service / on new http:Listener(port) {
             http:InternalServerError resultErr = {body: "Failed to start watcher."};
             return resultErr;
         }
-        return mapToTimelineStepResponse(createdStep, inputData, []);
+        return mapToTimelineStepResponse(createdStep, (), inputData, []);
     }
 
     resource function get experiments/[int experimentId]/timeline/[int timelineStep]() returns TimelineStepResponse|http:InternalServerError {
         database:TimelineStepWithParams result;
         database:ExperimentDataReference[] inputData;
         database:ExperimentDataReference[] outputData;
-        
+        database:TimelineSubstepSQL[] substeps;
         transaction {
-            result = check database:getTimelineStep(experimentId=experimentId, sequence=timelineStep);
+            result = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep);
             inputData = check database:getStepInputData(result);
             outputData = check database:getStepOutputData(result);
+            // duplicates input data for substeps, but overhead is negligible 
+            substeps = check database:getTimelineSubstepsWithInputData(timelineStep);
             check commit;
         } on fail error err {
             io:println(err);
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
-        return mapToTimelineStepResponse(result, inputData, outputData);
+        return mapToTimelineStepResponse(result, substeps, inputData, outputData);
     }
     resource function get experiments/[int experimentId]/timeline/[int timelineStep]/notes() returns TimelineStepNotesResponse|http:InternalServerError {
         string result;
-        
+
         transaction {
             result = check database:getTimelineStepNotes(experimentId, timelineStep);
             check commit;
@@ -378,8 +386,79 @@ service / on new http:Listener(port) {
 
         return <http:Ok>{};
     }
-}
 
+    resource function post experiments/[int experimentId]/timeline/[int timelineStep]/substeps/[int substepNr](@http:Payload TimelineSubstepPost substepData) returns TimelineSubstepResponse|http:InternalServerError {
+        database:TimelineStepWithParams step;
+        database:TimelineSubstepWithParams substep;
+        database:ExperimentDataReference[] inputData;
+
+        transaction {
+            inputData = from var inputUrl in substepData.inputData
+                select check mapFileUrlToDataRef(experimentId, inputUrl);
+            step = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep);
+            // verify that substep is in database
+            substep = check database:getTimelineSubstepWithParams(step.stepId, substepNr);
+            // save input data and update progress
+            check database:saveTimelineSubstepParams(step.stepId, substepNr, substepData.parameters, substepData.parametersContentType);
+            check database:saveTimelineSubstepInputData(step.stepId, substepNr, experimentId, inputData);
+            check commit;
+        } on fail error err {
+            io:println(err);
+            // if with return does not correctly narrow type for rest of function... this does.
+            http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
+            return resultErr;
+        }
+        do {
+            // reschedule result watcher (already running for the timeline step the substep is associated with)
+            ResultWatcher watcher;
+            lock {
+                watcher = check getResultWatcherFromRegistry(step.stepId);
+            }
+            check watcher.unschedule();
+            check watcher.schedule(...watcherIntervallConfig);
+        } on fail error err {
+            io:println(err);
+            // if with return does not correctly narrow type for rest of function... this does.
+            http:InternalServerError resultErr = {body: "Failed to restart watcher."};
+            return resultErr;
+        }
+        return mapToTimelineSubstepResponse(experimentId, substep, inputData);
+    }
+
+    resource function get experiments/[int experimentId]/timeline/[int timelineStep]/substeps() returns TimelineSubstepListResponse|http:InternalServerError {
+        // no pagination
+        database:TimelineSubstepSQL[] steps;
+
+        transaction {
+            steps = check database:getTimelineSubsteps(timelineStep);
+            check commit;
+        } on fail error err {
+            io:println(err);
+            // if with return does not correctly narrow type for rest of function... this does.
+            http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
+            return resultErr;
+        }
+        return {'\@self: string `/experiments/${experimentId}/timeline`, items: steps};
+    }
+
+    resource function get experiments/[int experimentId]/timeline/[int timelineStep]/substeps/[int substepNr]() returns TimelineSubstepResponse|http:InternalServerError {
+        int stepCount;
+        database:TimelineSubstepWithParams step;
+        database:ExperimentDataReference[] inputData;
+
+        transaction {
+            step = check database:getTimelineSubstepWithParams(timelineStep, substepNr);
+            inputData = check database:getSubstepInputData(step.stepId, step.substepNr);
+            check commit;
+        } on fail error err {
+            io:println(err);
+            // if with return does not correctly narrow type for rest of function... this does.
+            http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
+            return resultErr;
+        }
+        return mapToTimelineSubstepResponse(experimentId, step, inputData);
+    }
+}
 
 public function main() {
     // registering background tasks
