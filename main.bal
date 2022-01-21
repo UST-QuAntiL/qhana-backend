@@ -41,11 +41,7 @@ isolated function mapToInternalUrl(string url) returns string {
             strippedKey = key.substring(1, key.length() - 1);
         }
 
-        if (string:includes(url, strippedKey)) {
-            replacedUrl = regex:replaceFirst(url, strippedKey, internalUrlMap.get(key));
-
-            return replacedUrl;
-        }
+        replacedUrl = regex:replaceFirst(replacedUrl, strippedKey, internalUrlMap.get(key));
     }
     return replacedUrl;
 }
