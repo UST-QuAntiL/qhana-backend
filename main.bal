@@ -40,8 +40,12 @@ isolated function mapToInternalUrl(string url) returns string {
         if key[0] == "\"" || key[0] == "'" {
             strippedKey = key.substring(1, key.length() - 1);
         }
-        
-        replacedUrl = regex:replaceFirst(url, strippedKey, internalUrlMap.get(key));
+
+        if (string:includes(url, strippedKey)) {
+            replacedUrl = regex:replaceFirst(url, strippedKey, internalUrlMap.get(key));
+
+            return replacedUrl;
+        }
     }
     return replacedUrl;
 }
