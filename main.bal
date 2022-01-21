@@ -300,14 +300,30 @@ service / on new http:Listener(port) {
     // Timeline ////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
 
-    resource function get experiments/[int experimentId]/timeline() returns TimelineStepListResponse|http:InternalServerError {
+    resource function get experiments/[int experimentId]/timeline(int page=0, int item\-count=0) returns TimelineStepListResponse|http:BadRequest|http:NotFound|http:InternalServerError {
+        if (page < 0) {
+            return <http:BadRequest>{body: "Cannot retrieve a negative page number!"};
+        }
+
+        if (item\-count < 5 || item\-count > 500) {
+            return <http:BadRequest>{body: "Item count must be between 5 and 500 (both inclusive)!"};
+        }
+
+        var offset = page*item\-count;
+
         int stepCount;
         database:TimelineStepFull[] steps;
 
         transaction {
             stepCount = check database:getTimelineStepCount(experimentId);
-            steps = check database:getTimelineStepList(experimentId);
-            check commit;
+            if (offset >= stepCount) {
+                // page is out of range!
+                check commit;
+                return <http:NotFound>{};
+            } else {
+                steps = check database:getTimelineStepList(experimentId, 'limit=item\-count, offset=offset);
+                check commit;
+            }
         } on fail error err {
             io:println(err);
             // if with return does not correctly narrow type for rest of function... this does.
