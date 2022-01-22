@@ -60,11 +60,31 @@ type Progress record {|
     string? unit = "%";
 |};
 
+public type TimelineSubstep record {|
+    string? stepId;
+    string href;
+    string? uiHref;
+    boolean cleared;
+|};
+
+isolated function timelineSubstepToDBTimelineSubstep(TimelineSubstep substep)  returns database:TimelineSubstep {
+    string? substepId = substep?.stepId;
+    string? uiHref =  substep?.uiHref;
+    database:TimelineSubstep converted = {
+        substepId: substepId,
+        href: substep.href,
+        hrefUi: uiHref,
+        cleared: (substep.cleared) ? 1: 0
+    };
+
+    return converted;
+}
+
 type TaskStatusResponse record {
     string status;
     string? taskLog?;
     TaskDataOutput[]? outputs?;
-    database:TimelineSubstep[] substeps?;
+    TimelineSubstep[] steps?;
     Progress progress?;
 };
 
@@ -89,7 +109,7 @@ isolated class ResultProcessor {
     #
     # + return - true if timeline substeps were updated (new timeline step added), else false
     public isolated function processIntermediateResult() returns boolean|error {
-        database:TimelineSubstep[]? receivedSubsteps = self.result?.substeps;
+        TimelineSubstep[]? receivedSubsteps = self.result?.steps;
         Progress? tmpProgress = self.result?.progress;
         database:Progress? progress = ();
         if tmpProgress != () {
@@ -110,7 +130,9 @@ isolated class ResultProcessor {
             check database:updateTimelineTaskLog(self.stepId, taskLog);
             if receivedSubsteps != () {
                 // write changes in timeline substeps into db
-                isChanged = check database:updateTimelineSubsteps(self.stepId, receivedSubsteps);
+                database:TimelineSubstep[] convertedSubsteps = from var substep in receivedSubsteps
+                    select timelineSubstepToDBTimelineSubstep(substep);
+                isChanged = check database:updateTimelineSubsteps(self.stepId, convertedSubsteps);
             }
             check commit;
         }
