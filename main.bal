@@ -97,6 +97,7 @@ service / on new http:Listener(port) {
             result = check database:addPluginEndpoint(endpoint);
             check commit;
         } on fail error err {
+            io:println(err);
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -109,6 +110,7 @@ service / on new http:Listener(port) {
             result = check database:getPluginEndpoint(endpointId);
             check commit;
         } on fail error err {
+            io:println(err);
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -121,6 +123,7 @@ service / on new http:Listener(port) {
             result = check database:editPluginEndpoint(endpointId, endpoint.'type);
             check commit;
         } on fail error err {
+            io:println(err);
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -128,9 +131,8 @@ service / on new http:Listener(port) {
     }
 
     resource function delete plugin\-endpoints/[int endpointId]() returns http:Ok|http:InternalServerError {
-        error? result;
         transaction {
-            result = check database:deletePluginEndpoint(endpointId);
+            check database:deletePluginEndpoint(endpointId);
             check commit;
         } on fail error err {
             io:println(err);
@@ -174,6 +176,7 @@ service / on new http:Listener(port) {
             result = check database:createExperiment(experiment);
             check commit;
         } on fail error err {
+            io:println(err);
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -186,6 +189,7 @@ service / on new http:Listener(port) {
             result = check database:getExperiment(experimentId);
             check commit;
         } on fail error err {
+            io:println(err);
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -201,6 +205,7 @@ service / on new http:Listener(port) {
             result = check database:updateExperiment(experimentId, experiment);
             check commit;
         } on fail error err {
+            io:println(err);
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -228,7 +233,7 @@ service / on new http:Listener(port) {
         database:ExperimentDataFull[] data;
 
         transaction {
-            dataCount = check database: getExperimentDataCount(experimentId, all=includeAllVersions);
+            dataCount = check database:getExperimentDataCount(experimentId, all=includeAllVersions);
             if (offset >= dataCount) {
                 // page is out of range!
                 check commit;
@@ -260,7 +265,7 @@ service / on new http:Listener(port) {
             inputFor = check database:getStepsUsingData(data);
             check commit;
         } on fail error err {
-            io:println(data);
+            io:println(err);
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -341,8 +346,8 @@ service / on new http:Listener(port) {
         database:ExperimentDataReference[] inputData;
 
         transaction {
-            inputData = from var inputUrl in stepData.inputData
-                select check mapFileUrlToDataRef(experimentId, inputUrl);
+            inputData = check trap from var inputUrl in stepData.inputData
+                select checkpanic mapFileUrlToDataRef(experimentId, inputUrl); // FIXME move back to check if https://github.com/ballerina-platform/ballerina-lang/issues/34894 is resolved
             createdStep = check database:createTimelineStep(
                 experimentId = experimentId,
                 parameters = stepData.parameters,
@@ -425,8 +430,8 @@ service / on new http:Listener(port) {
         database:ExperimentDataReference[] inputData;
 
         transaction {
-            inputData = from var inputUrl in substepData.inputData
-                select check mapFileUrlToDataRef(experimentId, inputUrl);
+            inputData = check trap from var inputUrl in substepData.inputData
+                select checkpanic mapFileUrlToDataRef(experimentId, inputUrl); // FIXME move back to check if https://github.com/ballerina-platform/ballerina-lang/issues/34894 is resolved
             step = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep);
             // verify that substep is in database
             substep = check database:getTimelineSubstepWithParams(step.stepId, substepNr);
@@ -474,7 +479,6 @@ service / on new http:Listener(port) {
     }
 
     resource function get experiments/[int experimentId]/timeline/[int timelineStep]/substeps/[int substepNr]() returns TimelineSubstepResponse|http:InternalServerError {
-        int stepCount;
         database:TimelineSubstepWithParams step;
         database:ExperimentDataReference[] inputData;
 

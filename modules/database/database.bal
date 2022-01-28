@@ -273,7 +273,7 @@ public isolated transactional function addPluginEndpoint(*PluginEndpoint endpoin
 }
 
 public isolated transactional function editPluginEndpoint(int endpointId, string 'type) returns PluginEndpointFull|error {
-    var result = check experimentDB->execute(
+    _ = check experimentDB->execute(
         `UPDATE PluginEndpoints SET type=${'type} WHERE id=${endpointId};`
     );
 
@@ -362,7 +362,6 @@ public isolated transactional function getExperiment(int experimentId) returns E
 public isolated transactional function createExperiment(*Experiment experiment) returns ExperimentFull|error {
     ExperimentFull? result = ();
 
-    stream<Experiment, sql:Error?> experiments;
     var insertResult = check experimentDB->execute(
         `INSERT INTO Experiment (name, description) VALUES (${experiment.name}, ${experiment.description});`
     );
@@ -391,11 +390,9 @@ public isolated transactional function createExperiment(*Experiment experiment) 
 # + experiment - The updated data for the existing experiment
 # + return - The updated experiment data including the database id or the encountered error
 public isolated transactional function updateExperiment(int experimentId, *Experiment experiment) returns ExperimentFull|error {
-    stream<Experiment, sql:Error?> experiments;
-    var test = check experimentDB->execute(
+    _ = check experimentDB->execute(
         `UPDATE Experiment SET name=${experiment.name}, description=${experiment.description} WHERE experimentId = ${experimentId};`
     );
-    io:println(test);
     return {experimentId, name: experiment.name, description: experiment.description};
 }
 
@@ -615,13 +612,10 @@ public isolated transactional function createTimelineStep(
         string? parameters = (),
         string? parametersContentType = mime:APPLICATION_FORM_URLENCODED
 ) returns TimelineStepWithParams|error {
-    TimelineStepWithParams? result = ();
-
     if parameters == () && parametersContentType == () {
         return error("When parameters are given the parameters content type is required!");
     }
 
-    stream<TimelineStepSQL, sql:Error?> createdStep;
     sql:ParameterizedQuery currentTime = `strftime('%Y-%m-%dT%H:%M:%S', 'now')`;
     if dbType != "sqlite" {
         currentTime = `DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%S')`;
@@ -805,15 +799,12 @@ public isolated transactional function getTimelineStepNotes(int experimentId, in
 }
 
 public isolated transactional function updateTimelineStepNotes(int experimentId, int sequence, string notes) returns error? {
-    stream<Experiment, sql:Error?> experiments;
-    var test = check experimentDB->execute(
+    _ = check experimentDB->execute(
         `UPDATE TimelineStep SET notes=${notes} WHERE experimentId = ${experimentId} AND sequence=${sequence};`
     );
-    io:println(test);
 }
 
 public isolated transactional function updateTimelineStepResultQuality(int experimentId, int sequence, string resultQuality) returns error? {
-    stream<Experiment, sql:Error?> experiments;
     var test = check experimentDB->execute(
         `UPDATE TimelineStep SET resultQuality=${resultQuality} WHERE experimentId = ${experimentId} AND sequence=${sequence};`
     );
@@ -839,7 +830,7 @@ public isolated transactional function createTimelineStepResultWatcher(int stepI
     if resultEndpoint == "" {
         return error("Result endpoint cannot be empty!");
     }
-    var insertResult = check experimentDB->execute(
+    _ = check experimentDB->execute(
         `INSERT INTO ResultWatchers (stepId, resultEndpoint) 
          VALUES (${stepId}, ${resultEndpoint});`
     );
@@ -956,7 +947,7 @@ public isolated transactional function createTimelineSubstep(int stepId, Timelin
     int count = check experimentDB->queryRow(`SELECT count(*) FROM TimelineSubstep WHERE stepId=${stepId};`);
     count += 1;
     string? substepId = substep.substepId;
-    var insertResult = check experimentDB->execute(
+    _ = check experimentDB->execute(
         `INSERT INTO TimelineSubstep (stepId, substepNr, substepId, href, hrefUi, cleared) 
          VALUES (${stepId}, ${count}, ${substep.substepId != () ? substepId : count.toString()}, ${substep.href}, ${substep.hrefUi}, ${substep.cleared});`
     );
@@ -1077,7 +1068,7 @@ public isolated transactional function updateTimelineSubsteps(int stepId, Timeli
 }
 
 public isolated transactional function updateTimelineProgress(int stepId, Progress progress) returns error? {
-    var insertResult = check experimentDB->execute(
+    _ = check experimentDB->execute(
         `UPDATE TimelineStep SET pStart = ${progress.progressStart}, pTarget = ${progress.progressTarget}, pValue = ${progress.progressValue}, pUnit = ${progress.progressUnit} WHERE stepId = ${stepId};`
     );
 }
@@ -1104,7 +1095,7 @@ public isolated transactional function getSubstepInputData(int stepId, int subst
 }
 
 public isolated transactional function saveTimelineSubstepParams(int stepId, int substepNr, string? parameters, string parametersContentType) returns error? {
-    var result = check experimentDB->execute(
+    _ = check experimentDB->execute(
                 `UPDATE TimelineSubstep SET parameters=${parameters}, parametersContentType=${parametersContentType} WHERE stepId=${stepId} AND substepNr=${substepNr};`
             );
 }
