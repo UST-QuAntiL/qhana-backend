@@ -109,7 +109,16 @@ isolated class ResultProcessor {
     #
     # + return - true if timeline substeps were updated (new timeline step added), else false
     public isolated function processIntermediateResult() returns boolean|error {
-        TimelineSubstep[]? receivedSubsteps = self.result?.steps;
+        boolean isChanged = false;
+        transaction {
+            check self.saveResultProgressAndLog();
+            isChanged = check self.updateResultSubsteps();
+            check commit;
+        }
+        return isChanged;
+    }
+
+    private isolated transactional function saveResultProgressAndLog() returns error? {
         Progress? tmpProgress = self.result?.progress;
         database:Progress? progress = ();
         if tmpProgress != () {
@@ -121,20 +130,21 @@ isolated class ResultProcessor {
             };
         }
         string? taskLog = self.result?.taskLog;
-        // write progress and taskLog into db 
+        if progress != () {
+            check database:updateTimelineProgress(self.stepId, progress);
+        }
+        check database:updateTimelineTaskLog(self.stepId, taskLog);
+    }
+
+    private isolated transactional function updateResultSubsteps() returns boolean|error {
+        TimelineSubstep[]? receivedSubsteps = self.result?.steps;
+        
         boolean isChanged = false;
-        transaction {
-            if progress != () {
-                check database:updateTimelineProgress(self.stepId, progress);
-            }
-            check database:updateTimelineTaskLog(self.stepId, taskLog);
-            if receivedSubsteps != () {
-                // write changes in timeline substeps into db
-                database:TimelineSubstep[] convertedSubsteps = from var substep in receivedSubsteps
-                    select timelineSubstepToDBTimelineSubstep(substep);
-                isChanged = check database:updateTimelineSubsteps(self.stepId, convertedSubsteps);
-            }
-            check commit;
+        if receivedSubsteps != () {
+            // write changes in timeline substeps into db
+            database:TimelineSubstep[] convertedSubsteps = from var substep in receivedSubsteps
+                select timelineSubstepToDBTimelineSubstep(substep);
+            isChanged = check database:updateTimelineSubsteps(self.stepId, convertedSubsteps);
         }
         return isChanged;
     }
@@ -184,8 +194,15 @@ isolated class ResultProcessor {
         var outputs = self.result?.outputs;
 
         transaction {
+            // save progress and task log
+            check self.saveResultProgressAndLog();
+            // update substeps one last time
+            _ = check self.updateResultSubsteps();
+
+            // compensate for file creation outside of transaction control
             'transaction:onRollback(self.compensateFileCreation);
 
+            // process task output data
             if outputs is TaskDataOutput[] {
                 foreach var output in outputs {
                     http:Client c = check new (output.href);
@@ -317,6 +334,7 @@ public isolated class ResultWatcher {
                         self.currentBackoffCounter = self.backoffCounters.length() > 0 ? self.backoffCounters.pop() : ();
                     }
                     if newInterval == () {
+                        io:println(string `Unschedule watcher ${self.stepId} after running out of watching attempts.`);
                         check self.unschedule();
                         _ = check removeResultWatcherFromRegistry(self.stepId);
                         io:println(`finally finish executing job for step ${self.stepId}`);
@@ -335,7 +353,16 @@ public isolated class ResultWatcher {
     }
 
     private isolated function reschedule(decimal interval) returns error? {
-        check self.unschedule();
+        error? err = self.unschedule();
+
+        if (err != ()) {
+            if err.message().startsWith("Invalid job id:") {
+                // ignore error, but print it
+                io:println(err);
+            } else {
+                return err;
+            }
+        }
 
         lock {
             self.jobId = check task:scheduleJobRecurByFrequency(self, interval);
@@ -410,7 +437,7 @@ public isolated class ResultWatcher {
                 ResultProcessor processor = new (result, self.experimentId, self.stepId, self.resultEndpoint);
                 boolean isChanged = check processor.processIntermediateResult();
                 if isChanged {
-                    check self.unschedule();
+                    io:println(string `Reschedule watcher ${self.stepId} after new substep was found.`);
                     // TODO: Probably needs to be changed in the future
                     (decimal|int)[] initialIntervals = [2, 10, 5, 10, 10, 60, 30, 20, 60, 10, 600];
                     check self.schedule(...initialIntervals);
@@ -425,6 +452,7 @@ public isolated class ResultWatcher {
             do {
                 ResultProcessor processor = new (result, self.experimentId, self.stepId, self.resultEndpoint);
                 check processor.processResult();
+                io:println(string `Unschedule watcher ${self.stepId} after result was saved.`);
                 check self.unschedule();
                 _ = check removeResultWatcherFromRegistry(self.stepId);
             } on fail error e {
