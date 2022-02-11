@@ -22,6 +22,8 @@ Before the first run create a sqlite database with the provided schema.
 :warning: When updating from `slbeta2` it can happen that the dependency resolution of ballerina fails.
 In these cases try deleting the ballerina repository cache in the folder `~/.ballerina/repositories/`.
 
+:waring: When updating to the swan-lake release from a beta release please follow <https://ballerina.io/downloads/swan-lake-release-notes/2201-0-0-swan-lake/> closely!
+
 ```bash
 # first time only
 bash create-sqlite-db.sh
