@@ -1,19 +1,6 @@
-FROM ubuntu:focal
+FROM openjdk:11 AS builder
+
 WORKDIR /app
-RUN apt-get -y update && apt-get install -y wget sqlite3 unzip apt-transport-https gnupg
-
-# install adoptopenjdk 11
-RUN wget https://adoptopenjdk.jfrog.io/adoptopenjdk/api/gpg/key/public
-RUN gpg --no-default-keyring --keyring ./adoptopenjdk-keyring.gpg --import public
-RUN gpg --no-default-keyring --keyring ./adoptopenjdk-keyring.gpg --export --output adoptopenjdk-archive-keyring.gpg
-RUN rm adoptopenjdk-keyring.gpg
-RUN mv adoptopenjdk-archive-keyring.gpg /usr/share/keyrings
-RUN echo "deb [signed-by=/usr/share/keyrings/adoptopenjdk-archive-keyring.gpg] https://adoptopenjdk.jfrog.io/adoptopenjdk/deb focal main" | tee /etc/apt/sources.list.d/adoptopenjdk.list
-RUN apt-get -y update && apt-get install -y adoptopenjdk-11-hotspot
-
-# rename the installation folder so that the folder name is the same on every architecture
-RUN ln -s /usr/lib/jvm/adoptopenjdk-11-hotspot* /usr/lib/jvm/java-11
-ENV JAVA_HOME="/usr/lib/jvm/java-11"
 
 # install ballerina
 RUN wget https://dist.ballerina.io/downloads/swan-lake-beta3/ballerina-swan-lake-beta3.zip
@@ -23,11 +10,47 @@ ENV PATH="${PATH}:/app/ballerina-swan-lake-beta3/bin"
 # copy files
 COPY . /app
 
-# prepare database
-RUN bash create-sqlite-db.sh
+RUN bal build --observability-included --skip-tests
+
+
+
+FROM openjdk:11
+
+LABEL org.opencontainers.image.source="hhttps://github.com/UST-QuAntiL/qhana-backend"
+
+RUN apt-get -y update && apt-get install -y sqlite3
+
+# create unpriviledged user
+RUN useradd ballerina
+
+# create persistent data volume and change its owner to the new user
+VOLUME /app/data
+RUN chown --recursive ballerina /app
+
+WORKDIR /app/data
+
+COPY --from=builder --chown=ballerina /app/target/bin/qhana_backend.jar /app/
+
+COPY --chown=ballerina sqlite-schema.sql start-docker.sh /app/
+
+RUN ls -lah /app/
 
 # Apply docker specific config
-RUN cp /app/Config-docker.toml /app/Config.toml
+COPY --chown=ballerina Config-docker.toml /app/Config.toml
+
+EXPOSE 9090
+
+# Wait for database
+ADD --chown=ballerina https://github.com/ufoscout/docker-compose-wait/releases/download/2.7.3/wait /app/wait
+
+# make scripts executable
+RUN chmod +x /app/wait && chmod +x /app/start-docker.sh
+
+# switch to unpriviledged user
+USER ballerina
+
+# prepare database
+RUN sqlite3 /app/qhana-backend.db < /app/sqlite-schema.sql
 
 # run backend
-CMD bal run
+CMD /app/start-docker.sh
