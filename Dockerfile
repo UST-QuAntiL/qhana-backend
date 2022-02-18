@@ -25,15 +25,13 @@ RUN useradd ballerina
 
 # create persistent data volume and change its owner to the new user
 VOLUME /app/data
-RUN chown --recursive ballerina /app
+RUN mkdir --parents /app/data && chown --recursive ballerina /app
 
 WORKDIR /app/data
 
 COPY --from=builder --chown=ballerina /app/target/bin/qhana_backend.jar /app/
 
 COPY --chown=ballerina sqlite-schema.sql start-docker.sh /app/
-
-RUN ls -lah /app/
 
 # Apply docker specific config
 COPY --chown=ballerina Config-docker.toml /app/Config.toml
