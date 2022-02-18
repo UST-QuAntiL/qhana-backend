@@ -14,7 +14,7 @@ RUN bal build --observability-included --skip-tests
 
 
 
-FROM openjdk:11
+FROM openjdk:11-jre-slim
 
 LABEL org.opencontainers.image.source="hhttps://github.com/UST-QuAntiL/qhana-backend"
 
