@@ -16,7 +16,7 @@ RUN bal build --observability-included --skip-tests
 
 FROM openjdk:11-jre-slim
 
-LABEL org.opencontainers.image.source="hhttps://github.com/UST-QuAntiL/qhana-backend"
+LABEL org.opencontainers.image.source="https://github.com/UST-QuAntiL/qhana-backend"
 
 RUN apt-get -y update && apt-get install -y sqlite3
 
