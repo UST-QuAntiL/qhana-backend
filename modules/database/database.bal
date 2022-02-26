@@ -1035,6 +1035,7 @@ public isolated transactional function updateTimelineSubsteps(int stepId, Timeli
         if tmp != () {
             substepNr += 1;
             TimelineSubstepSQL oldDBSubstep = tmp.value;
+
             // make sure that no invalid changes have been made
             if receivedSubstep.href != oldDBSubstep.href {
                 return error(string `UI illegally changed the href of a substep or changed the order of substeps (stepId: ${stepId}, substep index: ${substepNr}, new hrefUi: ${receivedSubstep.href}).`);
@@ -1059,9 +1060,10 @@ public isolated transactional function updateTimelineSubsteps(int stepId, Timeli
             changes = true;
         }
     }
+
     // set all previous substeps except the latest one to cleared by default (should have been done, but we don't care here). The latest one should only be set manually. 
-    boolean someCleared = check clearTimelineSubsteps(stepId, receivedSubsteps.length() - nUncleared);
-    if someCleared {
+    if (nUncleared > 1) {
+        _ = check clearTimelineSubsteps(stepId, receivedSubsteps.length() - nUncleared);
         return true;
     }
     return changes;
