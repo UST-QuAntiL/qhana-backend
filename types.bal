@@ -250,7 +250,7 @@ public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull 
         progressStart: step.progressStart,
         progressTarget: step.progressTarget,
         progressUnit: step.progressUnit
-};
+    };
 }
 
 public isolated function mapToTimelineStepResponse(
@@ -315,7 +315,7 @@ public isolated function mapToTimelineSubstepResponse(
 public isolated function mapFileUrlToDataRef(int experimentId, string url) returns database:ExperimentDataReference|error {
     var regex = string `^(https?:\/\/)?[^\/]*\/experiments\/${experimentId}\/data\/[^\/]+\/download\?version=(latest|[0-9]+)$`;
     if !regex:matches(url, regex) {
-        return error("url does not match any file from the experiment.");
+        return error("url does not match any file from the experiment." + url);
     }
     var dataStart = url.lastIndexOf("/data/");
     var filenameEnd = url.lastIndexOf("/download?");

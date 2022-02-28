@@ -1053,6 +1053,9 @@ public isolated transactional function updateTimelineSubsteps(int stepId, Timeli
             }
             if receivedSubstep.cleared == 1 && substepNr == receivedSubsteps.length() {
                 nUncleared = 0;
+                if oldDBSubstep.cleared == 0 {
+                    changes = true;
+                }
             }
         } else {
             // new substep
@@ -1062,8 +1065,8 @@ public isolated transactional function updateTimelineSubsteps(int stepId, Timeli
     }
 
     // set all previous substeps except the latest one to cleared by default (should have been done, but we don't care here). The latest one should only be set manually. 
+    _ = check clearTimelineSubsteps(stepId, receivedSubsteps.length() - nUncleared);
     if (nUncleared > 1) {
-        _ = check clearTimelineSubsteps(stepId, receivedSubsteps.length() - nUncleared);
         return true;
     }
     return changes;
