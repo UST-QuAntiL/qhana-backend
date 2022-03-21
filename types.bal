@@ -175,6 +175,7 @@ public type TimelineStepMinResponse record {|
     string 'start;
     string? end = ();
     string status;
+    string resultQuality;
     string processorName;
     string? processorVersion = ();
     string? processorLocation = ();
@@ -224,6 +225,10 @@ public type TimelineSubstepListResponse record {|
     database:TimelineSubstepSQL[] items;
 |};
 
+public type TimelineStepResultQualityPut record {|
+    string resultQuality;
+|};
+
 public type TimelineStepNotesResponse record {|
     *ApiResponse;
     string notes;
@@ -242,6 +247,7 @@ public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull 
         'start: time:utcToString(step.'start),
         end: end == () ? () : time:utcToString(end),
         status: step.status,
+        resultQuality: step.resultQuality,
         processorName: step.processorName,
         processorVersion: step.processorVersion,
         processorLocation: step.processorLocation,
@@ -272,6 +278,7 @@ public isolated function mapToTimelineStepResponse(
         'start: time:utcToString(step.'start),
         end: end == () ? () : time:utcToString(end),
         status: step.status,
+        resultQuality: step.resultQuality,
         resultLog: log == () ? "" : log,
         processorName: step.processorName,
         processorVersion: step.processorVersion,

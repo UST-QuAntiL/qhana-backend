@@ -216,6 +216,22 @@ service / on new http:Listener(port) {
     // Data ////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
 
+    resource function get experiments/[int experimentId]/data\-summary() returns map<string[]>|http:InternalServerError {
+        
+        map<string[]> data;
+
+        transaction {
+            data = check database:getDataTypesSummary(experimentId);
+            check commit;
+        } on fail error err {
+            io:println(err);
+            // if with return does not correctly narrow type for rest of function... this does.
+            http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
+            return resultErr;
+        }
+        return data;
+    }
+
     resource function get experiments/[int experimentId]/data(boolean? allVersions, int page=0, int item\-count=0) returns ExperimentDataListResponse|http:NotFound|http:InternalServerError|http:BadRequest {
         boolean includeAllVersions = allVersions == true || allVersions == ();
 
@@ -396,6 +412,23 @@ service / on new http:Listener(port) {
 
         return mapToTimelineStepResponse(result, substeps, inputData, outputData);
     }
+
+    resource function put experiments/[int experimentId]/timeline/[int timelineStep](@http:Payload TimelineStepResultQualityPut resultQuality) returns http:Ok|http:BadRequest|http:InternalServerError {
+        string rq = resultQuality.resultQuality;
+        if rq != "UNKNOWN" && rq != "NEUTRAL" && rq != "GOOD" && rq != "BAD" && rq != "ERROR" && rq != "UNUSABLE" {
+            return <http:BadRequest>{body: "Result quality must be one of the following values: 'UNKNOWN', 'NEUTRAL', 'GOOD', 'BAD', 'ERROR', or 'UNUSABLE'."};
+        }
+        transaction {
+            check database:updateTimelineStepResultQuality(experimentId, timelineStep, resultQuality.resultQuality);
+            check commit;
+        } on fail error err {
+            io:println(err);
+            return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
+        }
+
+        return <http:Ok>{};
+    }
+
     resource function get experiments/[int experimentId]/timeline/[int timelineStep]/notes() returns TimelineStepNotesResponse|http:InternalServerError {
         string result;
 
@@ -412,6 +445,7 @@ service / on new http:Listener(port) {
             notes: result
         };
     }
+
     resource function put experiments/[int experimentId]/timeline/[int timelineStep]/notes(@http:Payload TimelineStepNotesPost notes) returns http:Ok|http:InternalServerError {
         transaction {
             check database:updateTimelineStepNotes(experimentId, timelineStep, notes.notes);

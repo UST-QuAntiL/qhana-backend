@@ -100,6 +100,11 @@ public type ExperimentDataReference record {|
     int 'version;
 |};
 
+type DataTypeTuple record {|
+    string dataType;
+    string contentType;
+|};
+
 public type ExperimentData record {|
     *ExperimentDataReference;
     string location;
@@ -425,6 +430,28 @@ public isolated transactional function getExperimentDataCount(int experimentId, 
     }
 }
 
+public isolated transactional function getDataTypesSummary(int experimentId) returns map<string[]>|error {
+    var baseQuery = `SELECT DISTINCT type, contentType from ExperimentData WHERE experimentId=${experimentId} GROUP BY type ORDER BY type, contentType;`;
+
+    stream<DataTypeTuple, sql:Error?> dataSummaryRaw = experimentDB->query(`SELECT DISTINCT type as dataType, contentType from ExperimentData WHERE experimentId=${experimentId} GROUP BY type ORDER BY type, contentType;`);
+    
+    map<string[]> dataSummary = {};
+    check from var dt in dataSummaryRaw
+        do {
+            string[]? contentTypes = dataSummary[dt.dataType];
+            if contentTypes == () {
+                dataSummary[dt.dataType] = [dt.contentType];
+            } else {
+                contentTypes.push(dt.dataType);
+                dataSummary[dt.dataType] = contentTypes;
+            }
+        };
+
+    check dataSummaryRaw.close();
+
+    return dataSummary;
+}
+
 public isolated transactional function getDataList(int experimentId, boolean all = true, int 'limit = 100, int offset = 0) returns ExperimentDataFull[]|error {
     var baseQuery = `SELECT dataId, experimentId, name, version, location, type, contentType 
                      FROM ExperimentData WHERE experimentId=${experimentId} `;
@@ -576,7 +603,7 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
     if allAttributes {
         query.push(`, resultQuality, resultLog, parameters, parametersContentType, notes `);
     } else {
-        query.push(`, NULL AS resultLog `);
+        query.push(`, resultQuality, NULL AS resultLog `);
     }
 
     query.push(`FROM TimelineStep WHERE experimentId=${experimentId} ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`);
@@ -687,6 +714,7 @@ public isolated transactional function getTimelineStep(int? experimentId = (), i
 
     return error(string `Timeline step with reference ${ref.toString()} was not found!`);
 }
+
 
 public isolated transactional function updateTimelineStepStatus(int|TimelineStepFull step, string status, string? resultLog) returns error? {
     var stepId = step is int ? step : step.stepId;
@@ -808,7 +836,6 @@ public isolated transactional function updateTimelineStepResultQuality(int exper
     var test = check experimentDB->execute(
         `UPDATE TimelineStep SET resultQuality=${resultQuality} WHERE experimentId = ${experimentId} AND sequence=${sequence};`
     );
-    io:println(test);
 }
 
 public isolated transactional function getTimelineStepsWithResultWatchers() returns int[]|error {
