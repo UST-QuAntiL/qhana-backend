@@ -199,7 +199,7 @@ service / on new http:Listener(port) {
     @http:ResourceConfig {
         consumes: ["application/json"]
     }
-    resource function update experiments/[int experimentId](@http:Payload database:Experiment experiment) returns ExperimentResponse|http:InternalServerError {
+    resource function put experiments/[int experimentId](@http:Payload database:Experiment experiment) returns ExperimentResponse|http:InternalServerError {
         database:ExperimentFull result;
         transaction {
             result = check database:updateExperiment(experimentId, experiment);
