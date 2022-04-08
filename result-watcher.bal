@@ -388,8 +388,12 @@ public isolated class ResultWatcher {
             }
         }
 
+        time:Utc delay = time:utcAddSeconds(time:utcNow(), interval);
+
         lock {
-            self.jobId = check task:scheduleJobRecurByFrequency(self, interval, maxCount);
+            // initial delay of new job matches new interval (this prevents the job from executing immediately)
+            time:Civil delayCivil = time:utcToCivil(delay.clone());
+            self.jobId = check task:scheduleJobRecurByFrequency(self, interval, maxCount, delayCivil);
             io:println(string `Scheduled watcher for step ${self.stepId} with interval ${interval}. JobId: ${self.jobId.toString()}`);
         }
     }
