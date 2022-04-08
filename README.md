@@ -75,19 +75,46 @@ You can build a Docker image for the QHAna backend with this command: `docker bu
 Run a container with this image and bind it to port 9090 with `docker run -p 9090:9090 qhana-backend` if you want to run the container detached add the flag `-d`.
 
 
+### Configuration Handling
 
+The QHAna backend can be configured using a toml config file or with environment variables.
+See `Config-template.toml` for how the backend can be configured using a toml file.
+The file has to be named `Config.toml` and must be in the current working directory the backend is started from.
+
+Environment variables to configure the backend with:
+
+| Variable | Example | Explanation |
+|:---------|:--------|:------------|
+| QHANA_DB_TYPE | `sqlite`\|`mariadb`\|`mysql` | The type of DB to connect to. |
+| QHANA_DB_PATH | `qhana-backend.db` | The path to the sqlite DB. |
+| QHANA_DB_HOST | `localhost:3306` | The host of a mysql or mariadb DB. |
+| QHANA_DB_NAME | `QHAnaBackend` | The mysql or mariadb database name to use. |
+| QHANA_DB_USER | `dbuser` | The mysql or mariadb user. |
+| QHANA_DB_PASSWORD | `****` | The mysql or mariadb password. |
+| QHANA_STORAGE_LOCATION | `experimentData` | The path where experiment data is stored by the backend. |
+| QHANA_PORT | `9090` | The port where the backend listens. |
+| QHANA_CORS_DOMAINS | `http://localhost:4200` | Domains for which cors requests are allowed. Entries are separated by any whitespace. |
+| QHANA_WATCHER_INTERVALLS | `1 10 10 5 60` | Configuration for the result watcher intervalls. Event entries are intervalls (in seconds) and odd entries specify after how many iterations the next intervall in the list is used. |
+| QHANA_URL_MAPPING | `{"(?<=^\|https?://)localhost(:[0-9]+)?": "host.docker.internal$1"}` | A map of rewrite rules for plugin result URLs. The map is a JSON object whose keys are regex patterns and whose values are the replacement strings for these patterns. All rules are applied to an URL without a guaranteed order. |
 
 
 ## Acknowledgements
 
-Current development is supported by the [Federal Ministry for Economic Affairs and Energy](http://www.bmwi.de/EN) as part of the [PlanQK](https://planqk.de) project (01MK20005N).
+Current development is supported by the [Federal Ministry for Economic Affairs and Climate Action (BMWK)] as part of the [PlanQK] project (01MK20005N).
+
+   [Federal Ministry for Economic Affairs and Climate Action (BMWK)]: https://www.bmwk.de/EN
+   [PlanQK]: https://planqk.de
 
 ## Haftungsausschluss
 
-Dies ist ein Forschungsprototyp.
-Die Haftung für entgangenen Gewinn, Produktionsausfall, Betriebsunterbrechung, entgangene Nutzungen, Verlust von Daten und Informationen, Finanzierungsaufwendungen sowie sonstige Vermögens- und Folgeschäden ist, außer in Fällen von grober Fahrlässigkeit, Vorsatz und Personenschäden, ausgeschlossen.
+Dies ist ein Forschungsprototyp. Die Haftung für entgangenen Gewinn, Produktionsausfall, Betriebsunterbrechung,
+entgangene Nutzungen, Verlust von Daten und Informationen, Finanzierungsaufwendungen sowie sonstige Vermögens- und
+Folgeschäden ist, außer in Fällen von grober Fahrlässigkeit, Vorsatz und Personenschäden, ausgeschlossen.
 
 ## Disclaimer of Warranty
 
-Unless required by applicable law or agreed to in writing, Licensor provides the Work (and each Contributor provides its Contributions) on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE.
-You are solely responsible for determining the appropriateness of using or redistributing the Work and assume any risks associated with Your exercise of permissions under this License.
+Unless required by applicable law or agreed to in writing, Licensor provides the Work (and each Contributor provides its
+Contributions) on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including,
+without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+PARTICULAR PURPOSE. You are solely responsible for determining the appropriateness of using or redistributing the Work
+and assume any risks associated with Your exercise of permissions under this License.

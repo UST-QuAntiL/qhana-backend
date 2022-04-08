@@ -16,6 +16,7 @@ import ballerina/io;
 import ballerina/time;
 import ballerina/sql;
 import ballerinax/java.jdbc;
+import ballerina/os;
 import ballerina/mime;
 
 sql:ConnectionPool sqlitePool = {
@@ -42,18 +43,45 @@ configurable string dbUser = "QHAna";
 configurable string dbPassword = "";
 
 function initClient() returns jdbc:Client|error {
-    if dbType == "sqlite" {
-        return new jdbc:Client(string `jdbc:sqlite:${dbPath}`, connectionPool = sqlitePool);
-    } else if dbType == "mariadb" || dbType == "mysql" {
-        string connection = string `jdbc:mariadb://${dbHost}/${dbName}?user=${dbUser}`;
-        if dbPassword != "" {
-            string passwordPart = string `&password=${dbPassword}`;
+    // load config from env vars
+    var dbTypeLocal = os:getEnv("QHANA_DB_TYPE");
+    if (dbTypeLocal.length() == 0) {
+        dbTypeLocal = dbType;
+    }
+    var dbPathLocal = os:getEnv("QHANA_DB_PATH");
+    if (dbPathLocal.length() == 0) {
+        dbPathLocal = dbPath;
+    }
+    var dbHostLocal = os:getEnv("QHANA_DB_HOST");
+    if (dbHostLocal.length() == 0) {
+        dbHostLocal = dbHost;
+    }
+    var dbNameLocal = os:getEnv("QHANA_DB_NAME");
+    if (dbNameLocal.length() == 0) {
+        dbNameLocal = dbName;
+    }
+    var dbUserLocal = os:getEnv("QHANA_DB_USER");
+    if (dbUserLocal.length() == 0) {
+        dbUserLocal = dbUser;
+    }
+    var dbPasswordLocal = os:getEnv("QHANA_DB_PASSWORD");
+    if (dbPasswordLocal.length() == 0) {
+        dbPasswordLocal = dbPassword;
+    }
+
+    // use config options to create db client
+    if dbTypeLocal == "sqlite" {
+        return new jdbc:Client(string `jdbc:sqlite:${dbPathLocal}`, connectionPool = sqlitePool);
+    } else if dbTypeLocal == "mariadb" || dbTypeLocal == "mysql" {
+        string connection = string `jdbc:mariadb://${dbHostLocal}/${dbNameLocal}?user=${dbUserLocal}`;
+        if dbPasswordLocal != "" {
+            string passwordPart = string `&password=${dbPasswordLocal}`;
             connection = connection + passwordPart;
         }
         io:println(connection);
         return new jdbc:Client(connection);
     } else {
-        return error(string `Db type ${dbType} is unknownn!`);
+        return error(string `Db type ${dbTypeLocal} is unknownn!`);
     }
 }
 

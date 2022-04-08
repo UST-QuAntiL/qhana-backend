@@ -15,33 +15,105 @@
 import ballerina/http;
 import ballerina/io;
 import ballerina/regex;
+import ballerina/os;
 import qhana_backend.database;
 
+// start configuration values
 configurable string[] corsDomains = ["http://localhost:4200"];
+
+function getCorsDomains() returns string[] {
+    string d = os:getEnv("QHANA_CORS_DOMAINS");
+    if (d.length() > 0) {
+        return regex:split(d, "[\\s]+");
+    }
+    return corsDomains;
+}
+
+final string[]&readonly configuredCorsDomains = getCorsDomains().cloneReadOnly();
+
 configurable int port = 9090;
 
+function getPort() returns int {
+    string p = os:getEnv("QHANA_PORT");
+    if (regex:matches(p, "^[0-9]+$")) {
+        do {
+            return check int:fromString(p);
+        } on fail error err {
+            // error should never happen if regex is correct...
+        }
+    }
+    return port;
+}
+
+final int&readonly serverPort = getPort().cloneReadOnly();
+
 configurable (decimal|int)[] watcherIntervallConfig = [2, 10, 5, 10, 10, 60, 30, 20, 60, 10, 600];
+
+function coerceToPositiveNumber(string input) returns decimal|int|error {
+    boolean isDecimal = regex:matches(input, "^[0-9]+\\.[0-9]+$");
+    if (isDecimal) {
+        return decimal:fromString(input);
+    }
+    boolean isInt = regex:matches(input, "^[0-9]+$");
+    if (isInt) {
+        return int:fromString(input);
+    }
+    return error(string`Input "${input}" is not a positive number!`);
+}
+
+function getWatcherIntervallConfig() returns (decimal|int)[] {
+    string intervalls = os:getEnv("QHANA_WATCHER_INTERVALLS");
+    if (intervalls.length() > 0) {
+        do {
+            return from string i in regex:split(intervalls, "[\\s\\(\\),;]+")
+                select check coerceToPositiveNumber(i);
+        } on fail error err {
+            io:println("Failed to parse environment variable QHANA_WATCHER_INTERVALLS!\n", err);
+        }
+    }
+    return watcherIntervallConfig;
+}
+
+final (decimal|int)[]&readonly configuredWatcherIntervalls = getWatcherIntervallConfig().cloneReadOnly();
 
 // URL map that can be used to map plugin endpoint watcher urls t URLs reachable for the backend
 // Intended for use in a dockerized dev setup where localhost is used as outside URL
 configurable map<string> & readonly internalUrlMap = {};
 
+function getInternalUrlMap() returns map<string> {
+    string mapping = os:getEnv("QHANA_URL_MAPPING");
+    if (mapping.length() > 0) {
+        do {
+            return check mapping.fromJsonStringWithType();
+        } on fail error err {
+            io:println("Failed to parse environment variable QHANA_URL_MAPPING!\n", err);
+        }
+    }
+    map<string> newMapping = {};
+    foreach var [key, value] in internalUrlMap.entries() {
+        if key[0] == "\"" || key[0] == "'" {
+            // remove enclosing quotes if necessary
+            // FIXME: This is a workaround for a possible bug in Ballerina. Can be removed if the bug is fixed.
+            var strippedKey = key.substring(1, key.length() - 1);
+            newMapping[strippedKey] = value;
+        } else {
+            newMapping[key] = value;
+        }
+    }
+    return newMapping;
+}
+
+final map<string> & readonly configuredUrlMap = getInternalUrlMap().cloneReadOnly();
+// end configuration values
+
 isolated function mapToInternalUrl(string url) returns string {
-    if internalUrlMap.length() == 0 {
+    if configuredUrlMap.length() == 0 {
         return url; // fast exit
     }
     // apply all replacements specified in the url map, keys are interpreted as regex
     var replacedUrl = url;
-    foreach var key in internalUrlMap.keys() {
-        string strippedKey = key;
-
-        // remove enclosing quotes if necessary
-        // FIXME: This is a workaround for a possible bug in Ballerina. Can be removed if the bug is fixed.
-        if key[0] == "\"" || key[0] == "'" {
-            strippedKey = key.substring(1, key.length() - 1);
-        }
-
-        replacedUrl = regex:replaceFirst(replacedUrl, strippedKey, internalUrlMap.get(key));
+    foreach var [pattern, replacement] in configuredUrlMap.entries() {
+        replacedUrl = regex:replaceFirst(replacedUrl, pattern, replacement);
     }
     return replacedUrl;
 }
@@ -49,14 +121,14 @@ isolated function mapToInternalUrl(string url) returns string {
 # The QHAna backend api service.
 @http:ServiceConfig {
     cors: {
-        allowOrigins: corsDomains,
+        allowOrigins: configuredCorsDomains,
         allowMethods: ["OPTIONS", "GET", "PUT", "POST", "DELETE"],
         allowHeaders: ["Content-Type", "Depth", "User-Agent", "X-File-Size", "X-Requested-With", "If-Modified-Since", "X-File-Name", "Cache-ControlAccess-Control-Allow-Origin"],
         allowCredentials: true,
         maxAge: 84900
     }
 }
-service / on new http:Listener(port) {
+service / on new http:Listener(serverPort) {
     resource function get .() returns RootResponse {
         return {
             '\@self: "/",
@@ -383,7 +455,7 @@ service / on new http:Listener(port) {
         }
         do {
             ResultWatcher watcher = check new (createdStep.stepId);
-            check watcher.schedule(...watcherIntervallConfig);
+            check watcher.schedule(...configuredWatcherIntervalls);
         } on fail error err {
             io:println(err);
             // if with return does not correctly narrow type for rest of function... this does.
@@ -486,7 +558,7 @@ service / on new http:Listener(port) {
                 watcher = check getResultWatcherFromRegistry(step.stepId);
             }
             check watcher.unschedule();
-            check watcher.schedule(...watcherIntervallConfig);
+            check watcher.schedule(...configuredWatcherIntervalls);
         } on fail error err {
             io:println(err);
             // if with return does not correctly narrow type for rest of function... this does.
@@ -536,7 +608,7 @@ public function main() {
         var stepsToWatch = check database:getTimelineStepsWithResultWatchers();
         foreach var stepId in stepsToWatch {
             ResultWatcher watcher = check new (stepId);
-            check watcher.schedule(...watcherIntervallConfig);
+            check watcher.schedule(...configuredWatcherIntervalls);
         }
         check commit;
     } on fail error err {

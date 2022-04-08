@@ -16,11 +16,24 @@ import ballerina/http;
 import ballerina/task;
 import ballerina/file;
 import ballerina/io;
+import ballerina/os;
 import ballerina/uuid;
 import ballerina/time;
 import qhana_backend.database;
 
+// start configuration values
 configurable string storageLocation = "experimentData";
+
+function getStorageLocation() returns string {
+    string location = os:getEnv("QHANA_STORAGE_LOCATION");
+    if (location.length() > 0) {
+        return location;
+    }
+    return storageLocation;
+}
+
+final string&readonly configuredStorageLocation = getStorageLocation().cloneReadOnly();
+// end configuration values
 
 isolated map<ResultWatcher> resultWatcherRegistry = {};
 
@@ -280,7 +293,7 @@ isolated class ResultWatcherRescheduler {
     public isolated function execute() {
         io:println(string `Reschedule watcher ${self.watcher.stepId} after new substep was found.`);
         // TODO: Probably needs to be changed in the future
-        (decimal|int)[] initialIntervals = [2, 10, 5, 10, 10, 60, 30, 20, 60, 10, 600];
+        (decimal|int)[] initialIntervals = configuredWatcherIntervalls;
         error? err = self.watcher.schedule(...initialIntervals);
         if err != () {
             io:println(err);
