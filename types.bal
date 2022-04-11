@@ -46,11 +46,20 @@ public type RootResponse record {|
     string tasks;
 |};
 
+# Post payload to create new plugin endpoint resources.
+#
+# + url - the URL of the plugin endpoint
+# + 'type - the type of the endpoint ("Plugin"|"PluginRunner")
 public type PluginEndpointPost record {|
     string url;
     string 'type = "PluginRunner";
 |};
 
+# A plugin endpoint resource.
+#
+# + endpointId - the id of the plugin endpoint
+# + url - the URL of the plugin endpoint
+# + 'type - the type of the endpoint ("Plugin"|"PluginRunner")
 public type PluginEndpointResponse record {|
     *ApiResponse;
     int endpointId;
@@ -58,12 +67,20 @@ public type PluginEndpointResponse record {|
     string 'type = "PluginRunner";
 |};
 
+# The plugin endpoints list resource.
+#
+# + items - the plugin endpoint resources
+# + itemCount - the total count of plugin endpoints
 public type PluginEndpointsListResponse record {|
     *ApiResponse;
     PluginEndpointResponse[] items;
     int itemCount;
 |};
 
+# Helper function to map from `PluginEndpointFull` database record to API record.
+#
+# + endpoint - the input database record
+# + return - the mapped record
 public isolated function mapToPluginEndpointResponse(database:PluginEndpointFull endpoint) returns PluginEndpointResponse {
     return {
         '\@self: string `/plugin-endpoints/${endpoint.id}`,
@@ -113,6 +130,17 @@ public isolated function mapToExperimentResponse(database:ExperimentFull experim
 // Data ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
+# Experiment data resource record.
+#
+# + download - a download link of the data
+# + producingStep - the timeline step which produced the data
+# + producingStepLink - a link to the producing timeline step
+# + inputFor - a list of timeline steps in which this data was used as input
+# + inputForLinks - a list of links to timeline steps in which this data was used as input
+# + name - the (file-) name of the data
+# + 'version - the version of the data
+# + 'type - the datatype tag
+# + contentType - the content type tag
 public type ExperimentDataResponse record {|
     *ApiResponse;
     string download;
@@ -126,12 +154,22 @@ public type ExperimentDataResponse record {|
     string contentType;
 |};
 
+# The experiment data list record.
+#
+# + items - The list of experiment data resources
+# + itemCount - The total count of experiment data resources
 public type ExperimentDataListResponse record {|
     *ApiResponse;
     ExperimentDataResponse[] items;
     int itemCount;
 |};
 
+# Helper function to map from `ExperimentDataFull` database record to API record.
+#
+# + data - the input data record
+# + producingStep - the database record of the producing step
+# + inputFor - the list of database records of steps this data was used in
+# + return - the mapped record
 public isolated function mapToExperimentDataResponse(database:ExperimentDataFull data, int? producingStep = (), int[]? inputFor = ()) returns ExperimentDataResponse {
     ExperimentDataResponse dataMapped = {
         '\@self: string `/experiments/${data.experimentId}/data/${data.name}?version=${data.'version}`,
@@ -157,6 +195,15 @@ public isolated function mapToExperimentDataResponse(database:ExperimentDataFull
 // Timeline ////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
+# Post payload to create a new timeline step.
+#
+# + resultLocation - the URL of the pending QHAna plugin result
+# + inputData - a list of all data used as input (must also be part of parameters!) 
+# + processorName - the plugin name processing the request
+# + processorVersion - the plugin version
+# + processorLocation - the root URL of the plugin
+# + parameters - the user inputs used to request the plugin result
+# + parametersContentType - the parameter encoding content type
 public type TimelineStepPost record {|
     string resultLocation;
     string[] inputData;
@@ -168,6 +215,18 @@ public type TimelineStepPost record {|
     *database:Progress;
 |};
 
+# Minimal timeline step resource record.
+#
+# + notes - a link to the step notes
+# + sequence - the sequence number of the step in the experiment (used as step id)
+# + 'start - the time the step was recorded into the backend database
+# + end - the time the result was recorded into the backend database
+# + status - the current status of the step
+# + resultQuality - the result quality
+# + processorName - the plugin name processing the request
+# + processorVersion - the plugin version
+# + processorLocation - the root URL of the plugin
+# + parametersContentType - the parameter encoding content type
 public type TimelineStepMinResponse record {|
     *ApiResponse;
     string notes;
@@ -183,6 +242,15 @@ public type TimelineStepMinResponse record {|
     *database:Progress;
 |};
 
+# The full timeline step record.
+#
+# + resultLog - the result log present in the pending plugin result
+# + parameters - the input parameters used for this plugin invocation
+# + inputData - the input data used (also part of the input parameters)
+# + inputDataLinks - links to the input data
+# + outputData - the output data of the timeline step
+# + outputDataLinks - links to the output data
+# + substeps - a list of substeps
 public type TimelineStepResponse record {|
     *TimelineStepMinResponse;
     string resultLog;
@@ -194,18 +262,41 @@ public type TimelineStepResponse record {|
     database:TimelineSubstepSQL[]? substeps = ();
 |};
 
+# A list of timeline steps.
+# 
+# Uses the minimal timeline step record.
+#
+# + items - the timeline steps
+# + itemCount - the total number of timeline steps
 public type TimelineStepListResponse record {|
     *ApiResponse;
     TimelineStepMinResponse[] items;
     int itemCount;
 |};
 
+# Post payload to provide the input parameters of a timeline substep.
+#
+# + inputData - the input data used in the substep (also in parameters)
+# + parameters - the input parameters
+# + parametersContentType - the parameter encoding content type
 public type TimelineSubstepPost record {|
     string[] inputData;
     string? parameters;
     string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
 |};
 
+# Timeline substep record.
+#
+# + stepId - the step id this is a substep of (the sequence number of the step)
+# + substepId - the substep id (a string id given to the substep by the plugin)
+# + substepNr - the sequence number of the substep in the current step
+# + href - the endpoint URL of the substep
+# + hrefUi - the micro frontend URL of the substep
+# + cleared - the status of the substep (true once data was received for the substep)
+# + parameters - the input parameetrs of the substep
+# + parametersContentType - the parameter encoding content type
+# + inputData - the input data of the substep (also in parameters)
+# + inputDataLinks - links to the input data of the substep
 public type TimelineSubstepResponse record {|
     *ApiResponse;
     int stepId;
@@ -220,24 +311,40 @@ public type TimelineSubstepResponse record {|
     string[] inputDataLinks;
 |};
 
+# List of timeline substeps
+#
+# + items - the timeline substeps
 public type TimelineSubstepListResponse record {|
     *ApiResponse;
     database:TimelineSubstepSQL[] items;
 |};
 
+# Put payload to change the result quality field of a timeline step.
+#
+# + resultQuality - the new result quality
 public type TimelineStepResultQualityPut record {|
     string resultQuality;
 |};
 
+# Timeline step notes record.
+#
+# + notes - the notes text/markdown content
 public type TimelineStepNotesResponse record {|
     *ApiResponse;
     string notes;
 |};
 
+# Payload to change the notes of a timeline step
+#
+# + notes - new the notes text/markdown content
 public type TimelineStepNotesPost record {|
     string notes;
 |};
 
+# Helper function to map database `TimelineStepFull` records to minimal timeline step API records.
+#
+# + step - the input database record
+# + return - the mapped record
 public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull step) returns TimelineStepMinResponse {
     var end = step.end;
     return {
@@ -259,6 +366,13 @@ public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull 
     };
 }
 
+# Helper function to map database `TimelineStepFull` records to full timeline step API records.
+#
+# + step - the input database record
+# + substeps - the list of substeps
+# + inputData - the input data consumed in this step
+# + outputData - the output data produced by this step
+# + return - the mapped record  
 public isolated function mapToTimelineStepResponse(
         database:TimelineStepWithParams step,
         database:TimelineSubstepSQL[]? substeps,
@@ -297,6 +411,12 @@ public isolated function mapToTimelineStepResponse(
     };
 }
 
+# Helper function to map `TimelineSubstepWithParams` database records to API records.
+#
+# + experimentId - the id of the experiment the substep is part of
+# + substep - the input substep record
+# + inputData - the input data of the substep
+# + return - the mapped record
 public isolated function mapToTimelineSubstepResponse(
         int experimentId,
         database:TimelineSubstepWithParams substep,
@@ -319,12 +439,20 @@ public isolated function mapToTimelineSubstepResponse(
     };
 }
 
+# Parse a data input URL to extract the URL parameters.
+#
+# + experimentId - the current experiment id
+# + url - the data input URL to parse
+# + return - the parsed parameters
 public isolated function mapFileUrlToDataRef(int experimentId, string url) returns database:ExperimentDataReference|error {
+    // TODO refactor once regex supports extrating group matches
     var regex = string `^(https?:\/\/)?[^\/]*\/experiments\/${experimentId}\/data\/[^\/]+\/download\?version=(latest|[0-9]+)$`;
     if !regex:matches(url, regex) {
         return error("url does not match any file from the experiment." + url);
     }
-    var dataStart = url.lastIndexOf("/data/");
+    // retrieve actual positions with index of looks because regex module is lacking 
+    // this is safe(ish) because the regex above guarantees the format
+    var dataStart = url.indexOf("/data/");
     var filenameEnd = url.lastIndexOf("/download?");
     var queryStart = url.lastIndexOf("?");
     var versionStart = url.lastIndexOf("=");
