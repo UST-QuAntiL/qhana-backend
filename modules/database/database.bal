@@ -19,29 +19,41 @@ import ballerinax/java.jdbc;
 import ballerina/os;
 import ballerina/mime;
 
+# The connection pool config for sqlite databases.
 sql:ConnectionPool sqlitePool = {
-    maxOpenConnections: 5,
-    maxConnectionLifeTime: 1800,
+    maxOpenConnections: 5, // limit the concurrent connections as sqlite is not really concurrency friendly
+    maxConnectionLifeTime: 1800, // limit keepalive to ensure pool resets faster on errors
     minIdleConnections: 0
 };
 
 # Either "sqlite" or "mariadb"
+# Can also be configured by setting the `QHANA_DB_TYPE` environment variable.
 configurable string dbType = "sqlite";
 
 // sqlite specific config
 # File Path to the sqlite db
+# Can also be configured by setting the `QHANA_DB_PATH` environment variable.
 configurable string dbPath = "qhana-backend.db";
 
 // mariadb specific config
 # Hostname + port for mariadb db
+# Can also be configured by setting the `QHANA_DB_HOST` environment variable.
 configurable string dbHost = "localhost:3306";
 # DB name for mariadb db
+# Can also be configured by setting the `QHANA_DB_NAME` environment variable.
 configurable string dbName = "QHAnaExperiments";
 # DB user for mariadb db
+# Can also be configured by setting the `QHANA_DB_USER` environment variable.
 configurable string dbUser = "QHAna";
 # DB password for mariadb db
+# Can also be configured by setting the `QHANA_DB_PASSWORD` environment variable.
 configurable string dbPassword = "";
 
+# Initialize the database client from the supplied config.
+# 
+# Also reads config from environment variables.
+# 
+# + return - the created client or an error
 function initClient() returns jdbc:Client|error {
     // load config from env vars
     var dbTypeLocal = os:getEnv("QHANA_DB_TYPE");
@@ -78,25 +90,36 @@ function initClient() returns jdbc:Client|error {
             string passwordPart = string `&password=${dbPasswordLocal}`;
             connection = connection + passwordPart;
         }
-        io:println(connection);
+        io:println(connection); // FIXME remove to stop outputting password to stdout
         return new jdbc:Client(connection);
     } else {
         return error(string `Db type ${dbTypeLocal} is unknownn!`);
     }
 }
 
-# always provide an initialized dummy jdbc client to circumvent null handling in every method
+// always provide an initialized dummy jdbc client to circumvent null handling in every method
+# the database client used by all database functions
 final jdbc:Client experimentDB = check initClient();
 
+# A record holding a single row count.
+# 
+# + rowCount - the row count
 type RowCount record {
     int rowCount;
 };
 
+# Database record of plugin endpoints.
+#
+# + url - the URL of the plugin endpoint
+# + 'type - the type of the plugin endpoint
 public type PluginEndpoint record {|
     string url;
     string 'type = "PluginRunner";
 |};
 
+# Full database record of plugin endpoints with the database id.
+#
+# + id - the id of the plugin record in the database
 public type PluginEndpointFull record {|
     readonly int id;
     *PluginEndpoint;
@@ -123,16 +146,29 @@ public type ExperimentFull record {|
 
 // Data ////////////////////////////////////////////////////////////////////////
 
+# Database record of references to experiment data.
+#
+# + name - the (file-)name of the experiment data
+# + 'version - the version of the data
 public type ExperimentDataReference record {|
     string name;
     int 'version;
 |};
 
+# Record specifying data and content type tags.
+# 
+# + dataType - the data type (what kind of data)
+# + contentType - the content type or mimetype (how is the data stored)
 type DataTypeTuple record {|
     string dataType;
     string contentType;
 |};
 
+# Database record for experiment data.
+#
+# + location - the path where the data is stored
+# + 'type - the data type of the stored data
+# + contentType - the content type of the stored data
 public type ExperimentData record {|
     *ExperimentDataReference;
     string location;
@@ -140,6 +176,10 @@ public type ExperimentData record {|
     string contentType;
 |};
 
+# Full database record for experiment data.
+#
+# + dataId - the database id of the record
+# + experimentId - the id of the experiment this data is part of
 public type ExperimentDataFull record {|
     readonly int dataId;
     readonly int experimentId;
@@ -148,6 +188,13 @@ public type ExperimentDataFull record {|
 
 // Timeline ////////////////////////////////////////////////////////////////////
 
+
+# Database result progress record.
+# 
+# + progressStart - the start value of the progress (defaults to 0)
+# + progressTarget - the target value, e.g., the value where the progress is considered 100% done (defaults to 100)
+# + progressValue - the current progress value
+# + progressUnit - the unit the progress is counted in, e.g., %, minutes, steps, error rate, etc. (defaults to "%")
 public type Progress record {|
     float? progressStart = 0;
     float? progressTarget = 100;
@@ -155,15 +202,35 @@ public type Progress record {|
     string? progressUnit = "%";
 |};
 
+# Record of a reference to a timeline step.
+#
+# + experimentId - the experiment id
+# + sequence - the sequence number of the step in the experiment
 public type TimelineStepRef record {|
     readonly int experimentId;
     readonly int sequence;
 |};
 
+# Database record of a reference to a timeline step.
+#
+# + stepId - the database id of the timeline step
 public type TimelineStepDbRef record {|
     readonly int stepId;
 |};
 
+# Database record of a timeline step.
+#
+# + 'start - the time when the timeline step was created
+# + end - the time when a result or error was recorded for the timeline step
+# + status - the current status of the timeline step result
+# + resultQuality - the result quality
+# + resultLog - the log output that is part of the result
+# + processorName - the plugin handling the computation for this step
+# + processorVersion - the version of the plugin
+# + processorLocation - the root URL of the plugin
+# + parameters - the parameters used to invoke the plugin with
+# + parametersContentType - the content type of the serialized parameters
+# + notes - the text of the notes stored for this step
 public type TimelineStep record {|
     time:Utc 'start;
     time:Utc? end = ();
@@ -179,12 +246,27 @@ public type TimelineStep record {|
     *Progress;
 |};
 
+# Full database record of a timeline step containing the database id of the step.
 public type TimelineStepFull record {|
     *TimelineStepDbRef;
     *TimelineStepRef;
     *TimelineStep;
 |};
 
+# Helper type used in SQL queries to get around issues with converting times 
+# to strings and back in sqlite databases.
+#
+# + 'start - the time when the timeline step was created
+# + end - the time when a result or error was recorded for the timeline step
+# + status - the current status of the timeline step result
+# + resultQuality - the result quality
+# + resultLog - the log output that is part of the result
+# + processorName - the plugin handling the computation for this step
+# + processorVersion - the version of the plugin
+# + processorLocation - the root URL of the plugin
+# + parameters - the parameters used to invoke the plugin with
+# + parametersContentType - the content type of the serialized parameters
+# + notes - the text of the notes stored for this step
 public type TimelineStepSQL record {|
     *TimelineStepDbRef;
     *TimelineStepRef;
@@ -202,11 +284,20 @@ public type TimelineStepSQL record {|
     *Progress;
 |};
 
+# Database record of a timeline step but with mandatory parameters field.
+#
+# + parameters - the parameters used to invoke the plugin with
 public type TimelineStepWithParams record {|
     *TimelineStepFull;
     string parameters;
 |};
 
+# Database record of timeline substeps.
+#
+# + substepId - the string id assigned to the substep by the plugin
+# + href - the URL to the resource accepting the substep input
+# + hrefUi - the URL of the corresponding micro frontend
+# + cleared - a boolean flag to indicate whether the substep is cleared
 public type TimelineSubstep record {|
     string? substepId;
     string href;
@@ -214,11 +305,11 @@ public type TimelineSubstep record {|
     int cleared;
 |};
 
-# Timeline Substep in SQL format
+# Full database record of timeline substeps without parameters.
 #
 # + substepNr - 1 based substep index 
 # + stepId - id of associated step
-# + inputData - input data
+# + inputData - input data of the substep
 public type TimelineSubstepSQL record {|
     *TimelineSubstep;
     int substepNr;
@@ -226,6 +317,10 @@ public type TimelineSubstepSQL record {|
     ExperimentDataReference[] inputData?;
 |};
 
+# Full database record of timeline substeps including parameters.
+#
+# + parameters - the parameters which were input for this substep
+# + parametersContentType - the content type of these parameters
 public type TimelineSubstepWithParams record {|
     *TimelineSubstepSQL;
     string parameters;
@@ -234,6 +329,11 @@ public type TimelineSubstepWithParams record {|
 
 // Timeline to Data links //////////////////////////////////////////////////////
 
+# Database record of a relation between a timeline step and its input/output data.
+#
+# + stepId - the database id of the timeline step
+# + dataId - the database id of the data
+# + relationType - the type of the relation (e.g. input/output)
 public type StepToData record {|
     readonly int stepId;
     readonly int dataId;

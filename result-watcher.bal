@@ -22,8 +22,14 @@ import ballerina/time;
 import qhana_backend.database;
 
 // start configuration values
+# Path to where the backend should store experiment data at.
+# Can also be configured by setting the `QHANA_STORAGE_LOCATION` environment variable.
 configurable string storageLocation = "experimentData";
 
+# Get the storage location from the `QHANA_STORAGE_LOCATION` environment variable.
+# If not present use the configurable variable `storageLocation` as fallback.
+#
+# + return - the configured cors domains
 function getStorageLocation() returns string {
     string location = os:getEnv("QHANA_STORAGE_LOCATION");
     if (location.length() > 0) {
@@ -32,17 +38,26 @@ function getStorageLocation() returns string {
     return storageLocation;
 }
 
+# The final configured storage location.
 final string&readonly configuredStorageLocation = getStorageLocation().cloneReadOnly();
 // end configuration values
 
+# A map from stepId to active result watchers
 isolated map<ResultWatcher> resultWatcherRegistry = {};
 
+# Add a new result watcher to the registry map.
+# 
+# + watcher - the watcher to add
 isolated function addResultWatcherToRegistry(ResultWatcher watcher) {
     lock {
         resultWatcherRegistry[watcher.stepId.toString()] = watcher;
     }
 }
 
+# Get a result watcher from the registry map.
+# 
+# + stepId - the database id of the step (not its sequence number!)
+# + return - the result watcher or an error
 isolated function getResultWatcherFromRegistry(int stepId) returns ResultWatcher|error {
     lock {
         ResultWatcher? w = resultWatcherRegistry[stepId.toString()];
@@ -54,12 +69,22 @@ isolated function getResultWatcherFromRegistry(int stepId) returns ResultWatcher
     }
 }
 
+# Remove a result watcher from the registry map.
+# 
+# + stepId - the database id of the step (not its sequence number!)
+# + return - the removed result watcher or an error
 isolated function removeResultWatcherFromRegistry(int stepId) returns ResultWatcher|error {
     lock {
         return resultWatcherRegistry.remove(stepId.toString());
     }
 }
 
+# Record describing output data of a task result.
+# 
+# + href - the link to the output data
+# + dataType - the data type tag of the output data
+# + contentType - the content type describing the serialization format of the output data
+# + name - the (file-)name of the output data
 type TaskDataOutput record {
     string href;
     string dataType;
@@ -67,6 +92,12 @@ type TaskDataOutput record {
     string? name?;
 };
 
+# Result progress record.
+# 
+# + start - the start value of the progress (defaults to 0)
+# + target - the target value, e.g., the value where the progress is considered 100% done (defaults to 100)
+# + value - the current progress value
+# + unit - the unit the progress is counted in, e.g., %, minutes, steps, error rate, etc. (defaults to "%")
 type Progress record {|
     float? 'start = 0;
     float? target = 100;
@@ -74,6 +105,12 @@ type Progress record {|
     string? unit = "%";
 |};
 
+# Record for timeline substeps.
+#
+# + stepId - the database id of the step this is a substep of (not the sequence number!)
+# + href - the URL to the API endpoint corresponding to that substep
+# + uiHref - the URL of the micro frontend corresponding to that substep
+# + cleared - a boolean flag indicating that this substep is cleared
 public type TimelineSubstep record {|
     string? stepId;
     string href;
@@ -81,6 +118,10 @@ public type TimelineSubstep record {|
     boolean cleared;
 |};
 
+# Helper function to convert `TimelineSubstep` records to db records.
+# 
+# + substep - the input record
+# + return - the mapped record
 isolated function timelineSubstepToDBTimelineSubstep(TimelineSubstep substep)  returns database:TimelineSubstep {
     string? substepId = substep?.stepId;
     string? uiHref =  substep?.uiHref;
@@ -94,6 +135,13 @@ isolated function timelineSubstepToDBTimelineSubstep(TimelineSubstep substep)  r
     return converted;
 }
 
+# Record describing the pending task result and status resource.
+# 
+# + status - a string describing the current task status
+# + taskLog - a human readable log of the task progress
+# + outputs - a list of data outputs once the task is finished
+# + steps - a list of substeps of the current task
+# + progress - the current progress of the task
 type TaskStatusResponse record {
     string status;
     string? taskLog?;
@@ -102,6 +150,7 @@ type TaskStatusResponse record {
     Progress progress?;
 };
 
+# Class containing methods to process the task results with transaction semantics.
 isolated class ResultProcessor {
 
     private final int experimentId;
@@ -132,6 +181,9 @@ isolated class ResultProcessor {
         return isChanged;
     }
 
+    # Save the task log and the progress to the database.
+    # 
+    # + return - any error
     private isolated transactional function saveResultProgressAndLog() returns error? {
         Progress? tmpProgress = self.result?.progress;
         database:Progress? progress = ();
@@ -150,6 +202,9 @@ isolated class ResultProcessor {
         check database:updateTimelineTaskLog(self.stepId, taskLog);
     }
 
+    # Save updates of the steps list in the pending result as substeps in the database.
+    # 
+    # + return - any error
     private isolated transactional function updateResultSubsteps() returns boolean|error {
         TimelineSubstep[]? receivedSubsteps = self.result?.steps;
         
@@ -163,6 +218,9 @@ isolated class ResultProcessor {
         return isChanged;
     }
 
+    # Process the set result as a concluded result, i.e., a finished or failed result.
+    #
+    # + return - an error if processing the result has failed
     public isolated function processResult() returns error? {
         if self.result.status == "SUCCESS" {
             check self.saveSuccessfullResult();
@@ -171,6 +229,11 @@ isolated class ResultProcessor {
         }
     }
 
+    # Reschedule the result watcher on a transaction rollback.
+    # 
+    # + info - the asociated transaction info
+    # + cause - the cause of the transaction rollback
+    # + willRetry - whether the transaction will be retried
     private isolated function rescheduleResultWatcher('transaction:Info info, error? cause, boolean willRetry) {
         io:println("Rolling back the transaction");
         // compensate by rescheduling the result watcher
@@ -186,6 +249,11 @@ isolated class ResultProcessor {
         }
     }
 
+    # Compensate any file creation by deleting the created files again on transaction rollback.
+    # 
+    # + info - the asociated transaction info
+    # + cause - the cause of the transaction rollback
+    # + willRetry - whether the transaction will be retried
     private isolated function compensateFileCreation('transaction:Info info, error? cause, boolean willRetry) {
         io:println("Rolling back the transaction");
         // compensate by deleting unused files
@@ -204,6 +272,9 @@ isolated class ResultProcessor {
         self.rescheduleResultWatcher(info, cause, willRetry);
     }
 
+    # Save a successfull result to the database.
+    # 
+    # + return - any error
     private isolated function saveSuccessfullResult() returns error? {
         var outputs = self.result?.outputs;
 
@@ -230,6 +301,7 @@ isolated class ResultProcessor {
                     }
                     var filename = output?.name;
                     lock {
+                        // save data for compensation action on transaction rollback
                         self.processedOutputs.push({
                             name: filename != () ? filename : fileId,
                             'version: -1,
@@ -265,6 +337,9 @@ isolated class ResultProcessor {
         }
     }
 
+    # Save an error result to the database.
+    # 
+    # + return - any error
     private isolated function saveErrorResult() returns error? {
         transaction {
             'transaction:onRollback(self.rescheduleResultWatcher);
@@ -280,16 +355,23 @@ isolated class ResultProcessor {
     }
 }
 
+# Task to reschedule the result watcher.
+# 
+# This is in an extra task to be able to delay the rescheduling.
 isolated class ResultWatcherRescheduler {
 
     *task:Job;
 
     private final ResultWatcher watcher;
 
+    # Set the result watcher instance that will be rescheduled
+    # 
+    # + watcher - the result watcher to reschedule
     isolated function init(ResultWatcher watcher) {
         self.watcher = watcher;
     }
 
+    # The rescheduling logic.
     public isolated function execute() {
         io:println(string `Reschedule watcher ${self.watcher.stepId} after new substep was found.`);
         // TODO: Probably needs to be changed in the future
@@ -301,6 +383,10 @@ isolated class ResultWatcherRescheduler {
     }
 }
 
+# A background job that polls the configured result endpoint.
+# 
+# The watcher can reschedule itself to be slower if no changes happened for some time.
+# If 5 errors happen for consecutive requests then the watcher will unschedule itself completely.
 public isolated class ResultWatcher {
 
     *task:Job;
@@ -389,6 +475,11 @@ public isolated class ResultWatcher {
         }
     }
 
+    # Unschedule the current repeating task and schedule self again with the new intervall.
+    # 
+    # + interval - the time in seconds
+    # + maxCount - how often the task will be repeated max (-1 for infinite repeats)
+    # + return - any error
     private isolated function reschedule(decimal interval, int maxCount = -1) returns error? {
         error? err = self.unschedule();
 
@@ -474,36 +565,37 @@ public isolated class ResultWatcher {
         }
     }
 
+    # Check the new result resource and handle it according to its status.
+    # 
+    # + result - the result to check
     private isolated function checkTaskResult(TaskStatusResponse result) {
-        if result.status == "UNKNOWN" || result.status == "PENDING" {
-            do {
+        do {
+            if result.status == "UNKNOWN" || result.status == "PENDING" {
                 ResultProcessor processor = new (result, self.experimentId, self.stepId, self.resultEndpoint);
                 boolean isChanged = check processor.processIntermediateResult();
                 if isChanged {
+                    // if new subtasks were found, reschedule to poll more frequently again
                     var _ = check task:scheduleOneTimeJob(new ResultWatcherRescheduler(self), time:utcToCivil(time:utcAddSeconds(time:utcNow(), 1)));
                 }
-            } on fail error e {
-                lock {
-                    self.errorCounter += 1;
-                }
-                io:println(e);
-            }
-        } else {
-            do {
+            } else {
+                // result has concluded/is no longer pending
                 ResultProcessor processor = new (result, self.experimentId, self.stepId, self.resultEndpoint);
                 check processor.processResult();
                 io:println(string `Unschedule watcher ${self.stepId} after result was saved.`);
                 check self.unschedule();
                 _ = check removeResultWatcherFromRegistry(self.stepId);
-            } on fail error e {
-                lock {
-                    self.errorCounter += 1;
-                }
-                io:println(e);
             }
+        } on fail error e {
+            lock {
+                self.errorCounter += 1;
+            }
+            io:println(e);
         }
     }
 
+    # Initialize the result watcher task.
+    # 
+    # + stepId - the database id of the step to watch
     isolated function init(int stepId) returns error? {
         self.errorCounter = 0;
 
@@ -536,6 +628,10 @@ public isolated class ResultWatcher {
     }
 }
 
+# Prepare the storage location and make sure that the folder exists.
+# 
+# + experimentId - the id of the experiment to create a folder for
+# + return - the folder to store experiment data in
 isolated function prepareStorageLocation(int experimentId) returns string|error {
     var relPath = check file:joinPath(storageLocation, string `${experimentId}`);
     var normalizedPath = check file:normalizePath(relPath, file:CLEAN);

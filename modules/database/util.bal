@@ -14,7 +14,10 @@
 
 import ballerina/sql;
 
-
+# Helper function to check the types in a raw query at runtime.
+# 
+# + value - the value to check
+# + return - the cast value or an error
 isolated function checkValue(any|error value) returns sql:Value | error {
     if (value is sql:Value) {
         return value;
@@ -26,6 +29,10 @@ isolated function checkValue(any|error value) returns sql:Value | error {
     }
 }
 
+# Helper function to check and cast all values in an array.
+# 
+# + values - the values to check
+# + return - the cast values or an error
 isolated function checkAllValues((any|error)[] values) returns sql:Value[] | error {
     sql:Value[] result = [];
     foreach var val in values {
@@ -35,7 +42,9 @@ isolated function checkAllValues((any|error)[] values) returns sql:Value[] | err
 }
 
 
-# Custom class that allows concatenating raw templates to dynamically build sql queries
+# Custom class that allows concatenating raw templates to dynamically build sql queries.
+# 
+# **Deprecated**, as there is a function in ballerina that allows this concatenation.
 public class ConcatQuery {
     *sql:ParameterizedQuery;
 
