@@ -50,9 +50,9 @@ configurable string dbUser = "QHAna";
 configurable string dbPassword = "";
 
 # Initialize the database client from the supplied config.
-# 
+#
 # Also reads config from environment variables.
-# 
+#
 # + return - the created client or an error
 function initClient() returns jdbc:Client|error {
     // load config from env vars
@@ -102,7 +102,7 @@ function initClient() returns jdbc:Client|error {
 final jdbc:Client experimentDB = check initClient();
 
 # A record holding a single row count.
-# 
+#
 # + rowCount - the row count
 type RowCount record {
     int rowCount;
@@ -156,7 +156,7 @@ public type ExperimentDataReference record {|
 |};
 
 # Record specifying data and content type tags.
-# 
+#
 # + dataType - the data type (what kind of data)
 # + contentType - the content type or mimetype (how is the data stored)
 type DataTypeTuple record {|
@@ -188,9 +188,8 @@ public type ExperimentDataFull record {|
 
 // Timeline ////////////////////////////////////////////////////////////////////
 
-
 # Database result progress record.
-# 
+#
 # + progressStart - the start value of the progress (defaults to 0)
 # + progressTarget - the target value, e.g., the value where the progress is considered 100% done (defaults to 100)
 # + progressValue - the current progress value
@@ -559,10 +558,8 @@ public isolated transactional function getExperimentDataCount(int experimentId, 
 }
 
 public isolated transactional function getDataTypesSummary(int experimentId) returns map<string[]>|error {
-    var baseQuery = `SELECT DISTINCT type, contentType from ExperimentData WHERE experimentId=${experimentId} GROUP BY type ORDER BY type, contentType;`;
-
     stream<DataTypeTuple, sql:Error?> dataSummaryRaw = experimentDB->query(`SELECT DISTINCT type as dataType, contentType from ExperimentData WHERE experimentId=${experimentId} GROUP BY type ORDER BY type, contentType;`);
-    
+
     map<string[]> dataSummary = {};
     check from var dt in dataSummaryRaw
         do {
@@ -842,7 +839,6 @@ public isolated transactional function getTimelineStep(int? experimentId = (), i
 
     return error(string `Timeline step with reference ${ref.toString()} was not found!`);
 }
-
 
 public isolated transactional function updateTimelineStepStatus(int|TimelineStepFull step, string status, string? resultLog) returns error? {
     var stepId = step is int ? step : step.stepId;
