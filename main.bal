@@ -288,17 +288,19 @@ service / on new http:Listener(serverPort) {
     # + page - the requested page (starting with page 0)
     # + 'item\-count - the number of items per page (5 <= item-count <= 500)
     # + return - the list resource containing the experiments
-    resource function get experiments(int page=0, int 'item\-count=10) returns ExperimentListResponse|http:InternalServerError|http:BadRequest|http:NotFound {
+    resource function get experiments(int? page=0, int? 'item\-count=10) returns ExperimentListResponse|http:InternalServerError|http:BadRequest|http:NotFound {
+        int intPage = (page is ()) ? 0 : page;
+        int itemCount = (item\-count is ()) ? 10 : item\-count;
 
-        if (page < 0) {
+        if (intPage < 0) {
             return <http:BadRequest>{body: "Cannot retrieve a negative page number!"};
         }
 
-        if (item\-count < 5 || item\-count > 500) {
+        if (itemCount < 5 || itemCount > 500) {
             return <http:BadRequest>{body: "Item count must be between 5 and 500 (both inclusive)!"};
         }
 
-        var offset = page*item\-count;
+        var offset = intPage*itemCount;
 
         int experimentCount;
         database:ExperimentFull[] experiments;
@@ -310,7 +312,7 @@ service / on new http:Listener(serverPort) {
                 check commit;
                 return <http:NotFound>{};
             } else {
-                experiments = check database:getExperiments('limit=item\-count, offset=offset);
+                experiments = check database:getExperiments('limit=itemCount, offset=offset);
                 check commit;
             }
         } on fail error err {
