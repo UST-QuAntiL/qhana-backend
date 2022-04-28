@@ -741,7 +741,7 @@ service / on new http:Listener(serverPort) {
                 select checkpanic mapFileUrlToDataRef(experimentId, inputUrl); // FIXME move back to check if https://github.com/ballerina-platform/ballerina-lang/issues/34894 is resolved
             step = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep);
             // verify that substep is in database
-            substep = check database:getTimelineSubstepWithParams(step.stepId, substepNr);
+            substep = check database:getTimelineSubstepWithParams(experimentId, timelineStep, substepNr);
             // save input data and update progress
             check database:saveTimelineSubstepParams(step.stepId, substepNr, substepData.parameters, substepData.parametersContentType);
             check database:saveTimelineSubstepInputData(step.stepId, substepNr, experimentId, inputData);
@@ -779,8 +779,7 @@ service / on new http:Listener(serverPort) {
         database:TimelineSubstepSQL[] steps;
 
         transaction {
-            // FIXME timelineStep != database step id!!!!
-            steps = check database:getTimelineSubsteps(timelineStep);
+            steps = check database:getTimelineSubsteps(timelineStep, experimentId);
             check commit;
         } on fail error err {
             io:println(err);
@@ -803,7 +802,7 @@ service / on new http:Listener(serverPort) {
 
         transaction {
             // FIXME timelineStep != database step id!!!!
-            step = check database:getTimelineSubstepWithParams(timelineStep, substepNr);
+            step = check database:getTimelineSubstepWithParams(experimentId, timelineStep, substepNr);
             inputData = check database:getSubstepInputData(step.stepId, step.substepNr);
             check commit;
         } on fail error err {
@@ -822,7 +821,7 @@ service / on new http:Listener(serverPort) {
 
         transaction {
             // FIXME timelineStep != database step id!!!!
-            step = check database:getTimelineSubstepWithParams(timelineStep, substepNr);
+            step = check database:getTimelineSubstepWithParams(experimentId, timelineStep, substepNr);
             check commit;
         } on fail error err {
             io:println(err);

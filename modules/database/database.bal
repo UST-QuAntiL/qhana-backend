@@ -1011,11 +1011,23 @@ public isolated transactional function deleteTimelineStepResultWatcher(int stepI
     );
 }
 
-public isolated transactional function getTimelineSubsteps(int stepId) returns TimelineSubstepSQL[]|error {
+public isolated transactional function getTimelineSubsteps(int stepId, int? experimentId=()) returns TimelineSubstepSQL[]|error {
 
-    stream<TimelineSubstepSQL, sql:Error?> substeps = experimentDB->query(
-        `SELECT stepId, substepNr, substepId, href, hrefUi, cleared FROM TimelineSubstep WHERE stepId=${stepId} ORDER BY substepNr ASC;`
-    );
+    stream<TimelineSubstepSQL, sql:Error?> substeps;
+    if (experimentId is ()) {
+        // experimentId is nil, use stepId as database id
+        substeps = experimentDB->query(
+            `SELECT stepId, substepNr, substepId, href, hrefUi, cleared FROM TimelineSubstep WHERE stepId=${stepId} ORDER BY substepNr ASC;`
+        );
+    } else {
+        // experimentId was given, use stepId as step sequence
+        substeps = experimentDB->query(
+            `SELECT 
+                    TimelineSubstep.stepId, substepNr, substepId, href, hrefUi, cleared
+                FROM TimelineSubstep JOIN TimelineStep ON TimelineSubstep.stepId=TimelineStep.stepId
+                WHERE TimelineStep.experimentId=${experimentId} AND TimelineStep.sequence=${stepId} ORDER BY substepNr ASC;`
+        );
+    }
     TimelineSubstepSQL[]|error|() result = check from var substep in substeps
         select substep;
     check substeps.close();
@@ -1078,10 +1090,13 @@ public isolated transactional function getTimelineSubstep(int stepId, int subste
     }
 }
 
-public isolated transactional function getTimelineSubstepWithParams(int stepId, int substepNr) returns TimelineSubstepWithParams|error {
+public isolated transactional function getTimelineSubstepWithParams(int experimentId, int stepSequence, int substepNr) returns TimelineSubstepWithParams|error {
     // as in getTimelineStep
     stream<TimelineSubstepWithParams, sql:Error?> substeps = experimentDB->query(
-        `SELECT stepId, substepNr, substepId, href, hrefUi, cleared, parameters, parametersContentType FROM TimelineSubstep WHERE stepId=${stepId} AND substepNr=${substepNr};`
+        `SELECT 
+                TimelineSubstep.stepId, substepNr, substepId, href, hrefUi, cleared, TimelineSubstep.parameters, TimelineSubstep.parametersContentType 
+            FROM TimelineSubstep JOIN TimelineStep ON TimelineSubstep.stepId=TimelineStep.stepId
+            WHERE TimelineStep.experimentId=${experimentId} AND TimelineStep.sequence=${stepSequence} AND substepNr=${substepNr};`
     );
     var result = substeps.next();
     check substeps.close();
@@ -1091,7 +1106,7 @@ public isolated transactional function getTimelineSubstepWithParams(int stepId, 
     } else if result is error {
         return result;
     } else {
-        return error("Could not find timeline substep with step id " + stepId.toString() + " and substep number " + substepNr.toString());
+        return error("Could not find timeline substep with experimentId " + experimentId.toString() + " step sequence " + stepSequence.toString() + " and substep number " + substepNr.toString());
     }
 }
 
