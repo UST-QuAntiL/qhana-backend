@@ -696,6 +696,35 @@ service / on new http:Listener(serverPort) {
         return <http:Ok>{};
     }
 
+    resource function get experiments/[int experimentId]/timeline/[int timelineStep]/parameters(http:Caller caller) returns error? {
+        database:TimelineStepWithParams result;
+
+        http:Response resp = new;
+
+        transaction {
+            result = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep);
+            check commit;
+        } on fail error err {
+            io:println(err);
+
+            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+            resp.setPayload("Something went wrong. Please try again later.");
+
+            check caller->respond(resp);
+        }
+
+        resp.statusCode = http:STATUS_OK;
+        var cType = result.parametersContentType;
+        if cType.startsWith("text/") || cType.startsWith("application/json") || cType.startsWith("application/X-lines+json") {
+            resp.addHeader("Content-Disposition", "inline; filename=\"parameters\"");
+        } else {
+            resp.addHeader("Content-Disposition", "attachment; filename=\"parameters\"");
+        }
+        resp.setTextPayload(result.parameters, contentType = result.parametersContentType);
+
+        check caller->respond(resp);
+    }
+
     # Post the user input data associated with an unfinished timeline substep.
     # 
     # + experimentId - the id of the experiment
@@ -750,6 +779,7 @@ service / on new http:Listener(serverPort) {
         database:TimelineSubstepSQL[] steps;
 
         transaction {
+            // FIXME timelineStep != database step id!!!!
             steps = check database:getTimelineSubsteps(timelineStep);
             check commit;
         } on fail error err {
@@ -772,6 +802,7 @@ service / on new http:Listener(serverPort) {
         database:ExperimentDataReference[] inputData;
 
         transaction {
+            // FIXME timelineStep != database step id!!!!
             step = check database:getTimelineSubstepWithParams(timelineStep, substepNr);
             inputData = check database:getSubstepInputData(step.stepId, step.substepNr);
             check commit;
@@ -782,6 +813,36 @@ service / on new http:Listener(serverPort) {
             return resultErr;
         }
         return mapToTimelineSubstepResponse(experimentId, step, inputData);
+    }
+
+    resource function get experiments/[int experimentId]/timeline/[int timelineStep]/substeps/[int substepNr]/parameters(http:Caller caller) returns error? {
+        database:TimelineSubstepWithParams step;
+
+        http:Response resp = new;
+
+        transaction {
+            // FIXME timelineStep != database step id!!!!
+            step = check database:getTimelineSubstepWithParams(timelineStep, substepNr);
+            check commit;
+        } on fail error err {
+            io:println(err);
+
+            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+            resp.setPayload("Something went wrong. Please try again later.");
+
+            check caller->respond(resp);
+        }
+
+        resp.statusCode = http:STATUS_OK;
+        var cType = step.parametersContentType;
+        if cType.startsWith("text/") || cType.startsWith("application/json") || cType.startsWith("application/X-lines+json") {
+            resp.addHeader("Content-Disposition", "inline; filename=\"parameters\"");
+        } else {
+            resp.addHeader("Content-Disposition", "attachment; filename=\"parameters\"");
+        }
+        resp.setTextPayload(step.parameters, contentType = step.parametersContentType);
+
+        check caller->respond(resp);
     }
 }
 

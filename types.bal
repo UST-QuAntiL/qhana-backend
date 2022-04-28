@@ -226,6 +226,7 @@ public type TimelineStepPost record {|
 # + processorName - the plugin name processing the request
 # + processorVersion - the plugin version
 # + processorLocation - the root URL of the plugin
+# + parameters - a link to the parameters
 # + parametersContentType - the parameter encoding content type
 public type TimelineStepMinResponse record {|
     *ApiResponse;
@@ -238,6 +239,7 @@ public type TimelineStepMinResponse record {|
     string processorName;
     string? processorVersion = ();
     string? processorLocation = ();
+    string parameters;
     string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
     *database:Progress;
 |};
@@ -245,7 +247,6 @@ public type TimelineStepMinResponse record {|
 # The full timeline step record.
 #
 # + resultLog - the result log present in the pending plugin result
-# + parameters - the input parameters used for this plugin invocation
 # + inputData - the input data used (also part of the input parameters)
 # + inputDataLinks - links to the input data
 # + outputData - the output data of the timeline step
@@ -254,7 +255,6 @@ public type TimelineStepMinResponse record {|
 public type TimelineStepResponse record {|
     *TimelineStepMinResponse;
     string resultLog;
-    string parameters;
     database:ExperimentDataReference[] inputData;
     string[] inputDataLinks;
     database:ExperimentDataReference[] outputData;
@@ -358,6 +358,7 @@ public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull 
         processorName: step.processorName,
         processorVersion: step.processorVersion,
         processorLocation: step.processorLocation,
+        parameters: string `/experiments/${step.experimentId}/timeline/${step.sequence}/parameters`,
         parametersContentType: step.parametersContentType,
         progressValue: step.progressValue,
         progressStart: step.progressStart,
@@ -398,7 +399,7 @@ public isolated function mapToTimelineStepResponse(
         processorVersion: step.processorVersion,
         processorLocation: step.processorLocation,
         parametersContentType: step.parametersContentType,
-        parameters: step?.parameters,
+        parameters: string `/experiments/${step.experimentId}/timeline/${step.sequence}/parameters`,
         inputData: inputData,
         inputDataLinks: inputDataLinks,
         outputData: outputData,
