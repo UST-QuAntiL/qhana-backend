@@ -115,8 +115,8 @@ public isolated transactional function cloneTimelineStepSimple(int newExperiment
     if newTimelineStepId !is int || newTimelineStepId < 0 {
         fail error("Cloning of TimelineStep with (old) id " + oldTimelineStepId.toString() + " unsuccessful [oldExperimentId: " + oldExperimentId.toString() + ", newExperimentId: " + newExperimentId.toString() + "]!");
     } else {
-        io:print(`Old TimelineStepID: ${oldTimelineStepId}\n`); // TODO: remove
-        io:print(`New TimelineStepID: ${newTimelineStepId}\n`); // TODO: remove
+        io:println("Old TimelineStepID: " + oldTimelineStepId.toString()); // TODO: remove
+        io:println("New TimelineStepID: " + newTimelineStepId.toString()); // TODO: remove
         return newTimelineStepId;
     }
 }
