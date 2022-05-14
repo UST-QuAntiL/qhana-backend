@@ -221,8 +221,8 @@ public isolated transactional function cloneTimelineStepComplex(int newExperimen
 # + return - record with details about created zip files or error
 public isolated transactional function exportExperiment(int experimentId, ExperimentExportConfig config) returns ExperimentExportZip|error {
 
-    string zipFilename;
-    string zipFileLocation;
+    string zipFilename = "";
+    string zipFileLocation = "";
 
     // experiment file(s?)
     // TODO: extract all (relevant?) data of the experiment (probably as json) -> needs to contain all relevant info for reconstruction in import
@@ -243,5 +243,5 @@ public isolated transactional function exportExperiment(int experimentId, Experi
     // TODO: add all files (experiment file(s) + data files) to ZIP
 
     ExperimentExportZip exportResult = {name: zipFilename, location: zipFileLocation};
-    return exportResult
+    return exportResult;
 }
