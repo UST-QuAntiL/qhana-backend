@@ -889,8 +889,49 @@ service / on new http:Listener(serverPort) {
         }
 
         resp.statusCode = http:STATUS_OK;
-        resp.addHeader("Content-Disposition", string `attachment; filename="${experimentZip.name}"`);        
+        resp.addHeader("Content-Disposition", string `attachment; filename="${experimentZip.name}"`);
         resp.setFileAsPayload(experimentZip.location, contentType = "application/zip");
+
+        check caller->respond(resp);
+    }
+
+    # Import an experiment from a zip.
+    #
+    # + return - the cloned experiment resource
+    @http:ResourceConfig {
+        consumes: ["application/json"]
+    }
+    resource function get experiments/export/[int experimentId](@http:Payload database:ExperimentExportConfig exportConfig, http:Caller caller) returns error? {
+        database:ExperimentExportZip experimentZip;
+        http:Response resp = new;
+        transaction {
+            experimentZip = check database:exportExperiment(experimentId, exportConfig);
+            check commit;
+        } on fail error err {
+            io:println(err);
+
+            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+            resp.setPayload("Something went wrong. Please try again later.");
+
+            check caller->respond(resp);
+        }
+
+        resp.statusCode = http:STATUS_OK;
+        resp.addHeader("Content-Disposition", string `attachment; filename="${experimentZip.name}"`);
+        resp.addHeader("Content-Length", experimentZip.fileLength.toString());
+        
+        // TODO: probably need to write zip file as bytestream...
+        byte[]|io:Error zipStream = check io:fileReadBytes(experimentZip.location);
+
+        if zipStream !is error {
+            resp.setPayload(zipStream, contentType = "application/zip");
+
+        } else {
+            io:println(zipStream);
+            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+            resp.setPayload("Something went wrong. Please try again later.");
+            check caller->respond(resp);
+        }
 
         check caller->respond(resp);
     }

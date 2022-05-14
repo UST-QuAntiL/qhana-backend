@@ -196,9 +196,11 @@ public type ExperimentExportConfig record {|
 #
 # + name - the (file-)name of the experiment zip
 # + location - the path where the data is stored
+# + fileLength - length of file
 public type ExperimentExportZip record {|
     string name;
     string location;
+    int fileLength;
 |};
 
 // Timeline ////////////////////////////////////////////////////////////////////
