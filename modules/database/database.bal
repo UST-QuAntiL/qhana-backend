@@ -186,6 +186,21 @@ public type ExperimentDataFull record {|
     *ExperimentData;
 |};
 
+# Record describing the export configuration for exporting an experiment.
+#
+public type ExperimentExportConfig record {|
+    string test; //TODO
+|};
+
+# Experiment export record for exporting experiments as a zip.
+#
+# + name - the (file-)name of the experiment zip
+# + location - the path where the data is stored
+public type ExperimentExportZip record {|
+    string name;
+    string location;
+|};
+
 // Timeline ////////////////////////////////////////////////////////////////////
 
 # Database result progress record.
@@ -1007,7 +1022,7 @@ public isolated transactional function deleteTimelineStepResultWatcher(int stepI
     );
 }
 
-public isolated transactional function getTimelineSubsteps(int stepId, int? experimentId=()) returns TimelineSubstepSQL[]|error {
+public isolated transactional function getTimelineSubsteps(int stepId, int? experimentId = ()) returns TimelineSubstepSQL[]|error {
 
     stream<TimelineSubstepSQL, sql:Error?> substeps;
     if (experimentId is ()) {

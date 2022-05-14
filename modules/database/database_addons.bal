@@ -213,3 +213,35 @@ public isolated transactional function cloneTimelineStepComplex(int newExperimen
         io:println("ExperimentId " + newExperimentId.toString() + ": cloned " + counter.toString() + " substeps.");
     }
 }
+
+# Prepare zip file for export of an experiment.
+#
+# + experimentId - experiment id of the new (cloned) experiment
+# + config - export configuration
+# + return - record with details about created zip files or error
+public isolated transactional function exportExperiment(int experimentId, ExperimentExportConfig config) returns ExperimentExportZip|error {
+
+    string zipFilename;
+    string zipFileLocation;
+
+    // experiment file(s?)
+    // TODO: extract all (relevant?) data of the experiment (probably as json) -> needs to contain all relevant info for reconstruction in import
+    // TODO: one file or three (JSON) files?
+    //      - Experiment
+    //      - list of TimelineSteps 
+    //          - StepData (points to ExperimentData -> include keys)
+    //          - list of TimelineSubsteps
+    //              - SubstepData (points to Experimentdata -> include keys)
+    //      - list of ExperimentData
+
+    // TODO: create index file containing info about all files in zip? maybe not necessary as structure is pre-defined and implicit via file links in experiment data?
+
+    // data files
+    // TODO: create list of all files in list of ExperimentData
+
+    // create zip
+    // TODO: add all files (experiment file(s) + data files) to ZIP
+
+    ExperimentExportZip exportResult = {name: zipFilename, location: zipFileLocation};
+    return exportResult
+}

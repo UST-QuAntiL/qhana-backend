@@ -17,6 +17,7 @@ import ballerina/io;
 import ballerina/regex;
 import ballerina/os;
 import qhana_backend.database;
+import ballerina/mime;
 
 // start configuration values
 # List of domains that are allowed CORS requests to the backend.
@@ -862,6 +863,36 @@ service / on new http:Listener(serverPort) {
         }
 
         return mapToExperimentResponse(result);
+    }
+
+    # Export an experiment as a zip.
+    #
+    # + experimentId - the id of the experiment to be cloned
+    # + exportConfig - configuration of export
+    # + return - the cloned experiment resource
+    @http:ResourceConfig {
+        consumes: ["application/json"]
+    }
+    resource function get experiments/export/[int experimentId](@http:Payload database:ExperimentExportConfig exportConfig, http:Caller caller) returns error? {
+        database:ExperimentExportZip experimentZip;
+        http:Response resp = new;
+        transaction {
+            experimentZip = check database:exportExperiment(experimentId, exportConfig);
+            check commit;
+        } on fail error err {
+            io:println(err);
+
+            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+            resp.setPayload("Something went wrong. Please try again later.");
+
+            check caller->respond(resp);
+        }
+
+        resp.statusCode = http:STATUS_OK;
+        resp.addHeader("Content-Disposition", string `attachment; filename="${experimentZip.name}"`);        
+        resp.setFileAsPayload(experimentZip.location, contentType = "application/zip");
+
+        check caller->respond(resp);
     }
 }
 
