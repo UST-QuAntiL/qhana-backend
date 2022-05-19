@@ -21,7 +21,7 @@ import qhana_backend.database;
 // start configuration values
 # List of domains that are allowed CORS requests to the backend.
 # Can also be configured by setting the `QHANA_CORS_DOMAINS` environment variable.
-configurable string[] corsDomains = ["http://localhost:4200"];
+configurable string[] corsDomains = ["*"];
 
 # Get the port from the `QHANA_CORS_DOMAINS` environment variable.
 # If not present use the configurable variable `corsDomains` as fallback.
