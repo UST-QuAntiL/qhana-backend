@@ -20,6 +20,23 @@ public type IdSQL record {|
     int id;
 |};
 
+# Get experiment info
+#
+# + experimentId - experiment id
+# + return - experiment info
+public isolated transactional function getExperimentInfo(int experimentId) returns Experiment|error {
+    Experiment experimentInfo;
+    stream<record {|string name; string description;|}, sql:Error?> experimentResult = experimentDB->query(`SELECT name, description FROM Experiment WHERE experimentId=${experimentId};`);
+    var experiment = experimentResult.next();
+    check experimentResult.close();
+
+    if experiment is record {record {string name; string description;} value;} {
+        return {name: experiment.value.name, description: experiment.value.description};
+    } else {
+        return error(string `[experimentId ${experimentId}] Query to Experiment table unsuccessful.`);
+    }
+}
+
 # Clones an experiment in the database.
 #
 # + oldExperimentId - experiment id of the experiment that is to be cloned
@@ -307,10 +324,15 @@ public isolated transactional function exportExperiment(int experimentId, Experi
     string zipFileLocation = "";
     int fileLength = 0;
 
+    Experiment experiment;
+    TimelineStepExport[] timelineSteps = [];
+    ExperimentData[] experimentDataList = [];
+
     // experiment file(s?)
     // TODO: extract all (relevant?) data of the experiment (probably as json) -> needs to contain all relevant info for reconstruction in import
     // TODO: one file or three (JSON) files?
     //      - Experiment
+    experiment = check getExperimentInfo(experimentId);
     //          - name
     //          - description
     //      - list of TimelineSteps 
@@ -320,6 +342,12 @@ public isolated transactional function exportExperiment(int experimentId, Experi
     //      - list of ExperimentData
 
     // TODO: create index file containing info about all files in zip? maybe not necessary as structure is pre-defined and implicit via file links in experiment data?
+
+    ExperimentCompleteExport experimentComplete = {
+        experiment: experiment,
+        timelineSteps: timelineSteps,
+        experimentDataList: experimentDataList
+    };
 
     // data files
     // TODO: create list of all files in list of ExperimentData
