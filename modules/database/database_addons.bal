@@ -45,20 +45,9 @@ public isolated transactional function cloneExperiment(int oldExperimentId) retu
     ExperimentFull? result = ();
 
     // clone experiment
-    string experimentName;
-    string experimentDescription;
-    stream<record {|string name; string description;|}, sql:Error?> experimentResult = experimentDB->query(`SELECT name, description FROM Experiment WHERE experimentId=${oldExperimentId};`);
-    var experiment = experimentResult.next();
-    check experimentResult.close();
-
-    if experiment is record {record {string name; string description;} value;} {
-        experimentName = experiment.value.name + " - Copy";
-        experimentDescription = experiment.value.description;
-    } else {
-        return error(string `[experimentId ${oldExperimentId}] Error in cloning. Query to Experiment table unsuccessful.`);
-    }
+    Experiment experimentInfo = check getExperimentInfo(oldExperimentId);
     var experimentInsertResult = check experimentDB->execute(
-        `INSERT INTO Experiment (name, description) VALUES (${experimentName}, ${experimentDescription});`
+        `INSERT INTO Experiment (name, description) VALUES (${experimentInfo.name}, ${experimentInfo.description});`
     );
 
     // extract experiment id and build full experiment data
@@ -66,7 +55,7 @@ public isolated transactional function cloneExperiment(int oldExperimentId) retu
     if newExperimentId !is int {
         fail error("Expected integer id but got a string or Nil!");
     } else {
-        result = {experimentId: newExperimentId, name: experimentName, description: experimentDescription};
+        result = {experimentId: newExperimentId, name: experimentInfo.name, description: experimentInfo.description};
 
         io:println(string `[experimentId ${oldExperimentId}] Cloned experiment has experimentId ${newExperimentId}`); // TODO: remove
 
