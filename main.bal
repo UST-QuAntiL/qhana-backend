@@ -17,7 +17,6 @@ import ballerina/io;
 import ballerina/regex;
 import ballerina/os;
 import qhana_backend.database;
-import ballerina/mime;
 
 // start configuration values
 # List of domains that are allowed CORS requests to the backend.
