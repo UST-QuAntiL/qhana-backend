@@ -849,12 +849,6 @@ service / on new http:Listener(serverPort) {
     #
     # + experimentId - the id of the experiment to be cloned
     # + return - the cloned experiment resource
-<<<<<<< HEAD
-    @http:ResourceConfig {
-        consumes: ["application/json"]
-    }
-=======
->>>>>>> feature/clone-experiments
     resource function post experiments/[int experimentId]/clone() returns ExperimentResponse|http:InternalServerError {
         database:ExperimentFull result;
         transaction {
