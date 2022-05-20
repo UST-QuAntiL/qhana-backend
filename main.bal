@@ -493,6 +493,9 @@ service / on new http:Listener(serverPort) {
         database:ExperimentDataFull data;
 
         http:Response resp = new;
+        resp.addHeader("Access-Control-Allow-Origin", "*");
+        resp.addHeader("Access-Control-Allow-Methods", "OPTIONS, GET");
+        resp.addHeader("Access-Control-Allow-Headers", "Content-Type, Depth, User-Agent, X-File-Size, X-Requested-With, If-Modified-Since, X-File-Name, Cache-ControlAccess-Control-Allow-Origin");
 
         transaction {
             data = check database:getData(experimentId, name, 'version);
@@ -700,6 +703,9 @@ service / on new http:Listener(serverPort) {
         database:TimelineStepWithParams result;
 
         http:Response resp = new;
+        resp.addHeader("Access-Control-Allow-Origin", "*");
+        resp.addHeader("Access-Control-Allow-Methods", "OPTIONS, GET");
+        resp.addHeader("Access-Control-Allow-Headers", "Content-Type, Depth, User-Agent, X-File-Size, X-Requested-With, If-Modified-Since, X-File-Name, Cache-ControlAccess-Control-Allow-Origin");
 
         transaction {
             result = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep);
@@ -818,6 +824,9 @@ service / on new http:Listener(serverPort) {
         database:TimelineSubstepWithParams step;
 
         http:Response resp = new;
+        resp.addHeader("Access-Control-Allow-Origin", "*");
+        resp.addHeader("Access-Control-Allow-Methods", "OPTIONS, GET");
+        resp.addHeader("Access-Control-Allow-Headers", "Content-Type, Depth, User-Agent, X-File-Size, X-Requested-With, If-Modified-Since, X-File-Name, Cache-ControlAccess-Control-Allow-Origin");
 
         transaction {
             // FIXME timelineStep != database step id!!!!
