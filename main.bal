@@ -852,10 +852,10 @@ service / on new http:Listener(serverPort) {
     @http:ResourceConfig {
         consumes: ["application/json"]
     }
-    resource function post experiments/[int experimentId]/clone(@http:Payload database:Experiment experiment) returns ExperimentResponse|http:InternalServerError {
+    resource function post experiments/[int experimentId]/clone() returns ExperimentResponse|http:InternalServerError {
         database:ExperimentFull result;
         transaction {
-            result = check database:cloneExperiment(experimentId, experiment);
+            result = check database:cloneExperiment(experimentId);
             check commit;
         } on fail error err {
             io:println(err);
