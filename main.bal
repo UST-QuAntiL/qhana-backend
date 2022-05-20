@@ -852,7 +852,7 @@ service / on new http:Listener(serverPort) {
     @http:ResourceConfig {
         consumes: ["application/json"]
     }
-    resource function post experiments/clone/[int experimentId](@http:Payload database:Experiment experiment) returns ExperimentResponse|http:InternalServerError {
+    resource function post experiments/[int experimentId]/clone(@http:Payload database:Experiment experiment) returns ExperimentResponse|http:InternalServerError {
         database:ExperimentFull result;
         transaction {
             result = check database:cloneExperiment(experimentId, experiment);
@@ -901,7 +901,7 @@ service / on new http:Listener(serverPort) {
     @http:ResourceConfig {
         consumes: ["application/json"]
     }
-    resource function get experiments/export/[int experimentId](@http:Payload database:ExperimentExportConfig exportConfig, http:Caller caller) returns error? {
+    resource function get experiments/import/[int experimentId](@http:Payload database:ExperimentExportConfig exportConfig, http:Caller caller) returns error? {
         database:ExperimentExportZip experimentZip;
         http:Response resp = new;
         transaction {
@@ -919,7 +919,7 @@ service / on new http:Listener(serverPort) {
         resp.statusCode = http:STATUS_OK;
         resp.addHeader("Content-Disposition", string `attachment; filename="${experimentZip.name}"`);
         resp.addHeader("Content-Length", experimentZip.fileLength.toString());
-        
+
         // TODO: probably need to write zip file as bytestream...
         byte[]|io:Error zipStream = check io:fileReadBytes(experimentZip.location);
 
