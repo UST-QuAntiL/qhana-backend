@@ -22,7 +22,6 @@ public type IdSQL record {|
 # Clones an experiment in the database.
 #
 # + oldExperimentId - experiment id of the experiment that is to be cloned
-# + experiment - The data for the new experiment
 # + return - The experiment data including the database id or the encountered error
 public isolated transactional function cloneExperiment(int oldExperimentId) returns ExperimentFull|error {
     ExperimentFull? result = ();
@@ -38,7 +37,7 @@ public isolated transactional function cloneExperiment(int oldExperimentId) retu
         experimentName = experiment.value.name + " - Copy";
         experimentDescription = experiment.value.description;
     } else {
-        return error(string `Tried to clone experiment with id ${oldExperimentId}. Query to Experiment table unsuccessful.\n`);
+        return error(string `[experimentId ${oldExperimentId}] Error in cloning. Query to Experiment table unsuccessful.`);
     }
     var experimentInsertResult = check experimentDB->execute(
         `INSERT INTO Experiment (name, description) VALUES (${experimentName}, ${experimentDescription});`
@@ -51,10 +50,10 @@ public isolated transactional function cloneExperiment(int oldExperimentId) retu
     } else {
         result = {experimentId: newExperimentId, name: experimentName, description: experimentDescription};
 
-        io:print(`New ExperimentId: ${newExperimentId}\n`); // TODO: remove
+        io:println(string `[experimentId ${oldExperimentId}] Cloned experiment has experimentId ${newExperimentId}`); // TODO: remove
 
         // map old experimentData ids to new (cloned) to avoid duplication
-        map<int> experimentDataMapping = {};
+        map<int> oldDataIdToNewDataId = {};
 
         // clone timeline steps
         stream<record {|int stepId;|}, sql:Error?> timelineStepResult = experimentDB->query(`SELECT stepId FROM TimelineStep WHERE experimentId=${oldExperimentId};`);
@@ -64,9 +63,9 @@ public isolated transactional function cloneExperiment(int oldExperimentId) retu
             int counter = 0;
             foreach var oldTimelineStepId in timelineStepList {
                 counter += 1;
-                _ = check cloneTimelineStepComplex(newExperimentId, oldExperimentId, oldTimelineStepId, experimentDataMapping);
+                _ = check cloneTimelineStepComplex(newExperimentId, oldExperimentId, oldTimelineStepId, oldDataIdToNewDataId);
             }
-            io:println("ExperimentId " + newExperimentId.toString() + ": cloned " + counter.toString() + " steps.");
+            io:println(string `[ExperimentId ${newExperimentId}] Cloned ${counter} TimelineSteps.`);
         }
         if result == () {
             // this should logically never happen but is included for the compiler
@@ -81,14 +80,14 @@ public isolated transactional function cloneExperiment(int oldExperimentId) retu
 #
 # Checks if item is already cloned (in mapping of old/new ids). If not the item is cloned and added to the mapping
 #
-# + experimentDataMapping - mutable mapping of old ExperimentData item ids to new experiment data ids to check if new experiment data needs to be created or not
+# + oldDataIdToNewDataId - mutable mapping of old ExperimentData item ids to new experiment data ids to check if new experiment data needs to be created or not
 # + dataId - id of old ExperimentData item that is to be cloned
 # + newExperimentId - experiment id of the new (cloned) experiment
 # + oldExperimentId - experiment id of the experiment that is being cloned
 # + return - The new (cloned) ExperimentData id or the encountered error
-public isolated transactional function cloneExperimentData(map<int> experimentDataMapping, int dataId, int newExperimentId, int oldExperimentId) returns int|error {
+public isolated transactional function cloneExperimentData(map<int> oldDataIdToNewDataId, int dataId, int newExperimentId, int oldExperimentId) returns int|error {
     // TODO: deep copy?
-    int? clonedExperimentDataId = experimentDataMapping[dataId.toString()];
+    int? clonedExperimentDataId = oldDataIdToNewDataId[dataId.toString()];
     if clonedExperimentDataId is () {
         // not cloned yet => clone experiment data 
         var experimentDataInsertResult = check experimentDB->execute(
@@ -100,7 +99,10 @@ public isolated transactional function cloneExperimentData(map<int> experimentDa
         // add to mapping
         var newExperimentDataId = experimentDataInsertResult.lastInsertId;
         if newExperimentDataId is int {
-            experimentDataMapping[dataId.toString()] = newExperimentDataId;
+            lock {
+                oldDataIdToNewDataId[dataId.toString()] = newExperimentDataId;
+            }
+            io:println(string `[experimentId ${oldExperimentId}, dataId ${dataId}] Cloned ExperimentData. Cloned ExperimentData has dataId ${newExperimentDataId}.`); // TODO: remove
             return newExperimentDataId;
         } else {
             fail error("Expected the experimentData id back but got nothing or Nil!");
@@ -127,8 +129,7 @@ public isolated transactional function cloneTimelineStepSimple(int newExperiment
     if newTimelineStepId !is int || newTimelineStepId < 0 {
         fail error("Cloning of TimelineStep with (old) id " + oldTimelineStepId.toString() + " unsuccessful [oldExperimentId: " + oldExperimentId.toString() + ", newExperimentId: " + newExperimentId.toString() + "]!");
     } else {
-        io:println("Old TimelineStepID: " + oldTimelineStepId.toString()); // TODO: remove
-        io:println("New TimelineStepID: " + newTimelineStepId.toString()); // TODO: remove
+        io:println(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloned TimelineStep has id ${newTimelineStepId}.`); // TODO: remove
         return newTimelineStepId;
     }
 }
@@ -140,9 +141,9 @@ public isolated transactional function cloneTimelineStepSimple(int newExperiment
 # + oldTimelineStepId - step id of (old) timeline step that is to be cloned
 # + newTimelineStepId - step id of (new, target) timeline step in cloning
 # + oldTimelineSubstepNr - substep nr of (old) timeline step that is to be cloned
-# + experimentDataMapping - mutable mapping of old ExperimentData item ids to new experiment data ids to check if new experiment data needs to be created or not
+# + oldDataIdToNewDataId - mutable mapping of old ExperimentData item ids to new experiment data ids to check if new experiment data needs to be created or not
 # + return - The new (cloned) timeline step id or the encountered error
-public isolated transactional function cloneTimelineSubstepComplex(int newExperimentId, int oldExperimentId, int oldTimelineStepId, map<int> experimentDataMapping, int newTimelineStepId, int oldTimelineSubstepNr) returns ()|error {
+public isolated transactional function cloneTimelineSubstepComplex(int newExperimentId, int oldExperimentId, int oldTimelineStepId, map<int> oldDataIdToNewDataId, int newTimelineStepId, int oldTimelineSubstepNr) returns ()|error {
     // clone timeline substep
     var timelineSubstepInsertResult = check experimentDB->execute(
         `INSERT INTO TimelineSubstep (stepId, substepNr, substepId, href, hrefUi, cleared, parameters, parametersContentType)
@@ -152,17 +153,18 @@ public isolated transactional function cloneTimelineSubstepComplex(int newExperi
     );
     var rowCount = timelineSubstepInsertResult.affectedRowCount;
     if rowCount == () || rowCount < 1 {
-        fail error("Cloning of TimelineSubstep with (old) timeline step id " + oldTimelineStepId.toString() + " and substepNr " + oldTimelineSubstepNr.toString() + " unsuccessful!");
+        fail error(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloning of TimelineSubstep with substepNr ${oldTimelineSubstepNr} unsuccessful!`);
     }
+    io:println(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloned substep with substepNr ${oldTimelineSubstepNr}.`); // TODO remove
 
-    // find and clone associated substepData // TODO: more than one or just one, for now don't care
+    // find and clone associated substepData
     stream<record {|int id; int dataId;|}, sql:Error?> substepDataResult = experimentDB->query(`SELECT id, dataId FROM SubstepData WHERE stepId = ${oldTimelineStepId} AND substepNr=${oldTimelineSubstepNr};`);
     record {|int id; int dataId;|}[]|error|() substepDataList = from var data in substepDataResult
         select data;
     if substepDataList !is error && substepDataList !is () {
         foreach var substepData in substepDataList {
             // TODO: deep copy
-            int clonedExperimentDataId = check cloneExperimentData(experimentDataMapping, substepData.dataId, newExperimentId, oldExperimentId);
+            int clonedExperimentDataId = check cloneExperimentData(oldDataIdToNewDataId, substepData.dataId, newExperimentId, oldExperimentId);
 
             //   clone step data with id of new experiment data
             var stepDataInsertResult = check experimentDB->execute(
@@ -173,8 +175,9 @@ public isolated transactional function cloneTimelineSubstepComplex(int newExperi
             );
             rowCount = stepDataInsertResult.affectedRowCount;
             if rowCount == () || rowCount < 1 {
-                fail error("Cloning of SubstepData with (old) timeline step id " + oldTimelineStepId.toString() + " and dataId " + clonedExperimentDataId.toString() + " unsuccessful!");
+                fail error(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}, substepNr ${oldTimelineSubstepNr}] Cloning of SubstepData with dataId ${substepData.dataId} unsuccessful.`);
             }
+            io:println(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}, SubstepNr: ${oldTimelineSubstepNr}] Cloned SubstepData item with dataId ${substepData.dataId}.`); // TODO remove
         }
     }
 }
@@ -184,13 +187,13 @@ public isolated transactional function cloneTimelineSubstepComplex(int newExperi
 # + newExperimentId - experiment id of the new (cloned) experiment
 # + oldExperimentId - experiment id of the experiment that is being cloned
 # + oldTimelineStepId - step id of (old) timeline step that is to be cloned
-# + experimentDataMapping - mutable mapping of old ExperimentData item ids to new experiment data ids to check if new experiment data needs to be created or not
+# + oldDataIdToNewDataId - mutable mapping of old ExperimentData item ids to new experiment data ids to check if new experiment data needs to be created or not
 # + return - The new (cloned) timeline step id or the encountered error
-public isolated transactional function cloneTimelineStepComplex(int newExperimentId, int oldExperimentId, int oldTimelineStepId, map<int> experimentDataMapping) returns ()|error {
+public isolated transactional function cloneTimelineStepComplex(int newExperimentId, int oldExperimentId, int oldTimelineStepId, map<int> oldDataIdToNewDataId) returns ()|error {
     // clone timeline step
     var newTimelineStepId = check cloneTimelineStepSimple(newExperimentId, oldExperimentId, oldTimelineStepId);
 
-    // find and clone associated step data // TODO: more than one or just one, for now don't care
+    // find and clone associated step data
     stream<record {|int id; int dataId;|}, sql:Error?> stepDataResult = experimentDB->query(`SELECT id, dataId FROM StepData WHERE stepId = ${oldTimelineStepId};`);
     record {|int id; int dataId;|}[]|error|() stepDataList = from var data in stepDataResult
         select data;
@@ -198,7 +201,7 @@ public isolated transactional function cloneTimelineStepComplex(int newExperimen
         foreach var stepData in stepDataList {
             // check if associated experiment data was already cloned
             // TODO: deep copy
-            int clonedExperimentDataId = check cloneExperimentData(experimentDataMapping, stepData.dataId, newExperimentId, oldExperimentId);
+            int clonedExperimentDataId = check cloneExperimentData(oldDataIdToNewDataId, stepData.dataId, newExperimentId, oldExperimentId);
             //   clone step data with id of new experiment data
             var stepDataInsertResult = check experimentDB->execute(
                 `INSERT INTO StepData (stepId, dataId, relationType) 
@@ -208,20 +211,21 @@ public isolated transactional function cloneTimelineStepComplex(int newExperimen
             );
             var rowCount = stepDataInsertResult.affectedRowCount;
             if rowCount == () || rowCount < 1 {
-                fail error("Cloning of StepData with (old) timeline step id " + oldTimelineStepId.toString() + " and dataId " + clonedExperimentDataId.toString() + " unsuccessful!");
+                fail error(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloning of StepData with dataId ${clonedExperimentDataId} unsuccessful!`);
             }
+            io:println(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloned StepData with dataId ${stepData.dataId}.`); // TODO remove
         }
     }
     // clone all associated timeline substeps
-    stream<record {|int substepNr;|}, sql:Error?> timelineSubstepResult = experimentDB->query(`SELECT stepId, substepNr FROM TimelineSubstep WHERE stepId=${oldTimelineStepId};`);
+    stream<record {|int substepNr;|}, sql:Error?> timelineSubstepResult = experimentDB->query(`SELECT substepNr FROM TimelineSubstep WHERE stepId=${oldTimelineStepId};`);
     int[]|error|() timelineSubstepNrList = from var substep in timelineSubstepResult
         select substep.substepNr;
     if timelineSubstepNrList !is error && timelineSubstepNrList !is () {
         int counter = 0;
         foreach int oldTimelineSubstepNr in timelineSubstepNrList {
             counter += 1;
-            _ = check cloneTimelineSubstepComplex(newExperimentId, oldExperimentId, oldTimelineStepId, experimentDataMapping, newTimelineStepId, oldTimelineSubstepNr);
+            _ = check cloneTimelineSubstepComplex(newExperimentId, oldExperimentId, oldTimelineStepId, oldDataIdToNewDataId, newTimelineStepId, oldTimelineSubstepNr);
         }
-        io:println("ExperimentId " + newExperimentId.toString() + ": cloned " + counter.toString() + " substeps.");
+        io:println(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloned ${counter} TimelineSubsteps.`); // TODO remove
     }
 }
