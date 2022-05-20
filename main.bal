@@ -870,7 +870,7 @@ service / on new http:Listener(serverPort) {
     @http:ResourceConfig {
         consumes: ["application/json"]
     }
-    resource function get experiments/export/[int experimentId](@http:Payload database:ExperimentExportConfig exportConfig, http:Caller caller) returns error? {
+    resource function get experiments/[int experimentId]/export(@http:Payload database:ExperimentExportConfig exportConfig, http:Caller caller) returns error? {
         database:ExperimentExportZip experimentZip;
         http:Response resp = new;
         transaction {

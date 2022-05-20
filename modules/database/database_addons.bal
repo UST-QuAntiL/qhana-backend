@@ -14,6 +14,7 @@
 
 import ballerina/sql;
 import ballerina/io;
+import ballerina/mime;
 
 public type IdSQL record {|
     int id;
@@ -230,6 +231,71 @@ public isolated transactional function cloneTimelineStepComplex(int newExperimen
     }
 }
 
+# Record for exporting/importing experiment data
+#
+# + dataId - The database id of the data item (used for reference, changer on import)
+public type ExperimentDataExport record {|
+    int dataId;
+    *ExperimentData; // TODO: how to map location to files in ZIP?
+|};
+
+# Record for exporting/importing step data
+#
+# + dataId - The database id of the data item (used for reference, changer on import)
+# + relationType - the type of the relation (e.g. input/output)
+public type StepData record {|
+    int dataId;
+    string relationType;
+|};
+
+# Record for exporting/importing substep data
+#
+# + substepNr - 1 based substep index   
+# + dataId - The database id of the data item (used for reference, changer on import)n  
+# + relationType - the type of the relation (e.g. input/output) 
+public type SubstepData record {|
+    string substepNr; // TODO not really necessary - maybe remove later when import is done 
+    int dataId;
+    string relationType;
+|};
+
+# Record for exporting/importing timeline substeps
+#
+# + substepNr - 1 based substep index  
+# + parameters - the parameters which were input for this substep
+# + parametersContentType - the content type of these parameters
+# + substepDataList - list of substep data
+public type TimelineSubstepExport record {|
+    string substepNr;
+    *TimelineSubstep;
+    string parameters;
+    string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
+    SubstepData[] substepDataList;
+|};
+
+# Record for exporting/importing timeline steps
+#
+# + sequence - the sequence number of the step in the experiment
+# + stepDataList - list of step data  
+# + timelineSubsteps - list of associated timeline substeps 
+public type TimelineStepExport record {|
+    int sequence; // TODO: not sure what this is used for
+    *TimelineStep; // TODO: not sure if this will work due to time:Utc for start and end
+    StepData[] stepDataList;
+    TimelineSubstepExport[] timelineSubsteps;
+|};
+
+# Record for exporting/importing a complete experiment
+#
+# + experiment - info about experiment
+# + timelineSteps - timeline steps including substeps and step/substep data
+# + experimentDataList - list of experiment data (reference to files in zip)
+public type ExperimentCompleteExport record {|
+    Experiment experiment;
+    TimelineStepExport[] timelineSteps;
+    ExperimentData[] experimentDataList;
+|};
+
 # Prepare zip file for export of an experiment.
 #
 # + experimentId - experiment id of the new (cloned) experiment
@@ -245,6 +311,8 @@ public isolated transactional function exportExperiment(int experimentId, Experi
     // TODO: extract all (relevant?) data of the experiment (probably as json) -> needs to contain all relevant info for reconstruction in import
     // TODO: one file or three (JSON) files?
     //      - Experiment
+    //          - name
+    //          - description
     //      - list of TimelineSteps 
     //          - StepData (points to ExperimentData -> include keys)
     //          - list of TimelineSubsteps
