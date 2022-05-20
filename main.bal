@@ -848,13 +848,10 @@ service / on new http:Listener(serverPort) {
     #
     # + experimentId - the id of the experiment to be cloned
     # + return - the cloned experiment resource
-    @http:ResourceConfig {
-        consumes: ["application/json"]
-    }
-    resource function post experiments/clone/[int experimentId](@http:Payload database:Experiment experiment) returns ExperimentResponse|http:InternalServerError {
+    resource function post experiments/[int experimentId]/clone() returns ExperimentResponse|http:InternalServerError {
         database:ExperimentFull result;
         transaction {
-            result = check database:cloneExperiment(experimentId, experiment);
+            result = check database:cloneExperiment(experimentId);
             check commit;
         } on fail error err {
             io:println(err);

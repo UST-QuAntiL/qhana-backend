@@ -24,12 +24,24 @@ public type IdSQL record {|
 # + oldExperimentId - experiment id of the experiment that is to be cloned
 # + experiment - The data for the new experiment
 # + return - The experiment data including the database id or the encountered error
-public isolated transactional function cloneExperiment(int oldExperimentId, *Experiment experiment) returns ExperimentFull|error {
+public isolated transactional function cloneExperiment(int oldExperimentId) returns ExperimentFull|error {
     ExperimentFull? result = ();
 
-    // create new experiment (clone)
+    // clone experiment
+    string experimentName;
+    string experimentDescription;
+    stream<record {|string name; string description;|}, sql:Error?> experimentResult = experimentDB->query(`SELECT name, description FROM Experiment WHERE experimentId=${oldExperimentId};`);
+    var experiment = experimentResult.next();
+    check experimentResult.close();
+
+    if experiment is record {record {string name; string description;} value;} {
+        experimentName = experiment.value.name + " - Copy";
+        experimentDescription = experiment.value.description;
+    } else {
+        return error(string `Tried to clone experiment with id ${oldExperimentId}. Query to Experiment table unsuccessful.\n`);
+    }
     var experimentInsertResult = check experimentDB->execute(
-        `INSERT INTO Experiment (name, description) VALUES (${experiment.name}, ${experiment.description});`
+        `INSERT INTO Experiment (name, description) VALUES (${experimentName}, ${experimentDescription});`
     );
 
     // extract experiment id and build full experiment data
@@ -37,7 +49,7 @@ public isolated transactional function cloneExperiment(int oldExperimentId, *Exp
     if newExperimentId !is int {
         fail error("Expected integer id but got a string or Nil!");
     } else {
-        result = {experimentId: newExperimentId, name: experiment.name, description: experiment.description};
+        result = {experimentId: newExperimentId, name: experimentName, description: experimentDescription};
 
         io:print(`New ExperimentId: ${newExperimentId}\n`); // TODO: remove
 
