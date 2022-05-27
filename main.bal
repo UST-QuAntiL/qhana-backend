@@ -897,7 +897,8 @@ service / on new http:Listener(serverPort) {
     @http:ResourceConfig {
         consumes: ["application/json"]
     }
-    resource function get experiments/import/[int experimentId](@http:Payload database:ExperimentExportConfig exportConfig, http:Caller caller) returns error? {
+    resource function get experiments/[int experimentId]/'import(@http:Payload database:ExperimentExportConfig exportConfig, http:Caller caller) returns error? {
+        // TODO: only draft
         database:ExperimentExportZip experimentZip;
         http:Response resp = new;
         transaction {

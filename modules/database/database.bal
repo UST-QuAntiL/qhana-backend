@@ -189,7 +189,6 @@ public type ExperimentDataFull record {|
 # Record describing the export configuration for exporting an experiment.
 #
 public type ExperimentExportConfig record {|
-    string test; //TODO
 |};
 
 # Experiment export record for exporting experiments as a zip.
@@ -731,7 +730,7 @@ public isolated transactional function castToTimelineStepFull(TimelineStepSQL st
     return step.cloneWithType();
 }
 
-public isolated transactional function getTimelineStepList(int experimentId, boolean allAttributes = false, int 'limit = 100, int offset = 0) returns TimelineStepFull[]|error {
+public isolated transactional function getTimelineStepList(int experimentId, boolean allAttributes = false, int 'limit = 100, int offset = 0, boolean allSteps = false) returns TimelineStepFull[]|error {
     object:RawTemplate[] query = [`SELECT stepId, experimentId, sequence, `];
 
     if dbType == "sqlite" {
@@ -743,12 +742,16 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
     query.push(`status, processorName, processorVersion, processorLocation `);
 
     if allAttributes {
-        query.push(`, resultQuality, resultLog, parameters, parametersContentType, notes `);
+        query.push(`, resultQuality, resultLog, coalesce(parameters,'') AS parameters, parametersContentType, coalesce(notes,'') AS notes `);
     } else {
         query.push(`, resultQuality, NULL AS resultLog `);
     }
 
-    query.push(`FROM TimelineStep WHERE experimentId=${experimentId} ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`);
+    if !allSteps {
+        query.push(`FROM TimelineStep WHERE experimentId=${experimentId} ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`);
+    } else {
+        query.push(`FROM TimelineStep WHERE experimentId=${experimentId} ORDER BY sequence ASC;`);
+    }
 
     stream<TimelineStepSQL, sql:Error?> timelineSteps = experimentDB->query(check new ConcatQuery(...query));
 

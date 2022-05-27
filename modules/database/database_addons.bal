@@ -15,6 +15,8 @@
 import ballerina/sql;
 import ballerina/io;
 import ballerina/mime;
+import ballerina/time;
+import ballerina/file;
 
 public type IdSQL record {|
     int id;
@@ -200,7 +202,7 @@ public isolated transactional function cloneTimelineStepComplex(int newExperimen
     // clone timeline step
     var newTimelineStepId = check cloneTimelineStepSimple(newExperimentId, oldExperimentId, oldTimelineStepId);
 
-    // find and clone associated step data
+    // find and clone associated step data 
     stream<record {|int id; int dataId;|}, sql:Error?> stepDataResult = experimentDB->query(`SELECT id, dataId FROM StepData WHERE stepId = ${oldTimelineStepId};`);
     record {|int id; int dataId;|}[]|error|() stepDataList = from var data in stepDataResult
         select data;
@@ -249,7 +251,7 @@ public type ExperimentDataExport record {|
 #
 # + dataId - The database id of the data item (used for reference, changer on import)
 # + relationType - the type of the relation (e.g. input/output)
-public type StepData record {|
+public type StepDataExport record {|
     int dataId;
     string relationType;
 |};
@@ -259,35 +261,69 @@ public type StepData record {|
 # + substepNr - 1 based substep index   
 # + dataId - The database id of the data item (used for reference, changer on import)n  
 # + relationType - the type of the relation (e.g. input/output) 
-public type SubstepData record {|
+public type SubstepDataExport record {|
     string substepNr; // TODO not really necessary - maybe remove later when import is done 
     int dataId;
     string relationType;
 |};
 
-# Record for exporting/importing timeline substeps
+# Base record for exporting/importing timeline substeps
 #
 # + substepNr - 1 based substep index  
 # + parameters - the parameters which were input for this substep
 # + parametersContentType - the content type of these parameters
-# + substepDataList - list of substep data
-public type TimelineSubstepExport record {|
-    string substepNr;
+public type TimelineSubstepExportBase record {|
+    int substepNr;
     *TimelineSubstep;
     string parameters;
     string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
-    SubstepData[] substepDataList;
 |};
 
-# Record for exporting/importing timeline steps
+# Record for exporting/importing timeline substeps
+#
+# + substepDataList - list of substep data
+public type TimelineSubstepExport record {|
+    *TimelineSubstepExportBase;
+    SubstepDataExport[] substepDataList;
+|};
+
+# Base record of a timeline step for export.
+#
+# + 'start - the time when the timeline step was created
+# + end - the time when a result or error was recorded for the timeline step
+# + status - the current status of the timeline step result
+# + resultQuality - the result quality
+# + resultLog - the log output that is part of the result
+# + processorName - the plugin handling the computation for this step
+# + processorVersion - the version of the plugin
+# + processorLocation - the root URL of the plugin
+# + parameters - the parameters used to invoke the plugin with
+# + parametersContentType - the content type of the serialized parameters
+# + notes - the text of the notes stored for this step
+public type TimelineStepBaseExport record {|
+    string 'start;
+    string? end = ();
+    string status = "PENDING";
+    string resultQuality = "UNKNOWN";
+    string? resultLog = ();
+    string processorName;
+    string? processorVersion = ();
+    string? processorLocation = ();
+    string? parameters; // optional for small requests
+    string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
+    string? notes; // optional for small requests
+    *Progress;
+|};
+
+# Record for exporting/importing timeline steps with step data and substeps
 #
 # + sequence - the sequence number of the step in the experiment
 # + stepDataList - list of step data  
 # + timelineSubsteps - list of associated timeline substeps 
 public type TimelineStepExport record {|
     int sequence; // TODO: not sure what this is used for
-    *TimelineStep; // TODO: not sure if this will work due to time:Utc for start and end
-    StepData[] stepDataList;
+    *TimelineStepBaseExport; // TODO: not sure if this will work due to time:Utc for start and end
+    StepDataExport[] stepDataList;
     TimelineSubstepExport[] timelineSubsteps;
 |};
 
@@ -299,8 +335,164 @@ public type TimelineStepExport record {|
 public type ExperimentCompleteExport record {|
     Experiment experiment;
     TimelineStepExport[] timelineSteps;
-    ExperimentData[] experimentDataList;
+    ExperimentDataExport[] experimentDataList;
 |};
+
+public isolated transactional function castToTimelineStepExport(TimelineStepFull step) returns TimelineStepExport|error {
+    var end = step.end;
+    return {
+        sequence: step.sequence,
+        'start: time:utcToString(step.'start),
+        end: end == () ? () : time:utcToString(end),
+        status: step.status,
+        resultQuality: step.resultQuality,
+        resultLog: step.resultLog,
+        processorName: step.processorName,
+        processorVersion: step.processorVersion,
+        processorLocation: step.processorLocation,
+        parameters: step?.parameters, // TODO: on import don't set when nill
+        parametersContentType: step.parametersContentType,
+        notes: step?.notes, // TODO: on import don't set when nill
+        progressStart: step.progressStart,
+        progressTarget: step.progressTarget,
+        progressValue: step.progressValue,
+        progressUnit: step.progressUnit,
+        stepDataList: [],
+        timelineSubsteps: []
+    };
+}
+
+public isolated transactional function getTimelineStepDataList(int stepId) returns StepDataExport[]|error {
+    stream<StepDataExport, sql:Error?> stepDataResult = experimentDB->query(`SELECT dataId, relationType FROM StepData WHERE stepId = ${stepId};`);
+    StepDataExport[]|error|() stepDataList = from var stepData in stepDataResult
+        select stepData;
+    if stepDataList is error {
+        return error(string `[stepId ${stepId}] Could not retrieve step data for export.`);
+    } else if stepDataList is () {
+        return [];
+    } else {
+        return stepDataList;
+    }
+}
+
+public isolated transactional function getTimelineSubstepDataList(int stepId, int substepNr) returns SubstepDataExport[]|error {
+    stream<SubstepDataExport, sql:Error?> substepDataResult = experimentDB->query(`SELECT substepNr, dataId, relationType FROM SubstepData WHERE stepId = ${stepId} AND substepNr = ${substepNr};`);
+    SubstepDataExport[]|error|() substepDataList = from var substepData in substepDataResult
+        select substepData;
+    if substepDataList is error {
+        return error(string `[stepId ${stepId}, substepNr ${substepNr}] Could not retrieve substep data for export.`);
+    } else if substepDataList is () {
+        return [];
+    } else {
+        return substepDataList;
+    }
+}
+
+public isolated transactional function getTimelineSubstepsBaseExport(int stepId) returns TimelineSubstepExportBase[]|error {
+    stream<TimelineSubstepExportBase, sql:Error?> substepsResult = experimentDB->query(
+        `SELECT substepNr, substepId, href, hrefUi, cleared, parameters, parametersContentType FROM TimelineSubstep WHERE stepId=${stepId} ORDER BY substepNr ASC;`
+    );
+    TimelineSubstepExportBase[]|error|() substepsBase = from var substep in substepsResult
+        select substep;
+    if substepsBase is error {
+        return error(string `[stepId ${stepId}] Could not retrieve substep list for export from database.`);
+    } else if substepsBase is () {
+        return [];
+    } else {
+        return substepsBase;
+    }
+}
+
+public isolated transactional function getTimelineSubstepsExport(int stepId) returns TimelineSubstepExport[]|error {
+    TimelineSubstepExport[] substepsExport = [];
+    TimelineSubstepExportBase[] substepsBase = check getTimelineSubstepsBaseExport(stepId);
+    foreach var substep in substepsBase {
+        SubstepDataExport[] substepDataList = check getTimelineSubstepDataList(stepId, substep.substepNr);
+        TimelineSubstepExport substepExport = {
+            substepNr: substep.substepNr,
+            substepId: substep.substepId,
+            href: substep.href,
+            hrefUi: substep.hrefUi,
+            cleared: substep.cleared,
+            parameters: substep.parameters,
+            parametersContentType: substep.parametersContentType,
+            substepDataList: substepDataList
+        };
+        substepsExport.push(substepExport);
+    }
+    return substepsExport;
+}
+
+public isolated transactional function getExperimentDataExport(int experimentId, int dataId) returns ExperimentDataExport|error {
+    stream<ExperimentDataExport, sql:Error?> experimentDataResult = experimentDB->query(
+        `SELECT dataId, name, version, location, type, contentType FROM ExperimentData WHERE dataId=${dataId} AND experimentId=${experimentId};`
+    );
+    var experimentData = experimentDataResult.next();
+    check experimentDataResult.close();
+    if experimentData is error {
+        return experimentData;
+    }
+    if experimentData is record {ExperimentDataExport value;} {
+        return experimentData.value;
+    } else {
+        // should never happen based on the sql query
+        return error(string `[experimentId ${experimentId}, dataId ${dataId}] Could not retrieve experiment data for export from database.`);
+    }
+}
+
+public isolated transactional function getExperimentDBExport(int experimentId) returns ExperimentCompleteExport|error {
+    TimelineStepExport[] timelineSteps = [];
+    ExperimentDataExport[] experimentDataList = [];
+    Experiment experiment = check getExperimentInfo(experimentId);
+    int[] dataIdList = [];
+
+    // iterate over timeline steps
+    TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experimentId, allAttributes = true, allSteps = true);
+    foreach TimelineStepFull timelineStepDb in timelineStepListDb {
+        TimelineStepExport timelineStepExport = check castToTimelineStepExport(timelineStepDb);
+        // retrieve associated step data
+        timelineStepExport.stepDataList = check getTimelineStepDataList(timelineStepDb.stepId);
+        foreach var stepData in timelineStepExport.stepDataList {
+            dataIdList.push(stepData.dataId);
+        }
+        // retrieve associated substeps with their substep data
+        timelineStepExport.timelineSubsteps = check getTimelineSubstepsExport(timelineStepDb.stepId);
+        timelineSteps.push(timelineStepExport);
+        foreach var substep in timelineStepExport.timelineSubsteps {
+            foreach var substepData in substep.substepDataList {
+                dataIdList.push(substepData.dataId);
+            }
+        }
+    }
+
+    // ignore duplicates in dataIdList and create experiment data list
+    int[] sortedDataIdList = dataIdList.sort();
+    int tmp = -1;
+    foreach int dataId in sortedDataIdList {
+        if dataId != tmp {
+            tmp = dataId;
+            ExperimentDataExport experimentData = check getExperimentDataExport(experimentId, dataId);
+            experimentDataList.push(experimentData);
+        }
+    }
+
+    return {
+        experiment: experiment,
+        timelineSteps: timelineSteps,
+        experimentDataList: experimentDataList
+    };
+}
+
+// TODO
+// function newFileOutputStream(handle path) returns handle = @java:Constructor {
+//     class: "java.io.FileOutputStream",
+//     paramTypes: ["java.lang.String"]
+// } external;
+
+// function newFileInputStream(handle path) returns handle = @java:Constructor {
+//     class: "java.io.FileInputStream",
+//     paramTypes: ["java.lang.String"]
+// } external;
 
 # Prepare zip file for export of an experiment.
 #
@@ -313,32 +505,40 @@ public isolated transactional function exportExperiment(int experimentId, Experi
     string zipFileLocation = "";
     int fileLength = 0;
 
-    Experiment experiment;
-    TimelineStepExport[] timelineSteps = [];
-    ExperimentData[] experimentDataList = [];
-
-    // experiment file(s?)
-    // TODO: extract all (relevant?) data of the experiment (probably as json) -> needs to contain all relevant info for reconstruction in import
-    // TODO: one file or three (JSON) files?
-    //      - Experiment
-    experiment = check getExperimentInfo(experimentId);
-    //          - name
-    //          - description
-    //      - list of TimelineSteps 
-    //          - StepData (points to ExperimentData -> include keys)
-    //          - list of TimelineSubsteps
-    //              - SubstepData (points to Experimentdata -> include keys)
-    //      - list of ExperimentData
-
-    // TODO: create index file containing info about all files in zip? maybe not necessary as structure is pre-defined and implicit via file links in experiment data?
-
-    ExperimentCompleteExport experimentComplete = {
-        experiment: experiment,
-        timelineSteps: timelineSteps,
-        experimentDataList: experimentDataList
-    };
-
+    ExperimentCompleteExport experimentComplete = check getExperimentDBExport(experimentId);
     // data files
+    string[] dataFileLocations = [];
+    ExperimentDataExport[] experimentDataList = experimentComplete.experimentDataList;
+    foreach var experimentData in experimentDataList {
+        string location = experimentData.location;
+        dataFileLocations.push(location);
+        // remove path from file location
+        int? index = location.lastIndexOf("/");
+        if index is () {
+            index = location.lastIndexOf("\\");
+            if index is () {
+                return error("Unable to determine relative file location.");
+            } else {
+                experimentData.location = location.substring(index + 1, location.length());
+            }
+        } else {
+            experimentData.location = location.substring(index + 1, location.length()); // not very pretty but compiler check recognize assignment of index...
+        }
+    }
+
+    // string tmpDir = check file:createTempDir();
+    var exists = file:test("tmp", file:EXISTS);
+    if exists !is error && !exists {
+        check file:createDir("tmp");
+    }
+    json experimentCompleteJson = experimentComplete;
+    var jsonPath = check file:joinPath("tmp", "experiment.json");
+    exists = file:test(jsonPath, file:EXISTS);
+    if exists !is error && exists {
+        check file:remove(jsonPath);
+    }
+    check io:fileWriteJson(jsonPath, experimentCompleteJson);
+
     // TODO: create list of all files in list of ExperimentData
 
     // create zip
