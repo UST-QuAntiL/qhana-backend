@@ -385,7 +385,8 @@ dependencies = [
 ]
 modules = [
 	{org = "qhana", packageName = "qhana_backend", moduleName = "qhana_backend"},
-	{org = "qhana", packageName = "qhana_backend", moduleName = "qhana_backend.database"}
+	{org = "qhana", packageName = "qhana_backend", moduleName = "qhana_backend.database"},
+	{org = "qhana", packageName = "qhana_backend", moduleName = "qhana_backend.java.util.zip"}
 ]
 
 

@@ -17,6 +17,8 @@ import ballerina/io;
 import ballerina/mime;
 import ballerina/time;
 import ballerina/file;
+import qhana_backend.java.io as javaio;
+import qhana_backend.java.util.zip as javazip;
 
 public type IdSQL record {|
     int id;
@@ -483,23 +485,12 @@ public isolated transactional function getExperimentDBExport(int experimentId) r
     };
 }
 
-// TODO
-// function newFileOutputStream(handle path) returns handle = @java:Constructor {
-//     class: "java.io.FileOutputStream",
-//     paramTypes: ["java.lang.String"]
-// } external;
-
-// function newFileInputStream(handle path) returns handle = @java:Constructor {
-//     class: "java.io.FileInputStream",
-//     paramTypes: ["java.lang.String"]
-// } external;
-
 # Prepare zip file for export of an experiment.
 #
 # + experimentId - experiment id of the new (cloned) experiment
 # + config - export configuration
 # + return - record with details about created zip files or error
-public isolated transactional function exportExperiment(int experimentId, ExperimentExportConfig config) returns ExperimentExportZip|error {
+public transactional function exportExperiment(int experimentId, ExperimentExportConfig config) returns ExperimentExportZip|error {
 
     string zipFilename = "";
     string zipFileLocation = "";
@@ -532,16 +523,25 @@ public isolated transactional function exportExperiment(int experimentId, Experi
         check file:createDir("tmp");
     }
     json experimentCompleteJson = experimentComplete;
-    var jsonPath = check file:joinPath("tmp", "experiment.json");
+    var jsonPath = check file:joinPath("tmp", "experiment.json"); //TODO: replace with var jsonPath = check file:joinPath(tmpDir, "experiment.json");
     exists = file:test(jsonPath, file:EXISTS);
     if exists !is error && exists {
         check file:remove(jsonPath);
     }
     check io:fileWriteJson(jsonPath, experimentCompleteJson);
 
-    // TODO: create list of all files in list of ExperimentData
-
     // create zip
+    string zipFileName = "experiment.zip";
+    var zipPath = check file:joinPath("tmp", zipFileName); //TODO: replace with var jsonPath = check file:joinPath(tmpDir, zipFileName);
+    javaio:File zipFile = javaio:newFile2(zipPath);
+    javaio:FileOutputStream|javaio:FileNotFoundException fileOutStream = javaio:newFileOutputStream1(zipFile);
+    if fileOutStream is javaio:FileNotFoundException {
+        // TODO do sth
+    } else {
+        javazip:ZipOutputStream|javaio:FileNotFoundException zipOutStream = javazip:newZipOutputStream1(fileOutStream);
+        // TODO
+    }
+
     // TODO: add all files (experiment file(s) + data files) to ZIP
 
     ExperimentExportZip exportResult = {name: zipFilename, location: zipFileLocation, fileLength: fileLength};
