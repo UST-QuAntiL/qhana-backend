@@ -138,11 +138,11 @@ CREATE INDEX IF NOT EXISTS `ix_substep_id` ON `TimelineSubstep` (
 );
 
 CREATE TABLE IF NOT EXISTS `SubstepData` (
-	`id`	INTEGER NOT NULL AUTOINCREMENT,
+	`id`	INTEGER NOT NULL AUTO_INCREMENT,
 	`stepId`	INTEGER NOT NULL,
 	`substepNr`	INTEGER NOT NULL,
 	`dataId`	INTEGER NOT NULL,
-	`relationType`	VARCHAR(50) NOT NULL COLLATE NOCASE,
+	`relationType`	VARCHAR(50) NOT NULL,
 	FOREIGN KEY(`stepId`, `substepNr`) REFERENCES `TimelineSubstep`(`stepId`, `substepNr`),
 	FOREIGN KEY(`dataId`) REFERENCES `ExperimentData`(`dataId`),
 	PRIMARY KEY(`id`)
