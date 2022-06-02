@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS `TimelineStep` (
 	`start`	DATETIME NOT NULL,
 	`end`	DATETIME,
 	`status`	VARCHAR(50) DEFAULT 'PENDING',
+	`resultQuality`	VARCHAR(50) NOT NULL DEFAULT 'UNKNOWN',
 	`resultLog`	TEXT,
 	`processorName`	VARCHAR(500) NOT NULL,
 	`processorVersion`	VARCHAR(150),
