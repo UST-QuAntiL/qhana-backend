@@ -13,12 +13,16 @@
 // limitations under the License.
 
 import ballerina/sql;
+<<<<<<< HEAD
 import ballerina/io;
 import ballerina/mime;
 import ballerina/time;
 import ballerina/file;
 import qhana_backend.java.io as javaio;
 import qhana_backend.java.util.zip as javazip;
+=======
+import ballerina/log;
+>>>>>>> feature/clone-experiments
 
 public type IdSQL record {|
     int id;
@@ -33,7 +37,12 @@ public isolated transactional function cloneExperiment(int oldExperimentId) retu
 
     // clone experiment
     ExperimentFull experimentInfo = check getExperiment(oldExperimentId);
+<<<<<<< HEAD
     experimentInfo.name = experimentInfo.name + " - Copy";
+=======
+    experimentInfo.name = experimentInfo.name + " (copy)";
+
+>>>>>>> feature/clone-experiments
     var experimentInsertResult = check experimentDB->execute(
         `INSERT INTO Experiment (name, description) VALUES (${experimentInfo.name}, ${experimentInfo.description});`
     );
@@ -45,7 +54,7 @@ public isolated transactional function cloneExperiment(int oldExperimentId) retu
     } else {
         result = {experimentId: newExperimentId, name: experimentInfo.name, description: experimentInfo.description};
 
-        io:println(string `[experimentId ${oldExperimentId}] Cloned experiment has experimentId ${newExperimentId}`); // TODO: remove
+        log:printDebug(string `[experimentId ${oldExperimentId}] Cloned experiment has experimentId ${newExperimentId}`); // TODO: remove
 
         // map old experimentData ids to new (cloned) to avoid duplication
         map<int> oldDataIdToNewDataId = {};
@@ -60,7 +69,7 @@ public isolated transactional function cloneExperiment(int oldExperimentId) retu
                 counter += 1;
                 _ = check cloneTimelineStepComplex(newExperimentId, oldExperimentId, oldTimelineStepId, oldDataIdToNewDataId);
             }
-            io:println(string `[ExperimentId ${newExperimentId}] Cloned ${counter} TimelineSteps.`);
+            log:printDebug(string `[ExperimentId ${newExperimentId}] Cloned ${counter} TimelineSteps.`);
         }
         if result == () {
             // this should logically never happen but is included for the compiler
@@ -97,7 +106,7 @@ public isolated transactional function cloneExperimentData(map<int> oldDataIdToN
             lock {
                 oldDataIdToNewDataId[dataId.toString()] = newExperimentDataId;
             }
-            io:println(string `[experimentId ${oldExperimentId}, dataId ${dataId}] Cloned ExperimentData. Cloned ExperimentData has dataId ${newExperimentDataId}.`); // TODO: remove
+            log:printDebug(string `[experimentId ${oldExperimentId}, dataId ${dataId}] Cloned ExperimentData. Cloned ExperimentData has dataId ${newExperimentDataId}.`); // TODO: remove
             return newExperimentDataId;
         } else {
             fail error("Expected the experimentData id back but got nothing or Nil!");
@@ -124,7 +133,7 @@ public isolated transactional function cloneTimelineStepSimple(int newExperiment
     if newTimelineStepId !is int || newTimelineStepId < 0 {
         fail error("Cloning of TimelineStep with (old) id " + oldTimelineStepId.toString() + " unsuccessful [oldExperimentId: " + oldExperimentId.toString() + ", newExperimentId: " + newExperimentId.toString() + "]!");
     } else {
-        io:println(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloned TimelineStep has id ${newTimelineStepId}.`); // TODO: remove
+        log:printDebug(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloned TimelineStep has id ${newTimelineStepId}.`); // TODO: remove
         return newTimelineStepId;
     }
 }
@@ -150,7 +159,7 @@ public isolated transactional function cloneTimelineSubstepComplex(int newExperi
     if rowCount == () || rowCount < 1 {
         fail error(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloning of TimelineSubstep with substepNr ${oldTimelineSubstepNr} unsuccessful!`);
     }
-    io:println(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloned substep with substepNr ${oldTimelineSubstepNr}.`); // TODO remove
+    log:printDebug(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloned substep with substepNr ${oldTimelineSubstepNr}.`); // TODO remove
 
     // find and clone associated substepData
     stream<record {|int id; int dataId;|}, sql:Error?> substepDataResult = experimentDB->query(`SELECT id, dataId FROM SubstepData WHERE stepId = ${oldTimelineStepId} AND substepNr=${oldTimelineSubstepNr};`);
@@ -172,7 +181,7 @@ public isolated transactional function cloneTimelineSubstepComplex(int newExperi
             if rowCount == () || rowCount < 1 {
                 fail error(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}, substepNr ${oldTimelineSubstepNr}] Cloning of SubstepData with dataId ${substepData.dataId} unsuccessful.`);
             }
-            io:println(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}, SubstepNr: ${oldTimelineSubstepNr}] Cloned SubstepData item with dataId ${substepData.dataId}.`); // TODO remove
+            log:printDebug(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}, SubstepNr: ${oldTimelineSubstepNr}] Cloned SubstepData item with dataId ${substepData.dataId}.`); // TODO remove
         }
     }
 }
@@ -208,7 +217,7 @@ public isolated transactional function cloneTimelineStepComplex(int newExperimen
             if rowCount == () || rowCount < 1 {
                 fail error(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloning of StepData with dataId ${clonedExperimentDataId} unsuccessful!`);
             }
-            io:println(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloned StepData with dataId ${stepData.dataId}.`); // TODO remove
+            log:printDebug(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloned StepData with dataId ${stepData.dataId}.`); // TODO remove
         }
     }
     // clone all associated timeline substeps
@@ -221,7 +230,7 @@ public isolated transactional function cloneTimelineStepComplex(int newExperimen
             counter += 1;
             _ = check cloneTimelineSubstepComplex(newExperimentId, oldExperimentId, oldTimelineStepId, oldDataIdToNewDataId, newTimelineStepId, oldTimelineSubstepNr);
         }
-        io:println(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloned ${counter} TimelineSubsteps.`); // TODO remove
+        log:printDebug(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloned ${counter} TimelineSubsteps.`); // TODO remove
     }
 }
 
