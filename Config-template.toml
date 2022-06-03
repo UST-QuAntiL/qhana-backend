@@ -1,3 +1,6 @@
+[ballerina.log]
+level = "DEBUG"
+
 [qhana.qhana_backend]
 
 # the port the server will listen on
