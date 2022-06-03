@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import ballerina/sql;
-import ballerina/io;
 import ballerina/log;
 
 public type IdSQL record {|
