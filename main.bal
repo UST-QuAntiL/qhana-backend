@@ -927,10 +927,11 @@ service / on new http:Listener(serverPort) {
         resp.addHeader("Content-Length", experimentZip.fileLength.toString());
 
         // TODO: probably need to write zip file as bytestream...
-        byte[]|io:Error zipStream = check io:fileReadBytes(experimentZip.location);
+        byte[]|io:Error zipStream = io:fileReadBytes(experimentZip.location);
 
         if zipStream !is error {
             resp.setPayload(zipStream, contentType = "application/zip");
+            check caller->respond(resp);
 
         } else {
             io:println(zipStream);
@@ -938,8 +939,6 @@ service / on new http:Listener(serverPort) {
             resp.setPayload("Something went wrong. Please try again later.");
             check caller->respond(resp);
         }
-
-        check caller->respond(resp);
     }
 }
 

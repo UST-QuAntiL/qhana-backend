@@ -17,9 +17,9 @@ import ballerina/io;
 import ballerina/mime;
 import ballerina/time;
 import ballerina/file;
+import ballerina/log;
 import qhana_backend.java.io as javaio;
 import qhana_backend.java.util.zip as javazip;
-import ballerina/log;
 
 public type IdSQL record {|
     int id;
@@ -509,27 +509,44 @@ public transactional function exportExperiment(int experimentId, ExperimentExpor
         check file:createDir("tmp");
     }
     json experimentCompleteJson = experimentComplete;
-    var jsonPath = check file:joinPath("tmp", "experiment.json"); //TODO: replace with var jsonPath = check file:joinPath(tmpDir, "experiment.json");
+    string jsonFile = "experiment.json";
+    var jsonPath = check file:joinPath("tmp", jsonFile); //TODO: replace with var jsonPath = check file:joinPath(tmpDir, jsonFile);
     exists = file:test(jsonPath, file:EXISTS);
     if exists !is error && exists {
         check file:remove(jsonPath);
     }
     check io:fileWriteJson(jsonPath, experimentCompleteJson);
 
-    // create zip
+    // create zip-  add all files (experiment file(s) + data files) to ZIP
     string zipFileName = "experiment.zip";
     var zipPath = check file:joinPath("tmp", zipFileName); //TODO: replace with var jsonPath = check file:joinPath(tmpDir, zipFileName);
     javaio:File zipFile = javaio:newFile2(zipPath);
-    javaio:FileOutputStream|javaio:FileNotFoundException fileOutStream = javaio:newFileOutputStream1(zipFile);
-    if fileOutStream is javaio:FileNotFoundException {
-        // TODO do sth
-    } else {
-        javazip:ZipOutputStream|javaio:FileNotFoundException zipOutStream = javazip:newZipOutputStream1(fileOutStream);
-        // TODO
+    javaio:FileOutputStream fileOutStream = check javaio:newFileOutputStream1(zipFile);
+    javazip:ZipOutputStream zipOutStream = javazip:newZipOutputStream1(fileOutStream);
+
+    // add experiment.json
+    javaio:FileInputStream inStream = check javaio:newFileInputStream1(javaio:newFile2(jsonPath));
+    javazip:ZipEntry entry = javazip:newZipEntry1(jsonFile);
+    _ = check zipOutStream.putNextEntry(entry);
+    byte[] data = check inStream.readAllBytes();
+    _ = check zipOutStream.write(data);
+    _ = check zipOutStream.closeEntry();
+    _ = check inStream.close();
+
+    // add experiment data files
+    foreach string dataFile in dataFileLocations {
+        inStream = check javaio:newFileInputStream1(javaio:newFile2(dataFile));
+        entry = javazip:newZipEntry1(dataFile);
+        _ = check zipOutStream.putNextEntry(entry);
+        data = check inStream.readAllBytes();
+        _ = check zipOutStream.write(data);
+        _ = check zipOutStream.closeEntry();
+        _ = check inStream.close();
     }
+    _ = check zipOutStream.close();
+    _ = check fileOutStream.close();
 
-    // TODO: add all files (experiment file(s) + data files) to ZIP
-
-    ExperimentExportZip exportResult = {name: zipFilename, location: zipFileLocation, fileLength: fileLength};
+    fileLength = zipFile.length();
+    ExperimentExportZip exportResult = {name: zipPath, location: zipFileLocation, fileLength: fileLength};
     return exportResult;
 }
