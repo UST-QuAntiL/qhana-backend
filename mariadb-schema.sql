@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS `TimelineStep` (
 	`start`	DATETIME NOT NULL,
 	`end`	DATETIME,
 	`status`	VARCHAR(50) DEFAULT 'PENDING',
+	`resultQuality`	VARCHAR(50) NOT NULL DEFAULT 'UNKNOWN',
 	`resultLog`	TEXT,
 	`processorName`	VARCHAR(500) NOT NULL,
 	`processorVersion`	VARCHAR(150),
@@ -138,11 +139,11 @@ CREATE INDEX IF NOT EXISTS `ix_substep_id` ON `TimelineSubstep` (
 );
 
 CREATE TABLE IF NOT EXISTS `SubstepData` (
-	`id`	INTEGER NOT NULL AUTOINCREMENT,
+	`id`	INTEGER NOT NULL AUTO_INCREMENT,
 	`stepId`	INTEGER NOT NULL,
 	`substepNr`	INTEGER NOT NULL,
 	`dataId`	INTEGER NOT NULL,
-	`relationType`	VARCHAR(50) NOT NULL COLLATE NOCASE,
+	`relationType`	VARCHAR(50) NOT NULL,
 	FOREIGN KEY(`stepId`, `substepNr`) REFERENCES `TimelineSubstep`(`stepId`, `substepNr`),
 	FOREIGN KEY(`dataId`) REFERENCES `ExperimentData`(`dataId`),
 	PRIMARY KEY(`id`)
@@ -170,7 +171,7 @@ CREATE TABLE IF NOT EXISTS `ResultWatchers` (
 
 CREATE TABLE IF NOT EXISTS `PluginEndpoints` (
 	`id`	INTEGER NOT NULL AUTO_INCREMENT,
-	`url`	VARCHAR(3000) NOT NULL UNIQUE,
+	`url`	VARCHAR(1024) NOT NULL UNIQUE,
 	`type`	VARCHAR(64) NOT NULL DEFAULT 'PluginRunner',
 	PRIMARY KEY(`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;

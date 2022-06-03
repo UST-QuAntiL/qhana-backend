@@ -49,6 +49,23 @@ configurable string dbUser = "QHAna";
 # Can also be configured by setting the `QHANA_DB_PASSWORD` environment variable.
 configurable string dbPassword = "";
 
+
+# Get the db type from the `QHANA_DB_TYPE` environment variable.
+# If not present use the configurable variable `dbType` as fallback.
+#
+# + return - the configured db type
+function getDBType() returns string {
+    string d = os:getEnv("QHANA_DB_TYPE");
+    if (d.length() > 0) {
+        return d;
+    }
+    return dbType;
+}
+
+# The final configured db type.
+final string&readonly configuredDBType = getDBType().cloneReadOnly();
+
+
 # Initialize the database client from the supplied config.
 #
 # Also reads config from environment variables.
@@ -56,10 +73,6 @@ configurable string dbPassword = "";
 # + return - the created client or an error
 function initClient() returns jdbc:Client|error {
     // load config from env vars
-    var dbTypeLocal = os:getEnv("QHANA_DB_TYPE");
-    if (dbTypeLocal.length() == 0) {
-        dbTypeLocal = dbType;
-    }
     var dbPathLocal = os:getEnv("QHANA_DB_PATH");
     if (dbPathLocal.length() == 0) {
         dbPathLocal = dbPath;
@@ -82,9 +95,9 @@ function initClient() returns jdbc:Client|error {
     }
 
     // use config options to create db client
-    if dbTypeLocal == "sqlite" {
+    if configuredDBType == "sqlite" {
         return new jdbc:Client(string `jdbc:sqlite:${dbPathLocal}`, connectionPool = sqlitePool);
-    } else if dbTypeLocal == "mariadb" || dbTypeLocal == "mysql" {
+    } else if configuredDBType == "mariadb" || configuredDBType == "mysql" {
         string connection = string `jdbc:mariadb://${dbHostLocal}/${dbNameLocal}?user=${dbUserLocal}`;
         if dbPasswordLocal != "" {
             string passwordPart = string `&password=${dbPasswordLocal}`;
@@ -93,7 +106,7 @@ function initClient() returns jdbc:Client|error {
         io:println(connection); // FIXME remove to stop outputting password to stdout
         return new jdbc:Client(connection);
     } else {
-        return error(string `Db type ${dbTypeLocal} is unknownn!`);
+        return error(string `Db type ${configuredDBType} is unknownn!`);
     }
 }
 
@@ -733,7 +746,7 @@ public isolated transactional function castToTimelineStepFull(TimelineStepSQL st
 public isolated transactional function getTimelineStepList(int experimentId, boolean allAttributes = false, int 'limit = 100, int offset = 0, boolean allSteps = false) returns TimelineStepFull[]|error {
     object:RawTemplate[] query = [`SELECT stepId, experimentId, sequence, `];
 
-    if dbType == "sqlite" {
+    if configuredDBType == "sqlite" {
         query.push(`cast(start as TEXT) AS start, cast(end as TEXT) AS end, `);
     } else {
         query.push(`DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, `);
@@ -789,7 +802,7 @@ public isolated transactional function createTimelineStep(
     }
 
     sql:ParameterizedQuery currentTime = `strftime('%Y-%m-%dT%H:%M:%S', 'now')`;
-    if dbType != "sqlite" {
+    if configuredDBType != "sqlite" {
         currentTime = `DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%S')`;
     }
     var insertResult = check experimentDB->execute(
@@ -816,7 +829,7 @@ public isolated transactional function createTimelineStep(
 public isolated transactional function getTimelineStep(int? experimentId = (), int? sequence = (), int? stepId = ()) returns TimelineStepWithParams|error {
     var baseQuery = `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart AS progressStart, pTarget AS progressTarget, pValue AS progressValue, pUnit AS progressUnit
                      FROM TimelineStep `;
-    if dbType != "sqlite" {
+    if configuredDBType != "sqlite" {
         baseQuery = `SELECT stepId, experimentId, sequence, DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart AS progressStart, pTarget AS progressTarget, pValue AS progressValue, pUnit AS progressUnit
                      FROM TimelineStep `;
     }
@@ -863,7 +876,7 @@ public isolated transactional function getTimelineStep(int? experimentId = (), i
 public isolated transactional function updateTimelineStepStatus(int|TimelineStepFull step, string status, string? resultLog) returns error? {
     var stepId = step is int ? step : step.stepId;
     sql:ParameterizedQuery currentTime = `strftime('%Y-%m-%dT%H:%M:%S', 'now')`;
-    if dbType != "sqlite" {
+    if configuredDBType != "sqlite" {
         currentTime = `DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%S')`;
     }
 

@@ -39,7 +39,7 @@ COPY --chown=ballerina Config-docker.toml /app/Config.toml
 EXPOSE 9090
 
 # Wait for database
-ADD --chown=ballerina https://github.com/ufoscout/docker-compose-wait/releases/download/2.7.3/wait /app/wait
+ADD --chown=ballerina https://github.com/ufoscout/docker-compose-wait/releases/download/2.9.0/wait /app/wait
 
 # make scripts executable
 RUN chmod +x /app/wait && chmod +x /app/start-docker.sh
