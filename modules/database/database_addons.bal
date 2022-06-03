@@ -19,23 +19,6 @@ public type IdSQL record {|
     int id;
 |};
 
-# Get experiment info
-#
-# + experimentId - experiment id
-# + return - experiment info
-public isolated transactional function getExperimentInfo(int experimentId) returns Experiment|error {
-    Experiment experimentInfo;
-    stream<record {|string name; string description;|}, sql:Error?> experimentResult = experimentDB->query(`SELECT name, description FROM Experiment WHERE experimentId=${experimentId};`);
-    var experiment = experimentResult.next();
-    check experimentResult.close();
-
-    if experiment is record {record {string name; string description;} value;} {
-        return {name: experiment.value.name, description: experiment.value.description};
-    } else {
-        return error(string `[experimentId ${experimentId}] Query to Experiment table unsuccessful.`);
-    }
-}
-
 # Clones an experiment in the database.
 #
 # + oldExperimentId - experiment id of the experiment that is to be cloned
@@ -44,7 +27,9 @@ public isolated transactional function cloneExperiment(int oldExperimentId) retu
     ExperimentFull? result = ();
 
     // clone experiment
-    Experiment experimentInfo = check getExperimentInfo(oldExperimentId);
+    ExperimentFull experimentInfo = check getExperiment(oldExperimentId);
+    experimentInfo.name = experimentInfo.name + " (copy)";
+
     var experimentInsertResult = check experimentDB->execute(
         `INSERT INTO Experiment (name, description) VALUES (${experimentInfo.name}, ${experimentInfo.description});`
     );
