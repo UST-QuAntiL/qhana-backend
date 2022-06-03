@@ -21,7 +21,7 @@ import qhana_backend.database;
 // start configuration values
 # List of domains that are allowed CORS requests to the backend.
 # Can also be configured by setting the `QHANA_CORS_DOMAINS` environment variable.
-configurable string[] corsDomains = ["http://localhost:4200"];
+configurable string[] corsDomains = ["*"];
 
 # Get the port from the `QHANA_CORS_DOMAINS` environment variable.
 # If not present use the configurable variable `corsDomains` as fallback.
@@ -164,7 +164,7 @@ isolated function mapToInternalUrl(string url) returns string {
     cors: {
         allowOrigins: configuredCorsDomains,
         allowMethods: ["OPTIONS", "GET", "PUT", "POST", "DELETE"],
-        allowHeaders: ["Content-Type", "Depth", "User-Agent", "X-File-Size", "X-Requested-With", "If-Modified-Since", "X-File-Name", "Cache-ControlAccess-Control-Allow-Origin"],
+        allowHeaders: ["Content-Type", "Depth", "User-Agent", "range", "X-File-Size", "X-Requested-With", "If-Modified-Since", "X-File-Name", "Cache-ControlAccess-Control-Allow-Origin"],
         allowCredentials: true,
         maxAge: 84900
     }
@@ -493,6 +493,9 @@ service / on new http:Listener(serverPort) {
         database:ExperimentDataFull data;
 
         http:Response resp = new;
+        resp.addHeader("Access-Control-Allow-Origin", "*");
+        resp.addHeader("Access-Control-Allow-Methods", "OPTIONS, GET");
+        resp.addHeader("Access-Control-Allow-Headers", "range,Content-Type,Depth,User-Agent,X-File-Size,X-Requested-With,If-Modified-Since,X-File-Name,Cache-Control,Access-Control-Allow-Origin");
 
         transaction {
             data = check database:getData(experimentId, name, 'version);
@@ -700,6 +703,9 @@ service / on new http:Listener(serverPort) {
         database:TimelineStepWithParams result;
 
         http:Response resp = new;
+        resp.addHeader("Access-Control-Allow-Origin", "*");
+        resp.addHeader("Access-Control-Allow-Methods", "OPTIONS, GET");
+        resp.addHeader("Access-Control-Allow-Headers", "range,Content-Type,Depth,User-Agent,X-File-Size,X-Requested-With,If-Modified-Since,X-File-Name,Cache-Control,Access-Control-Allow-Origin");
 
         transaction {
             result = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep);
@@ -818,6 +824,9 @@ service / on new http:Listener(serverPort) {
         database:TimelineSubstepWithParams step;
 
         http:Response resp = new;
+        resp.addHeader("Access-Control-Allow-Origin", "*");
+        resp.addHeader("Access-Control-Allow-Methods", "OPTIONS, GET");
+        resp.addHeader("Access-Control-Allow-Headers", "range,Content-Type,Depth,User-Agent,X-File-Size,X-Requested-With,If-Modified-Since,X-File-Name,Cache-Control,Access-Control-Allow-Origin");
 
         transaction {
             // FIXME timelineStep != database step id!!!!
