@@ -13,16 +13,13 @@
 // limitations under the License.
 
 import ballerina/sql;
-<<<<<<< HEAD
 import ballerina/io;
 import ballerina/mime;
 import ballerina/time;
 import ballerina/file;
 import qhana_backend.java.io as javaio;
 import qhana_backend.java.util.zip as javazip;
-=======
 import ballerina/log;
->>>>>>> feature/clone-experiments
 
 public type IdSQL record {|
     int id;
@@ -37,12 +34,8 @@ public isolated transactional function cloneExperiment(int oldExperimentId) retu
 
     // clone experiment
     ExperimentFull experimentInfo = check getExperiment(oldExperimentId);
-<<<<<<< HEAD
-    experimentInfo.name = experimentInfo.name + " - Copy";
-=======
     experimentInfo.name = experimentInfo.name + " (copy)";
 
->>>>>>> feature/clone-experiments
     var experimentInsertResult = check experimentDB->execute(
         `INSERT INTO Experiment (name, description) VALUES (${experimentInfo.name}, ${experimentInfo.description});`
     );
