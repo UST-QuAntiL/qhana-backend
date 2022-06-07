@@ -1,6 +1,6 @@
 -- liquibase formatted sql
 
--- changeset nicolaikrebs:qhana-backend-baseline-1 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-1 labels:v0 context:all
 CREATE TABLE IF NOT EXISTS "Experiment" (
 	"experimentId"	INTEGER NOT NULL,
 	"name"	VARCHAR(500) NOT NULL COLLATE NOCASE,
@@ -8,12 +8,12 @@ CREATE TABLE IF NOT EXISTS "Experiment" (
 	PRIMARY KEY("experimentId" AUTOINCREMENT)
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-2 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-2 labels:v0 context:all
 CREATE INDEX IF NOT EXISTS "ix_pk_experiment" ON "Experiment" (
 	"experimentId"	ASC
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-3 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-3 labels:v0 context:all
 CREATE TABLE IF NOT EXISTS "ExperimentData" (
 	"dataId"	INTEGER NOT NULL,
 	"experimentId"	INTEGER NOT NULL,
@@ -27,37 +27,37 @@ CREATE TABLE IF NOT EXISTS "ExperimentData" (
 	PRIMARY KEY("dataId" AUTOINCREMENT)
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-4 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-4 labels:v0 context:all
 CREATE INDEX IF NOT EXISTS "ix_pk_experiment_data" ON "ExperimentData" (
 	"dataId"	ASC
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-5 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-5 labels:v0 context:all
 CREATE INDEX IF NOT EXISTS "ix_fk_data_to_experiment" ON "ExperimentData" (
 	"experimentId"
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-6 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-6 labels:v0 context:all
 CREATE INDEX IF NOT EXISTS "ix_data_name" ON "ExperimentData" (
 	"name"	ASC
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-7 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-7 labels:v0 context:all
 CREATE INDEX IF NOT EXISTS "ix_data_version" ON "ExperimentData" (
 	"version"	ASC
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-8 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-8 labels:v0 context:all
 CREATE INDEX IF NOT EXISTS "ix_data_type" ON "ExperimentData" (
 	"type"
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-9 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-9 labels:v0 context:all
 CREATE INDEX IF NOT EXISTS "ix_data_contenttype" ON "ExperimentData" (
 	"contentType"
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-10 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-10 labels:v0 context:all
 CREATE TABLE IF NOT EXISTS "TimelineStep" (
 	"stepId"	INTEGER NOT NULL,
 	"experimentId"	INTEGER NOT NULL,
@@ -82,27 +82,27 @@ CREATE TABLE IF NOT EXISTS "TimelineStep" (
 	PRIMARY KEY("stepId" AUTOINCREMENT)
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-11 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-11 labels:v0 context:all
 CREATE INDEX IF NOT EXISTS "ix_pk_experiment_step" ON "TimelineStep" (
 	"stepId"	ASC
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-12 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-12 labels:v0 context:all
 CREATE INDEX IF NOT EXISTS "ix_fk_step_to_experiment" ON "TimelineStep" (
 	"experimentId"
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-13 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-13 labels:v0 context:all
 CREATE INDEX IF NOT EXISTS "ix_step_sequence" ON "TimelineStep" (
 	"sequence"
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-14 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-14 labels:v0 context:all
 CREATE INDEX IF NOT EXISTS "ix_step_processor" ON "TimelineStep" (
 	"processorName"
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-15 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-15 labels:v0 context:all
 CREATE TABLE IF NOT EXISTS "StepData" (
 	"id"	INTEGER NOT NULL,
 	"stepId"	INTEGER NOT NULL,
@@ -113,22 +113,22 @@ CREATE TABLE IF NOT EXISTS "StepData" (
 	PRIMARY KEY("id" AUTOINCREMENT)
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-16 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-16 labels:v0 context:all
 CREATE INDEX IF NOT EXISTS "ix_pk_step_data" ON "StepData" (
 	"id"	ASC
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-17 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-17 labels:v0 context:all
 CREATE INDEX IF NOT EXISTS "ix_fk_step_data_to_step" ON "StepData" (
 	"stepId"
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-18 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-18 labels:v0 context:all
 CREATE INDEX IF NOT EXISTS "ix_fk_step_data_to_data" ON "StepData" (
 	"dataId"
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-19 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-19 labels:v0 context:all
 CREATE INDEX IF NOT EXISTS "ix_fk_step_data_relation" ON "StepData" (
 	"relationType"
 );
@@ -194,7 +194,7 @@ CREATE INDEX IF NOT EXISTS "ix_fk_substep_data_relation" ON "SubstepData" (
 	"relationType"
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-29 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-29 labels:v0 context:all
 CREATE TABLE IF NOT EXISTS "ResultWatchers" (
 	"stepId"	INTEGER NOT NULL,
 	"resultEndpoint"	TEXT NOT NULL,
@@ -202,7 +202,7 @@ CREATE TABLE IF NOT EXISTS "ResultWatchers" (
 	PRIMARY KEY("stepId")
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-30 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-30 labels:v0 context:all
 CREATE TABLE IF NOT EXISTS "PluginEndpoints" (
 	"id"	INTEGER NOT NULL,
 	"url"	TEXT NOT NULL UNIQUE,
@@ -210,5 +210,5 @@ CREATE TABLE IF NOT EXISTS "PluginEndpoints" (
 	PRIMARY KEY("id" AUTOINCREMENT)
 );
 
--- changeset nicolaikrebs:qhana-backend-baseline-31 labels:v0 context:all
+-- changeset fabianbuehler:qhana-backend-baseline-31 labels:v0 context:all
 INSERT INTO PluginEndpoints (url, type) VALUES ("http://localhost:5005", "PluginRunner");
