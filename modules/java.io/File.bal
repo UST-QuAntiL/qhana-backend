@@ -7,6 +7,7 @@ import qhana_backend.java.nio.file as javaniofile;
 # Ballerina class mapping for the Java `java.io.File` class.
 @java:Binding {'class: "java.io.File"}
 public distinct class File {
+
     *java:JObject;
     *javalang:Object;
 
