@@ -21,8 +21,8 @@ import ballerina/mime;
 
 # The connection pool config for sqlite databases.
 sql:ConnectionPool sqlitePool = {
-    maxOpenConnections: 5, // limit the concurrent connections as sqlite is not really concurrency friendly
-    maxConnectionLifeTime: 1800, // limit keepalive to ensure pool resets faster on errors
+    maxOpenConnections: 5,  // limit the concurrent connections as sqlite is not really concurrency friendly
+    maxConnectionLifeTime: 1800,  // limit keepalive to ensure pool resets faster on errors
     minIdleConnections: 0
 };
 
@@ -49,7 +49,6 @@ configurable string dbUser = "QHAna";
 # Can also be configured by setting the `QHANA_DB_PASSWORD` environment variable.
 configurable string dbPassword = "";
 
-
 # Get the db type from the `QHANA_DB_TYPE` environment variable.
 # If not present use the configurable variable `dbType` as fallback.
 #
@@ -63,13 +62,12 @@ function getDBType() returns string {
 }
 
 # The final configured db type.
-final string&readonly configuredDBType = getDBType().cloneReadOnly();
-
+final string & readonly configuredDBType = getDBType().cloneReadOnly();
 
 # Initialize the database client from the supplied config.
-# 
+#
 # Also reads config from environment variables.
-# 
+#
 # + return - the created client or an error
 function initClient() returns jdbc:Client|error {
     // load config from env vars
@@ -115,7 +113,7 @@ function initClient() returns jdbc:Client|error {
 final jdbc:Client experimentDB = check initClient();
 
 # A record holding a single row count.
-# 
+#
 # + rowCount - the row count
 type RowCount record {
     int rowCount;
@@ -169,7 +167,7 @@ public type ExperimentDataReference record {|
 |};
 
 # Record specifying data and content type tags.
-# 
+#
 # + dataType - the data type (what kind of data)
 # + contentType - the content type or mimetype (how is the data stored)
 type DataTypeTuple record {|
@@ -201,9 +199,8 @@ public type ExperimentDataFull record {|
 
 // Timeline ////////////////////////////////////////////////////////////////////
 
-
 # Database result progress record.
-# 
+#
 # + progressStart - the start value of the progress (defaults to 0)
 # + progressTarget - the target value, e.g., the value where the progress is considered 100% done (defaults to 100)
 # + progressValue - the current progress value
@@ -575,7 +572,7 @@ public isolated transactional function getDataTypesSummary(int experimentId) ret
     var baseQuery = `SELECT DISTINCT type, contentType from ExperimentData WHERE experimentId=${experimentId} GROUP BY type ORDER BY type, contentType;`;
 
     stream<DataTypeTuple, sql:Error?> dataSummaryRaw = experimentDB->query(`SELECT DISTINCT type as dataType, contentType from ExperimentData WHERE experimentId=${experimentId} GROUP BY type ORDER BY type, contentType;`);
-    
+
     map<string[]> dataSummary = {};
     check from var dt in dataSummaryRaw
         do {
@@ -856,7 +853,6 @@ public isolated transactional function getTimelineStep(int? experimentId = (), i
     return error(string `Timeline step with reference ${ref.toString()} was not found!`);
 }
 
-
 public isolated transactional function updateTimelineStepStatus(int|TimelineStepFull step, string status, string? resultLog) returns error? {
     var stepId = step is int ? step : step.stepId;
     sql:ParameterizedQuery currentTime = `strftime('%Y-%m-%dT%H:%M:%S', 'now')`;
@@ -1024,7 +1020,7 @@ public isolated transactional function deleteTimelineStepResultWatcher(int stepI
     );
 }
 
-public isolated transactional function getTimelineSubsteps(int stepId, int? experimentId=()) returns TimelineSubstepSQL[]|error {
+public isolated transactional function getTimelineSubsteps(int stepId, int? experimentId = ()) returns TimelineSubstepSQL[]|error {
 
     stream<TimelineSubstepSQL, sql:Error?> substeps;
     if (experimentId is ()) {
