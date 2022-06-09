@@ -13,27 +13,28 @@
 // limitations under the License.
 
 import ballerina/sql;
+import ballerina/log;
 
 # Helper function to check the types in a raw query at runtime.
-# 
+#
 # + value - the value to check
 # + return - the cast value or an error
-isolated function checkValue(any|error value) returns sql:Value | error {
+isolated function checkValue(any|error value) returns sql:Value|error {
     if (value is sql:Value) {
         return value;
     }
     if value is error {
         return error("Template insertion failed with an error!", value);
     } else {
-        return error(string`Cannot use inserion ${value.toString()} of type ${(typeof value).toString()} in an sql query!`);
+        return error(string `Cannot use inserion ${value.toString()} of type ${(typeof value).toString()} in an sql query!`);
     }
 }
 
 # Helper function to check and cast all values in an array.
-# 
+#
 # + values - the values to check
 # + return - the cast values or an error
-isolated function checkAllValues((any|error)[] values) returns sql:Value[] | error {
+isolated function checkAllValues((any|error)[] values) returns sql:Value[]|error {
     sql:Value[] result = [];
     foreach var val in values {
         result.push(check checkValue(val));
@@ -41,9 +42,8 @@ isolated function checkAllValues((any|error)[] values) returns sql:Value[] | err
     return result;
 }
 
-
 # Custom class that allows concatenating raw templates to dynamically build sql queries.
-# 
+#
 # **Deprecated**, as there is a function in ballerina that allows this concatenation.
 public class ConcatQuery {
     *sql:ParameterizedQuery;
@@ -61,7 +61,7 @@ public class ConcatQuery {
             sql:Value[] insertions = [];
             string? nextToConcat = ();
             foreach var template in templates {
-                foreach var i in 0..<template.strings.length() {
+                foreach var i in 0 ..< template.strings.length() {
                     // process strings (resulting string array must be exacty one larger than insertions array!)
                     if (i == 0 && nextToConcat != ()) {
                         // if first string check if it must be concatenated with last string of last template
@@ -98,4 +98,24 @@ public class ConcatQuery {
             self.insertions = insertions;
         }
     }
+}
+
+# Workaround for log:printError with stack trace
+# FIXME Prints errors with stack trace. Should be possible to replace this with  log:printError(msg, 'error=err, stackTrace=err.stackTrace()) in upcoming versions
+#
+# + msg - Error message
+# + 'error - Error
+# + stackTrace - Stack trace (currently CallStack) 
+public isolated function printError(string msg, error 'error, error:CallStack stackTrace) {
+    json[] callStack = [];
+    foreach error:CallStackElement stackElement in stackTrace.callStack {
+        callStack.push(stackElement.toString());
+    }
+
+    json errContents = {
+        "message": msg,
+        "error": 'error.message(),
+        "stackTrace": callStack
+    };
+    log:printError(errContents.toString());
 }
