@@ -11,4 +11,4 @@ if ! command -v liquibase; then
     echo "Liquibase not found. Are you sure that you have installed it? For more information, visit https://www.liquibase.org/download"
     exit
 fi
-liquibase update
+liquibase updateTestingRollback

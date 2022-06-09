@@ -37,7 +37,7 @@ COPY --from=builder --chown=ballerina /app/liquibase /app/liquibase
 COPY --chown=ballerina liquibase.docker.properties /app/liquibase.properties
 COPY --chown=ballerina changelog-mariadb.sql /app/
 
-COPY --chown=ballerina sqlite-schema.sql start-docker.sh /app/
+COPY --chown=ballerina changelog-sqlite.sql start-docker.sh /app/
 
 # Apply docker specific config
 COPY --chown=ballerina Config-docker.toml /app/Config.toml
@@ -55,9 +55,6 @@ USER ballerina
 
 # enable liquibase
 ENV PATH="${PATH}:/app/liquibase"
-
-# prepare database
-RUN sqlite3 /app/qhana-backend.db < /app/sqlite-schema.sql
 
 # run backend
 CMD /app/start-docker.sh
