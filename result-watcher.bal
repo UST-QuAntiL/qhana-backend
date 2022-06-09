@@ -240,7 +240,7 @@ isolated class ResultProcessor {
         // compensate by rescheduling the result watcher
         ResultWatcher|error watcher = getResultWatcherFromRegistry(self.stepId);
         if watcher is error {
-            log:printError(watcher.toString());
+            database:printError("Unable to get result watcher", 'error = watcher, stackTrace = watcher.stackTrace());
         } else {
             // TODO: reschedule result watcher
             // error? unschedule = watcher.reschedule();
@@ -266,7 +266,7 @@ isolated class ResultProcessor {
                     }
                 } on fail var compensationError {
                     // TODO actual error logging (and periodic cleanup job looking for files not in a database)
-                    log:printError(string `Error during deletion of file ${processed.location}, while compensating on error importing result for step ${self.stepId}!`, compensationError);
+                    database:printError(string `Error during deletion of file ${processed.location}, while compensating on error importing result for step ${self.stepId}!`, 'error = compensationError, stackTrace = compensationError.stackTrace());
                 }
             }
         }
@@ -379,7 +379,8 @@ isolated class ResultWatcherRescheduler {
         (decimal|int)[] initialIntervals = configuredWatcherIntervalls;
         error? err = self.watcher.schedule(...initialIntervals);
         if err != () {
-            log:printError("Error", 'error = err);
+            database:printError("Failed to reschedule watcher.", 'error = err, stackTrace = err.stackTrace());
+
         }
     }
 }
@@ -411,12 +412,13 @@ public isolated class ResultWatcher {
             log:printError(string `Unscheduling watcher for step ${self.stepId} because of repeated errors.`);
             var err = self.unschedule();
             if err is error {
-                log:printError(string `Failed to unsubscribe step result watcher for step ${self.stepId}`, err);
+                database:printError(string `Failed to unsubscribe step result watcher for step ${self.stepId}`, 'error = err, stackTrace = err.stackTrace());
             } else {
                 // not sure if this is needed here
                 var err2 = removeResultWatcherFromRegistry(self.stepId);
                 if err2 is error {
-                    log:printError(string `Failed to remove result watcher from registry for step ${self.stepId}`, err2);
+                    database:printError(string `Failed to remove result watcher from registry for step ${self.stepId}`, 'error = err2, stackTrace = err2.stackTrace());
+
                 }
             }
         }
@@ -427,7 +429,8 @@ public isolated class ResultWatcher {
             lock {
                 self.errorCounter += 1;
             }
-            log:printError("Error", 'error = result);
+            database:printError("Could not get task status response.", 'error = result, stackTrace = result.stackTrace());
+
         } else {
             lock {
                 if self.errorCounter > 0 {
@@ -470,7 +473,7 @@ public isolated class ResultWatcher {
                     lock {
                         self.errorCounter += 1;
                     }
-                    log:printError("Error", 'error = err);
+                    database:printError("Rescheduling failed.", 'error = err, stackTrace = err.stackTrace());
                 }
             }
         }
@@ -487,7 +490,7 @@ public isolated class ResultWatcher {
         if (err != ()) {
             if err.message().startsWith("Invalid job id:") {
                 // ignore error, but print it
-                log:printError("Error", 'error = err);
+                database:printError("Unscheduling failed.", 'error = err, stackTrace = err.stackTrace());
             } else {
                 return err;
             }
@@ -590,7 +593,7 @@ public isolated class ResultWatcher {
             lock {
                 self.errorCounter += 1;
             }
-            log:printError("Error", 'error = e);
+            database:printError("Failed to check task result.", 'error = e, stackTrace = e.stackTrace());
         }
     }
 
