@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import ballerina/sql;
-import ballerina/log;
 
 # Helper function to check the types in a raw query at runtime.
 #
@@ -98,24 +97,4 @@ public class ConcatQuery {
             self.insertions = insertions;
         }
     }
-}
-
-# Workaround for log:printError with stack trace
-# FIXME Prints errors with stack trace. Should be possible to replace this with  log:printError(msg, 'error=err, stackTrace=err.stackTrace()) in upcoming versions
-#
-# + msg - Error message
-# + 'error - Error
-# + stackTrace - Stack trace (currently CallStack) 
-public isolated function printError(string msg, error 'error, error:CallStack stackTrace) {
-    json[] callStack = [];
-    foreach error:CallStackElement stackElement in stackTrace.callStack {
-        callStack.push(stackElement.toString());
-    }
-
-    json errContents = {
-        "message": msg,
-        "error": 'error.message(),
-        "stackTrace": callStack
-    };
-    log:printError(errContents.toString());
 }
