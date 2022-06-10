@@ -263,7 +263,7 @@ public type TimelineStepResponse record {|
 |};
 
 # A list of timeline steps.
-# 
+#
 # Uses the minimal timeline step record.
 #
 # + items - the timeline steps
@@ -304,7 +304,7 @@ public type TimelineSubstepResponse record {|
     int substepNr;
     string href;
     string? hrefUi;
-    int cleared;
+    boolean cleared;
     string? parameters;
     string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
     database:ExperimentDataReference[] inputData;
@@ -432,8 +432,8 @@ public isolated function mapToTimelineSubstepResponse(
         substepNr: substep.substepNr,
         href: substep.href,
         hrefUi: substep.hrefUi,
-        cleared: substep.cleared,
-        parameters: substep?.parameters,
+        cleared: substep.cleared == 1 ? true : false,
+        parameters: string `/experiments/${experimentId}/timeline/${substep.stepId}/substeps/${substep.substepNr}/parameters`,
         parametersContentType: substep?.parametersContentType,
         inputData: inputData,
         inputDataLinks: inputDataLinks
