@@ -67,9 +67,9 @@ final string&readonly configuredDBType = getDBType().cloneReadOnly();
 
 
 # Initialize the database client from the supplied config.
-# 
+#
 # Also reads config from environment variables.
-# 
+#
 # + return - the created client or an error
 function initClient() returns jdbc:Client|error {
     // load config from env vars
@@ -115,7 +115,7 @@ function initClient() returns jdbc:Client|error {
 final jdbc:Client experimentDB = check initClient();
 
 # A record holding a single row count.
-# 
+#
 # + rowCount - the row count
 type RowCount record {
     int rowCount;
@@ -169,7 +169,7 @@ public type ExperimentDataReference record {|
 |};
 
 # Record specifying data and content type tags.
-# 
+#
 # + dataType - the data type (what kind of data)
 # + contentType - the content type or mimetype (how is the data stored)
 type DataTypeTuple record {|
@@ -199,11 +199,26 @@ public type ExperimentDataFull record {|
     *ExperimentData;
 |};
 
+# Record describing the export configuration for exporting an experiment.
+#
+public type ExperimentExportConfig record {|
+|};
+
+# Experiment export record for exporting experiments as a zip.
+#
+# + name - the (file-)name of the experiment zip
+# + location - the path where the data is stored
+# + fileLength - length of file
+public type ExperimentExportZip record {|
+    string name;
+    string location;
+    int fileLength;
+|};
+
 // Timeline ////////////////////////////////////////////////////////////////////
 
-
 # Database result progress record.
-# 
+#
 # + progressStart - the start value of the progress (defaults to 0)
 # + progressTarget - the target value, e.g., the value where the progress is considered 100% done (defaults to 100)
 # + progressValue - the current progress value
@@ -572,10 +587,8 @@ public isolated transactional function getExperimentDataCount(int experimentId, 
 }
 
 public isolated transactional function getDataTypesSummary(int experimentId) returns map<string[]>|error {
-    var baseQuery = `SELECT DISTINCT type, contentType from ExperimentData WHERE experimentId=${experimentId} GROUP BY type ORDER BY type, contentType;`;
-
     stream<DataTypeTuple, sql:Error?> dataSummaryRaw = experimentDB->query(`SELECT DISTINCT type as dataType, contentType from ExperimentData WHERE experimentId=${experimentId} GROUP BY type ORDER BY type, contentType;`);
-    
+
     map<string[]> dataSummary = {};
     check from var dt in dataSummaryRaw
         do {
@@ -730,7 +743,7 @@ public isolated transactional function castToTimelineStepFull(TimelineStepSQL st
     return step.cloneWithType();
 }
 
-public isolated transactional function getTimelineStepList(int experimentId, boolean allAttributes = false, int 'limit = 100, int offset = 0) returns TimelineStepFull[]|error {
+public isolated transactional function getTimelineStepList(int experimentId, boolean allAttributes = false, int 'limit = 100, int offset = 0, boolean allSteps = false) returns TimelineStepFull[]|error {
     object:RawTemplate[] query = [`SELECT stepId, experimentId, sequence, `];
 
     if configuredDBType == "sqlite" {
@@ -742,12 +755,16 @@ public isolated transactional function getTimelineStepList(int experimentId, boo
     query.push(`status, processorName, processorVersion, processorLocation `);
 
     if allAttributes {
-        query.push(`, resultQuality, resultLog, parameters, parametersContentType, notes `);
+        query.push(`, resultQuality, resultLog, coalesce(parameters,'') AS parameters, parametersContentType, coalesce(notes,'') AS notes `);
     } else {
         query.push(`, resultQuality, NULL AS resultLog `);
     }
 
-    query.push(`FROM TimelineStep WHERE experimentId=${experimentId} ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`);
+    if !allSteps {
+        query.push(`FROM TimelineStep WHERE experimentId=${experimentId} ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`);
+    } else {
+        query.push(`FROM TimelineStep WHERE experimentId=${experimentId} ORDER BY sequence ASC;`);
+    }
 
     stream<TimelineStepSQL, sql:Error?> timelineSteps = experimentDB->query(check new ConcatQuery(...query));
 
@@ -855,7 +872,6 @@ public isolated transactional function getTimelineStep(int? experimentId = (), i
 
     return error(string `Timeline step with reference ${ref.toString()} was not found!`);
 }
-
 
 public isolated transactional function updateTimelineStepStatus(int|TimelineStepFull step, string status, string? resultLog) returns error? {
     var stepId = step is int ? step : step.stepId;
@@ -1024,7 +1040,7 @@ public isolated transactional function deleteTimelineStepResultWatcher(int stepI
     );
 }
 
-public isolated transactional function getTimelineSubsteps(int stepId, int? experimentId=()) returns TimelineSubstepSQL[]|error {
+public isolated transactional function getTimelineSubsteps(int stepId, int? experimentId = ()) returns TimelineSubstepSQL[]|error {
 
     stream<TimelineSubstepSQL, sql:Error?> substeps;
     if (experimentId is ()) {
