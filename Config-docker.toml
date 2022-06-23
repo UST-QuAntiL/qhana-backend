@@ -1,3 +1,6 @@
+[ballerina.log]
+level = "INFO"
+
 [qhana.qhana_backend]
 
 # Allow all CORS requests from any domain
