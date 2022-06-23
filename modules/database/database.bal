@@ -569,8 +569,6 @@ public isolated transactional function getExperimentDataCount(int experimentId, 
 }
 
 public isolated transactional function getDataTypesSummary(int experimentId) returns map<string[]>|error {
-    var baseQuery = `SELECT DISTINCT type, contentType from ExperimentData WHERE experimentId=${experimentId} GROUP BY type ORDER BY type, contentType;`;
-
     stream<DataTypeTuple, sql:Error?> dataSummaryRaw = experimentDB->query(`SELECT DISTINCT type as dataType, contentType from ExperimentData WHERE experimentId=${experimentId} GROUP BY type ORDER BY type, contentType;`);
 
     map<string[]> dataSummary = {};

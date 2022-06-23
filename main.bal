@@ -854,6 +854,23 @@ service / on new http:Listener(serverPort) {
 
         check caller->respond(resp);
     }
+
+    # Clone an experiment.
+    #
+    # + experimentId - the id of the experiment to be cloned
+    # + return - the cloned experiment resource
+    resource function post experiments/[int experimentId]/clone() returns ExperimentResponse|http:InternalServerError {
+        database:ExperimentFull result;
+        transaction {
+            result = check database:cloneExperiment(experimentId);
+            check commit;
+        } on fail error err {
+            io:println(err);
+            return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
+        }
+
+        return mapToExperimentResponse(result);
+    }
 }
 
 # Start all ResultWatchers from their DB entries.
