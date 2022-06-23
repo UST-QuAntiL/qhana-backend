@@ -865,7 +865,7 @@ service / on new http:Listener(serverPort) {
             result = check database:cloneExperiment(experimentId);
             check commit;
         } on fail error err {
-            io:println(err);
+            log:printError("Could not clone the experiment.", 'error = err, stackTrace = err.stackTrace().callStack);
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
