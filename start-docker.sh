@@ -1,13 +1,14 @@
 #!/bin/sh
 
 # prepare sqlite database
-liquibase --url=jdbc:sqlite:qhana-backend.db --classpath=../liquibase/internal/lib/sqlite-jdbc.jar --driver=org.sqlite.JDBC --changelog-file=../changelog-sqlite.sql updateTestingRollback
+cp /app/liquibase.properties /app/data/liquibase.properties
+liquibase --url=jdbc:sqlite:qhana-backend.db --classpath=../liquibase/internal/lib/sqlite-jdbc.jar --driver=org.sqlite.JDBC --changelog-file=../changelog.xml updateTestingRollback
 
 # insert env var for mariadb liquibase config
-eval "echo \"$(cat /app/liquibase.properties)\"" > /app/liquibase.properties
+eval "echo \"$(cat /app/liquibase.mariadb.properties)\"" > /app/data/liquibase.properties
 
 # copy config and qhana db into volume
-cp -n /app/Config.toml /app/liquibase.properties /app/changelog-mariadb.sql /app/data/
+cp /app/Config.toml /app/changelog.xml /app/data/
 
 
 # wait for db to start
