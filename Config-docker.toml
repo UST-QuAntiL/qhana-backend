@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [qhana.qhana_backend]
 
 # Allow all CORS requests from any domain
@@ -8,3 +9,18 @@ corsDomains = ["*"]
 
 [qhana.qhana_backend.database]
 # The config key must be present or ballerina crashes
+=======
+[ballerina.log]
+level = "INFO"
+
+[qhana.qhana_backend]
+
+# Allow all CORS requests from any domain
+corsDomains = ["*"]
+
+[qhana.qhana_backend.internalUrlMap]
+"(?<=^|https?://)localhost(:[0-9]+)?" = "host.docker.internal$1"
+
+[qhana.qhana_backend.database]
+# The config key must be present or ballerina crashes
+>>>>>>> main

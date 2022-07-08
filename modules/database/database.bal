@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import ballerina/io;
+import ballerina/log;
 import ballerina/time;
 import ballerina/sql;
 import ballerinax/java.jdbc;
@@ -101,7 +101,7 @@ function initClient() returns jdbc:Client|error {
             string passwordPart = string `&password=${dbPasswordLocal}`;
             connection = connection + passwordPart;
         }
-        io:println(connection); // FIXME remove to stop outputting password to stdout
+        log:printDebug(connection); // FIXME remove to stop outputting password to stdout
         return new jdbc:Client(connection);
     } else {
         return error(string `Db type ${configuredDBType} is unknownn!`);
@@ -569,8 +569,6 @@ public isolated transactional function getExperimentDataCount(int experimentId, 
 }
 
 public isolated transactional function getDataTypesSummary(int experimentId) returns map<string[]>|error {
-    var baseQuery = `SELECT DISTINCT type, contentType from ExperimentData WHERE experimentId=${experimentId} GROUP BY type ORDER BY type, contentType;`;
-
     stream<DataTypeTuple, sql:Error?> dataSummaryRaw = experimentDB->query(`SELECT DISTINCT type as dataType, contentType from ExperimentData WHERE experimentId=${experimentId} GROUP BY type ORDER BY type, contentType;`);
 
     map<string[]> dataSummary = {};
