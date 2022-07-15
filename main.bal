@@ -532,10 +532,14 @@ service / on new http:Listener(serverPort) {
     # The list resource of timeline entries is paginated
     #
     # + experimentId - the id of the experiment
+    # + plugin\-name - filter by plugin name
+    # + 'version - filter by version (name + version for exact match)
+    # + status - filter by status (pending/finished)
+    # + uncleared\-substep - filter by step status (whether there is an uncleared substep that requires user inputs) - 1 for true, 0 for false 
     # + page - the requested page (starting with page 0)
     # + 'item\-count - the number of items per page (5 <= item-count <= 500)
     # + return - the list resource containing the timeline entries
-    resource function get experiments/[int experimentId]/timeline(int page = 0, int item\-count = 0) returns TimelineStepListResponse|http:BadRequest|http:NotFound|http:InternalServerError {
+    resource function get experiments/[int experimentId]/timeline(string? plugin\-name, string? 'version, string? status, int? uncleared\-substep, int page = 0, int item\-count = 0) returns TimelineStepListResponse|http:BadRequest|http:NotFound|http:InternalServerError {
         if (page < 0) {
             return <http:BadRequest>{body: "Cannot retrieve a negative page number!"};
         }
@@ -550,15 +554,22 @@ service / on new http:Listener(serverPort) {
         database:TimelineStepFull[] steps;
 
         transaction {
-            stepCount = check database:getTimelineStepCount(experimentId);
+
+            if uncleared\-substep == () {
+                stepCount = check database:getTimelineStepCount(experimentId, plugin\-name, 'version, status);
+            }
+
+            // calculating stepCount with substep filter (has cleared/uncleared substeps) inefficient
+            steps = check database:getTimelineStepList(experimentId, plugin\-name, 'version, status, uncleared\-substep, 'limit = item\-count, offset = offset);
+            stepCount = steps.length();
             if (offset >= stepCount) {
                 // page is out of range!
                 check commit;
                 return <http:NotFound>{};
             } else {
-                steps = check database:getTimelineStepList(experimentId, 'limit = item\-count, offset = offset);
                 check commit;
             }
+
         } on fail error err {
             log:printError("Could not get timeline step list.", 'error = err, stackTrace = err.stackTrace().callStack);
             // if with return does not correctly narrow type for rest of function... this does.
