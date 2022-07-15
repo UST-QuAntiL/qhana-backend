@@ -738,31 +738,34 @@ public isolated transactional function castToTimelineStepFull(TimelineStepSQL st
 
 public isolated transactional function getTimelineStepList(int experimentId, string? plugin\-name, string? 'version, string? status, int? uncleared\-substep, boolean allAttributes = false, int 'limit = 100, int offset = 0) returns TimelineStepFull[]|error {
 
-    sql:ParameterizedQuery query = `SELECT stepId, experimentId, sequence, `;
+    sql:ParameterizedQuery baseQuery = `SELECT stepId, experimentId, sequence, `;
     if configuredDBType == "sqlite" {
-        query = sql:queryConcat(query, `cast(start as TEXT) AS start, cast(end as TEXT) AS end, `);
+        baseQuery = sql:queryConcat(baseQuery, `cast(start as TEXT) AS start, cast(end as TEXT) AS end, `);
     } else {
-        query = sql:queryConcat(query, `DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, `);
+        baseQuery = sql:queryConcat(baseQuery, `DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, `);
     }
-    query = sql:queryConcat(query, `status, processorName, processorVersion, processorLocation `);
+    baseQuery = sql:queryConcat(baseQuery, `status, processorName, processorVersion, processorLocation `);
     if allAttributes {
-        query = sql:queryConcat(query, `, resultQuality, resultLog, parameters, parametersContentType, notes `);
+        baseQuery = sql:queryConcat(baseQuery, `, resultQuality, resultLog, parameters, parametersContentType, notes `);
     } else {
-        query = sql:queryConcat(query, `, resultQuality, NULL AS resultLog `);
+        baseQuery = sql:queryConcat(baseQuery, `, resultQuality, NULL AS resultLog `);
     }
-    query = sql:queryConcat(query, `FROM TimelineStep WHERE experimentId=${experimentId}`);
+    baseQuery = sql:queryConcat(baseQuery, `FROM TimelineStep WHERE experimentId=${experimentId}`);
+
+    sql:ParameterizedQuery filter = ``;
     if plugin\-name != () {
-        query = sql:queryConcat(query, ` AND processorName = ${plugin\-name}`);
+        filter = sql:queryConcat(filter, ` AND processorName = ${plugin\-name}`);
     }
     if 'version != () {
-        query = sql:queryConcat(query, ` AND processorVersion = ${'version}`);
+        filter = sql:queryConcat(filter, ` AND processorVersion = ${'version}`);
     }
     if status != () {
-        query = sql:queryConcat(query, ` AND status = ${status}`);
+        filter = sql:queryConcat(filter, ` AND status = ${status}`);
     }
-    query = sql:queryConcat(query, ` ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`);
 
-    stream<TimelineStepSQL, sql:Error?> timelineSteps = experimentDB->query(query);
+    // filtering for (un)cleared substeps done later 
+
+    stream<TimelineStepSQL, sql:Error?> timelineSteps = experimentDB->query(check new ConcatQuery(baseQuery, filter, ` ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`));
 
     (TimelineStepSQL|TimelineStepFull)[]|error|() tempList = from var step in timelineSteps
         select step;

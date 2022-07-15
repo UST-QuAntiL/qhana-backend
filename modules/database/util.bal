@@ -40,3 +40,61 @@ isolated function checkAllValues((any|error)[] values) returns sql:Value[]|error
     }
     return result;
 }
+
+# Custom class that allows concatenating raw templates to dynamically build sql queries.
+#
+# **Deprecated**, as there is a function in ballerina that allows this concatenation.
+public class ConcatQuery {
+    *sql:ParameterizedQuery;
+
+    isolated function init(object:RawTemplate... templates) returns error? {
+        if (templates.length() == 0) {
+            return error("Must provide at least one raw template!");
+        } else if (templates.length() == 1) {
+            // only one template, just copy values
+            self.strings = templates[0].strings;
+            self.insertions = check checkAllValues(templates[0].insertions);
+        } else {
+            // multiple templates, concatenate values
+            string[] strings = [];
+            sql:Value[] insertions = [];
+            string? nextToConcat = ();
+            foreach var template in templates {
+                foreach var i in 0 ..< template.strings.length() {
+                    // process strings (resulting string array must be exacty one larger than insertions array!)
+                    if (i == 0 && nextToConcat != ()) {
+                        // if first string check if it must be concatenated with last string of last template
+                        if (template.strings.length() == 1) {
+                            // template only contains one string (and no insertions)
+                            nextToConcat = nextToConcat + template.strings[i];
+                        } else {
+                            // template contains more strings (and at least one insertion)
+                            strings.push(nextToConcat + template.strings[i]);
+                            nextToConcat = ();
+                        }
+                        // string already handled, go to next
+                        continue;
+                    }
+                    if (i == (template.strings.length() - 1)) {
+                        // last item is saved in nextToConcat temporarily
+                        nextToConcat = template.strings[i];
+                    } else {
+                        // push middle items directly to array
+                        strings.push(template.strings[i]);
+                    }
+                }
+                foreach var inserion in template.insertions {
+                    // process template insertions
+                    insertions.push(check checkValue(inserion));
+                }
+            }
+            // add last item to strings array (should always exist)
+            if (nextToConcat != ()) {
+                strings.push(nextToConcat);
+            }
+            // set values
+            self.strings = strings.cloneReadOnly();
+            self.insertions = insertions;
+        }
+    }
+}
