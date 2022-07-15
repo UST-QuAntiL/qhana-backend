@@ -34,14 +34,10 @@ WORKDIR /app/data
 COPY --from=builder --chown=ballerina /app/target/bin/qhana_backend.jar /app/
 
 COPY --from=builder --chown=ballerina /app/liquibase /app/liquibase
-COPY --chown=ballerina liquibase.mariadb.properties /app/liquibase.mariadb.properties
 COPY --chown=ballerina liquibase.properties /app/liquibase.properties
 COPY --chown=ballerina changelog.xml /app/
 
 COPY --chown=ballerina start-docker.sh /app/
-
-# Apply docker specific config
-COPY --chown=ballerina Config-docker.toml /app/Config.toml
 
 EXPOSE 9090
 
