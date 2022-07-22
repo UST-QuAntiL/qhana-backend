@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:pro="http://www.liquibase.org/xml/ns/pro" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
-		https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
-		https://www.liquibase.org/xml/ns/dbchangelog-ext https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
-		https://www.liquibase.org/xml/ns/pro https://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+	https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
 	<changeSet id="create-experiment" author="fabianbuehler">
 		<preConditions onFail="MARK_RAN">
@@ -157,18 +155,12 @@
 			<column name="start" type="datetime">
 				<constraints nullable="false" />
 			</column>
-			<column name="end" type="datetime">
-				<constraints nullable="false" />
-			</column>
-			<column name="status" type="varchar(50)" defaultValue="PENDING">
-				<constraints nullable="false" />
-			</column>
+			<column name="end" type="datetime"></column>
+			<column name="status" type="varchar(50)" defaultValue="PENDING"></column>
 			<column name="resultQuality" type="varchar(50)" defaultValue="UNKNOWN">
 				<constraints nullable="false" />
 			</column>
-			<column name="resultLog" type="text">
-				<constraints nullable="false" />
-			</column>
+			<column name="resultLog" type="text"></column>
 			<column name="processorName" type="varchar(500)">
 				<constraints nullable="false" />
 			</column>
@@ -302,7 +294,7 @@
 			</column>
 			<column name="hrefUi" type="text" />
 			<column name="cleared" type="int" defaultValue="0">
-				<constraints nullable="false" checkConstraint="CHECK(cleared=0 or cleared=1)" />
+				<constraints checkConstraint="CHECK(cleared=0 or cleared=1)" />
 			</column>
 			<column name="parameters" type="text" />
 			<column name="parametersContentType" type="varchar(500)" defaultValue="application/x-www-form-urlencoded">
@@ -439,6 +431,12 @@
 				<constraints nullable="false" />
 			</column>
 		</createTable>
+		<rollback>
+			<dropTable tableName="PluginEndpoints" />
+		</rollback>
+	</changeSet>
+
+	<changeSet id="insert-plugin-endpoint" author="fabianbuehler">
 		<insert tableName="PluginEndpoints">
 			<column name="url" value="http://localhost:5005" />
 			<column name="type" value="PluginRunner" />

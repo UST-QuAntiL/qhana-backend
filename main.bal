@@ -766,7 +766,6 @@ service / on new http:Listener(serverPort) {
             lock {
                 watcher = check getResultWatcherFromRegistry(step.stepId);
             }
-            check watcher.unschedule();
             check watcher.schedule(...configuredWatcherIntervalls);
         } on fail error err {
             log:printError("Failed to restart watcher.", 'error = err, stackTrace = err.stackTrace().callStack);
