@@ -7,12 +7,14 @@ RUN wget https://dist.ballerina.io/downloads/swan-lake-beta3/ballerina-swan-lake
 RUN unzip ballerina-swan-lake-beta3.zip
 ENV PATH="${PATH}:/app/ballerina-swan-lake-beta3/bin"
 
+# install liquibase
+RUN wget https://github.com/liquibase/liquibase/releases/download/v4.11.0/liquibase-4.11.0.zip
+RUN unzip liquibase-4.11.0.zip -d /app/liquibase
+
 # copy files
 COPY . /app
 
 RUN bal build --observability-included --skip-tests
-
-
 
 FROM openjdk:11-jre-slim
 
@@ -31,10 +33,13 @@ WORKDIR /app/data
 
 COPY --from=builder --chown=ballerina /app/target/bin/qhana_backend.jar /app/
 
-COPY --chown=ballerina sqlite-schema.sql start-docker.sh /app/
+COPY --from=builder --chown=ballerina /app/liquibase /app/liquibase
+COPY --chown=ballerina changelog.xml /app/
 
-# Apply docker specific config
-COPY --chown=ballerina Config-docker.toml /app/Config.toml
+COPY --chown=ballerina start-docker.sh /app/
+
+# # Apply docker specific config
+# COPY --chown=ballerina Config-docker.toml /app/Config.toml
 
 EXPOSE 9090
 
@@ -47,8 +52,9 @@ RUN chmod +x /app/wait && chmod +x /app/start-docker.sh
 # switch to unpriviledged user
 USER ballerina
 
-# prepare database
-RUN sqlite3 /app/qhana-backend.db < /app/sqlite-schema.sql
+# enable liquibase
+ENV PATH="${PATH}:/app/liquibase"
 
 # run backend
 CMD /app/start-docker.sh
+

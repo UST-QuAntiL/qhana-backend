@@ -21,7 +21,7 @@ services:
   db:
     image: "mariadb:10"
     volumes:
-      - ./mariadb-schema.sql:/docker-entrypoint-initdb.d/mariadb-schema.sql
+      - ./mariadb-init.sql:/docker-entrypoint-initdb.d/mariadb-init.sql
     ports:
       - 3306:3306
     environment:

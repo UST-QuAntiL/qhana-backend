@@ -24,18 +24,23 @@ In these cases try deleting the ballerina repository cache in the folder `~/.bal
 
 :waring: When updating to the swan-lake release from a beta release please follow <https://ballerina.io/downloads/swan-lake-release-notes/2201-0-0-swan-lake/> closely!
 
-```bash
-# first time only
-bash create-sqlite-db.sh
+Install [Liquibase](https://www.liquibase.org/download) following the instructions in the link. 
 
-# insert localhost plugin runner endpoint
-echo 'INSERT INTO PluginEndpoints (url, type) VALUES ("http://localhost:5005", "PluginRunner");' | sqlite3 qhana-backend.db
+```bash
+# create or update the sqlite db 
+bash update-sqlite-db.sh
 
 # start qhana backend
 bal run
 ```
 
 The API is available at the configured port in `main.bal` (currently 9090).
+
+## DB schema changes
+Schema changes need to be added as changesets in the respective changelogs for sqlite and mariadb. For more information, visit [Liquibase](https://www.liquibase.org/get-started/quickstart). To apply all changes in the dev environment, you can run:
+```bash
+liquibase update
+```
 
 ## Troubleshooting
 - Running ballerina in a directory with a space in its name currently does not work and results in the following error:  

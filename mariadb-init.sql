@@ -1,0 +1,2 @@
+DROP DATABASE QHAnaExperiments;
+CREATE DATABASE QHAnaExperiments;
