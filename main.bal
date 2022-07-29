@@ -142,6 +142,49 @@ function getInternalUrlMap() returns map<string> {
 # The final configured URL map.
 final map<string> & readonly configuredUrlMap = getInternalUrlMap().cloneReadOnly();
 
+# Preset plugin runner and plugins.
+# Can also be configured by setting the `QHANA_PLUGIN_RUNNERS` and `QHANA_PLUGINS` environment variables.
+configurable string[] plugins = [];
+configurable string[] pluginRunners = [];
+
+# Get preset plugin runner from the `QHANA_PLUGIN_RUNNERS` environment variable.
+# If not present use the configurable variable `pluginRunners` as fallback.
+#
+# + return - the configured watcher intervalls
+function getPluginRunnersConfig() returns string[] {
+    string pRunners = os:getEnv("QHANA_PLUGIN_RUNNERS");
+    if (pRunners.length() > 0) {
+        do {
+            return check pRunners.fromJsonStringWithType();
+        } on fail error err {
+            log:printError("Failed to parse environment variable QHANA_PLUGIN_RUNNERS!\n", 'error = err, stackTrace = err.stackTrace().callStack);
+        }
+    }
+    return pluginRunners;
+}
+
+# The final configured plugin runner.
+final string[] & readonly preconfiguredPluginRunners = getPluginRunnersConfig().cloneReadOnly();
+
+# Get preset plugins from the `QHANA_PLUGINS` environment variable.
+# If not present use the configurable variable `plugins` as fallback.
+#
+# + return - the configured watcher intervalls
+function getPluginsConfig() returns string[] {
+    string pluginList = os:getEnv("QHANA_PLUGINS");
+    if (pluginList.length() > 0) {
+        do {
+            return check pluginList.fromJsonStringWithType();
+        } on fail error err {
+            log:printError("Failed to parse environment variable QHANA_PLUGINS!\n", 'error = err, stackTrace = err.stackTrace().callStack);
+        }
+    }
+    return plugins;
+}
+
+# The final configured plugins.
+final string[] & readonly preconfiguredPlugins = getPluginsConfig().cloneReadOnly();
+
 // end configuration values
 
 # Rewrite the given URL with the rules configured in the variable `configuredUrlMap`.
@@ -875,6 +918,19 @@ service / on new http:Listener(serverPort) {
 
 # Start all ResultWatchers from their DB entries.
 public function main() {
+    // insert preset plugin runners and plugins into database
+    transaction {
+        foreach string pRunner in preconfiguredPluginRunners {
+            _ = check database:addPluginEndpoint({url: pRunner, 'type: "PluginRunner"});
+        }
+        foreach string plugin in preconfiguredPlugins {
+            _ = check database:addPluginEndpoint({url: plugin, 'type: "Plugin"});
+        }
+        check commit;
+    } on fail error err {
+        log:printError("Could not load preset plugin(-runner) endpoints", 'error = err, stackTrace = err.stackTrace().callStack);
+    }
+
     // registering background tasks
     transaction {
         var stepsToWatch = check database:getTimelineStepsWithResultWatchers();
