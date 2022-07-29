@@ -630,24 +630,24 @@ service / on new http:Listener(serverPort) {
     # + experimentId - the id of the experiment
     # + timelineStep - the step number of the timeline step
     # + return - the requested timeline step resource
-    resource function get experiments/[int experimentId]/timeline/[int timelineStep]() returns TimelineStepResponse|http:InternalServerError {
-        database:TimelineStepWithParams result;
+    resource function get experiments/[int experimentId]/timeline/[int timelineStepSequence]() returns TimelineStepResponse|http:InternalServerError {
+        database:TimelineStepWithParams step;
         database:ExperimentDataReference[] inputData;
         database:ExperimentDataReference[] outputData;
         database:TimelineSubstepSQL[] substeps;
         transaction {
-            result = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep);
-            inputData = check database:getStepInputData(result);
-            outputData = check database:getStepOutputData(result);
+            step = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStepSequence);
+            inputData = check database:getStepInputData(step);
+            outputData = check database:getStepOutputData(step);
             // duplicates input data for substeps, but overhead is negligible 
-            substeps = check database:getTimelineSubstepsWithInputData(timelineStep);
+            substeps = check database:getTimelineSubstepsWithInputData(step.stepId);
             check commit;
         } on fail error err {
             log:printError("Could not get timeline step.", 'error = err, stackTrace = err.stackTrace().callStack);
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
-        return mapToTimelineStepResponse(result, substeps, inputData, outputData);
+        return mapToTimelineStepResponse(step, substeps, inputData, outputData);
     }
 
     # Update the result quality associated with a specific timeline step.
