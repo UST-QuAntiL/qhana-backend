@@ -142,9 +142,12 @@ function getInternalUrlMap() returns map<string> {
 # The final configured URL map.
 final map<string> & readonly configuredUrlMap = getInternalUrlMap().cloneReadOnly();
 
-# Preset plugin runner and plugins.
-# Can also be configured by setting the `QHANA_PLUGIN_RUNNERS` and `QHANA_PLUGINS` environment variables.
+# Preset plugins.
+# Can also be configured by setting the `QHANA_PLUGINS` environment variable.
 configurable string[] plugins = [];
+
+# Preset plugin runners.
+# Can also be configured by setting the `QHANA_PLUGIN_RUNNERS` environment variable.
 configurable string[] pluginRunners = [];
 
 # Get preset plugin runner from the `QHANA_PLUGIN_RUNNERS` environment variable.
@@ -163,7 +166,7 @@ function getPluginRunnersConfig() returns string[] {
     return pluginRunners;
 }
 
-# The final configured plugin runner.
+# The final configured plugin runners.
 final string[] & readonly preconfiguredPluginRunners = getPluginRunnersConfig().cloneReadOnly();
 
 # Get preset plugins from the `QHANA_PLUGINS` environment variable.
@@ -920,11 +923,18 @@ service / on new http:Listener(serverPort) {
 public function main() {
     // insert preset plugin runners and plugins into database
     transaction {
+        database:PluginEndpointFull|error x;
         foreach string pRunner in preconfiguredPluginRunners {
-            _ = check database:addPluginEndpoint({url: pRunner, 'type: "PluginRunner"});
+            x = database:addPluginEndpoint({url: pRunner, 'type: "PluginRunner"});
+            if x is error {
+                log:printDebug("Could not load preset plugin-runner endpoint", 'error = x, stackTrace = x.stackTrace().callStack);
+            }
         }
         foreach string plugin in preconfiguredPlugins {
-            _ = check database:addPluginEndpoint({url: plugin, 'type: "Plugin"});
+            x = check database:addPluginEndpoint({url: plugin, 'type: "Plugin"});
+            if x is error {
+                log:printDebug("Could not load preset plugin endpoint", 'error = x, stackTrace = x.stackTrace().callStack);
+            }
         }
         check commit;
     } on fail error err {
