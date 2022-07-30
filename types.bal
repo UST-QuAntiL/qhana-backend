@@ -259,7 +259,7 @@ public type TimelineStepResponse record {|
     string[] inputDataLinks;
     database:ExperimentDataReference[] outputData;
     string[] outputDataLinks;
-    database:TimelineSubstepSQL[]? substeps = ();
+    TimelineSubstepResponseWithoutParams[]? substeps = ();
 |};
 
 # A list of timeline steps.
@@ -288,6 +288,7 @@ public type TimelineSubstepPost record {|
 # Timeline substep record.
 #
 # + stepId - the step id this is a substep of (the sequence number of the step)
+# + sequence - the sequence number of the associated timeline step
 # + substepId - the substep id (a string id given to the substep by the plugin)
 # + substepNr - the sequence number of the substep in the current step
 # + href - the endpoint URL of the substep
@@ -297,9 +298,10 @@ public type TimelineSubstepPost record {|
 # + parametersContentType - the parameter encoding content type
 # + inputData - the input data of the substep (also in parameters)
 # + inputDataLinks - links to the input data of the substep
-public type TimelineSubstepResponse record {|
+public type TimelineSubstepResponseWithParams record {|
     *ApiResponse;
-    int stepId;
+    int stepId; // TODO remove once frontend accepts sequence
+    int sequence;
     string? substepId;
     int substepNr;
     string href;
@@ -311,12 +313,33 @@ public type TimelineSubstepResponse record {|
     string[] inputDataLinks;
 |};
 
+# Timeline substep record.
+#
+# + stepId - the step id this is a substep of (the sequence number of the step)
+# + sequence - the sequence number of the associated timeline step
+# + substepId - the substep id (a string id given to the substep by the plugin)
+# + substepNr - the sequence number of the substep in the current step
+# + href - the endpoint URL of the substep
+# + hrefUi - the micro frontend URL of the substep
+# + cleared - the status of the substep (true once data was received for the substep)
+# + inputData - the input data of the substep (also in parameters)
+public type TimelineSubstepResponseWithoutParams record {|
+    int stepId; // TODO remove once frontend accepts sequence
+    int sequence;
+    string? substepId;
+    int substepNr;
+    string href;
+    string? hrefUi;
+    boolean cleared;
+    database:ExperimentDataReference[]? inputData;
+|};
+
 # List of timeline substeps
 #
 # + items - the timeline substeps
 public type TimelineSubstepListResponse record {|
     *ApiResponse;
-    database:TimelineSubstepSQL[] items;
+    TimelineSubstepResponseWithoutParams[] items;
 |};
 
 # Put payload to change the result quality field of a timeline step.
@@ -386,6 +409,10 @@ public isolated function mapToTimelineStepResponse(
         select string `/experiments/${step.experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
     var outputDataLinks = from var dataRef in outputData
         select string `/experiments/${step.experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
+    TimelineSubstepResponseWithoutParams[]? substepsResponse = ();
+    if substeps != () {
+        substepsResponse = mapToTimelineSubstepListResponse(step.experimentId, step.sequence, substeps);
+    }
     return {
         '\@self: string `/experiments/${step.experimentId}/timeline/${step.sequence}`,
         notes: string `./notes`,
@@ -408,36 +435,63 @@ public isolated function mapToTimelineStepResponse(
         progressStart: step.progressStart,
         progressTarget: step.progressTarget,
         progressUnit: step.progressUnit,
-        substeps: substeps
+        substeps: substepsResponse
     };
 }
 
 # Helper function to map `TimelineSubstepWithParams` database records to API records.
 #
 # + experimentId - the id of the experiment the substep is part of
+# + timelineStepSequence - the sequence number of the associated timeline step
 # + substep - the input substep record
 # + inputData - the input data of the substep
 # + return - the mapped record
 public isolated function mapToTimelineSubstepResponse(
         int experimentId,
+        int timelineStepSequence,
         database:TimelineSubstepWithParams substep,
         database:ExperimentDataReference[] inputData = []
-) returns TimelineSubstepResponse {
+) returns TimelineSubstepResponseWithParams {
     var inputDataLinks = from var dataRef in inputData
         select string `/experiments/${experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
     return {
-        '\@self: string `/experiments/${experimentId}/timeline/${substep.substepNr}`,
-        stepId: substep.stepId,
+        '\@self: string `/experiments/${experimentId}/timeline/${timelineStepSequence}/substeps/${timelineStepSequence}`,
+        stepId: timelineStepSequence,
+        sequence: timelineStepSequence,
         substepId: substep.substepId,
         substepNr: substep.substepNr,
         href: substep.href,
         hrefUi: substep.hrefUi,
         cleared: substep.cleared == 1 ? true : false,
-        parameters: string `/experiments/${experimentId}/timeline/${substep.stepId}/substeps/${substep.substepNr}/parameters`,
+        parameters: string `/experiments/${experimentId}/timeline/${timelineStepSequence}/substeps/${substep.substepNr}/parameters`,
         parametersContentType: substep?.parametersContentType,
         inputData: inputData,
         inputDataLinks: inputDataLinks
     };
+}
+
+# Helper function to map `TimelineSubstepSQL[]` database records to API records.
+#
+# + experimentId - the id of the experiment the substep is part of
+# + timelineStepSequence - the sequence number of the associated timeline step
+# + substeps - the input substep list
+# + return - the mapped record
+public isolated function mapToTimelineSubstepListResponse(
+        int experimentId,
+        int timelineStepSequence,
+        database:TimelineSubstepSQL[] substeps
+) returns TimelineSubstepResponseWithoutParams[] {
+    return from var substep in substeps
+        select {
+            stepId: timelineStepSequence,
+            sequence: timelineStepSequence,
+            substepId: substep.substepId,
+            substepNr: substep.substepNr,
+            href: substep.href,
+            hrefUi: substep.hrefUi,
+            cleared: substep.cleared == 1 ? true : false,
+            inputData: substep?.inputData
+        };
 }
 
 # Parse a data input URL to extract the URL parameters.
@@ -447,7 +501,7 @@ public isolated function mapToTimelineSubstepResponse(
 # + return - the parsed parameters
 public isolated function mapFileUrlToDataRef(int experimentId, string url) returns database:ExperimentDataReference|error {
     // TODO refactor once regex supports extrating group matches
-    var regex = string `^(https?:\/\/)?[^\/]*\/experiments\/${experimentId}\/data\/[^\/]+\/download\?version=(latest|[0-9]+)$`;
+    var regex = string ` ^ (https ?: \/\/) ? [ ^ \/] * \/experiments\/ ${experimentId}\/data\/[^\/]+\/download\?version = (latest | [0 - 9] + )$`;
     if !regex:matches(url, regex) {
         return error("url does not match any file from the experiment." + url);
     }

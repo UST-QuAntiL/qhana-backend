@@ -617,26 +617,27 @@ service / on new http:Listener(serverPort) {
     # Get a specific timeline step by its step number.
     #
     # + experimentId - the id of the experiment
-    # + timelineStep - the step number of the timeline step
+    # + timelineStepSequence - the step number of the timeline step
     # + return - the requested timeline step resource
-    resource function get experiments/[int experimentId]/timeline/[int timelineStep]() returns TimelineStepResponse|http:InternalServerError {
-        database:TimelineStepWithParams result;
+    resource function get experiments/[int experimentId]/timeline/[int timelineStepSequence]() returns TimelineStepResponse|http:InternalServerError {
+        database:TimelineStepWithParams step;
         database:ExperimentDataReference[] inputData;
         database:ExperimentDataReference[] outputData;
         database:TimelineSubstepSQL[] substeps;
         transaction {
-            result = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep);
-            inputData = check database:getStepInputData(result);
-            outputData = check database:getStepOutputData(result);
+            step = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStepSequence);
+            inputData = check database:getStepInputData(step);
+            outputData = check database:getStepOutputData(step);
             // duplicates input data for substeps, but overhead is negligible 
-            substeps = check database:getTimelineSubstepsWithInputData(timelineStep);
+            // TODO: FIXME substep has stepId field that is misinterpreted by ui -> change to sequence
+            substeps = check database:getTimelineSubstepsWithInputData(step.stepId);
             check commit;
         } on fail error err {
             log:printError("Could not get timeline step.", 'error = err, stackTrace = err.stackTrace().callStack);
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
-        return mapToTimelineStepResponse(result, substeps, inputData, outputData);
+        return mapToTimelineStepResponse(step, substeps, inputData, outputData);
     }
 
     # Update the result quality associated with a specific timeline step.
@@ -665,13 +666,13 @@ service / on new http:Listener(serverPort) {
     # Get the notes associated with a specific timelin step.
     #
     # + experimentId - the id of the experiment
-    # + timelineStep - the step number of the timeline step
+    # + timelineStepSequence - the step number of the timeline step
     # + return - the timline step notes
-    resource function get experiments/[int experimentId]/timeline/[int timelineStep]/notes() returns TimelineStepNotesResponse|http:InternalServerError {
+    resource function get experiments/[int experimentId]/timeline/[int timelineStepSequence]/notes() returns TimelineStepNotesResponse|http:InternalServerError {
         string result;
 
         transaction {
-            result = check database:getTimelineStepNotes(experimentId, timelineStep);
+            result = check database:getTimelineStepNotes(experimentId, timelineStepSequence);
             check commit;
         } on fail error err {
             log:printError("Could not get timeline step notes.", 'error = err, stackTrace = err.stackTrace().callStack);
@@ -679,7 +680,7 @@ service / on new http:Listener(serverPort) {
         }
 
         return {
-            '\@self: string `/experiments/${experimentId}/timeline/${timelineStep}/notes`,
+            '\@self: string `/experiments/${experimentId}/timeline/${timelineStepSequence}/notes`,
             notes: result
         };
     }
@@ -736,10 +737,10 @@ service / on new http:Listener(serverPort) {
     # Post the user input data associated with an unfinished timeline substep.
     #
     # + experimentId - the id of the experiment
-    # + timelineStep - the step number of the timeline step
+    # + timelineStepSequence - the step number of the timeline step
     # + substepNr - the step number of the timeline substep
     # + return - the updated timline substep
-    resource function post experiments/[int experimentId]/timeline/[int timelineStep]/substeps/[int substepNr](@http:Payload TimelineSubstepPost substepData) returns TimelineSubstepResponse|http:InternalServerError {
+    resource function post experiments/[int experimentId]/timeline/[int timelineStepSequence]/substeps/[int substepNr](@http:Payload TimelineSubstepPost substepData) returns TimelineSubstepResponseWithParams|http:InternalServerError {
         database:TimelineStepWithParams step;
         database:TimelineSubstepWithParams substep;
         database:ExperimentDataReference[] inputData;
@@ -747,9 +748,9 @@ service / on new http:Listener(serverPort) {
         transaction {
             inputData = check trap from var inputUrl in substepData.inputData
                 select checkpanic mapFileUrlToDataRef(experimentId, inputUrl); // FIXME move back to check if https://github.com/ballerina-platform/ballerina-lang/issues/34894 is resolved
-            step = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep);
+            step = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStepSequence);
             // verify that substep is in database
-            substep = check database:getTimelineSubstepWithParams(experimentId, timelineStep, substepNr);
+            substep = check database:getTimelineSubstepWithParams(experimentId, timelineStepSequence, substepNr);
             // save input data and update progress
             check database:saveTimelineSubstepParams(step.stepId, substepNr, substepData.parameters, substepData.parametersContentType);
             check database:saveTimelineSubstepInputData(step.stepId, substepNr, experimentId, inputData);
@@ -774,20 +775,21 @@ service / on new http:Listener(serverPort) {
             http:InternalServerError resultErr = {body: "Failed to restart watcher."};
             return resultErr;
         }
-        return mapToTimelineSubstepResponse(experimentId, substep, inputData);
+        return mapToTimelineSubstepResponse(experimentId, timelineStepSequence, substep, inputData);
     }
 
     # Get a list of substeps of a timeline entry.
     #
     # + experimentId - the id of the experiment
-    # + timelineStep - the step number of the timeline step
+    # + timelineStepSequence - the step number of the timeline step
     # + return - the list of timline substeps
-    resource function get experiments/[int experimentId]/timeline/[int timelineStep]/substeps() returns TimelineSubstepListResponse|http:InternalServerError {
+    resource function get experiments/[int experimentId]/timeline/[int timelineStepSequence]/substeps() returns TimelineSubstepListResponse|http:InternalServerError {
         // no pagination
-        database:TimelineSubstepSQL[] steps;
+        database:TimelineSubstepSQL[] substeps;
 
         transaction {
-            steps = check database:getTimelineSubsteps(timelineStep, experimentId);
+            database:TimelineStepWithParams step = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStepSequence);
+            substeps = check database:getTimelineSubsteps(step.stepId, experimentId);
             check commit;
         } on fail error err {
             log:printError("Could not get list of timeline substeps.", 'error = err, stackTrace = err.stackTrace().callStack);
@@ -795,23 +797,27 @@ service / on new http:Listener(serverPort) {
             http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
             return resultErr;
         }
-        return {'\@self: string `/experiments/${experimentId}/timeline`, items: steps};
+        TimelineSubstepResponseWithoutParams[] substepsResponse = mapToTimelineSubstepListResponse(experimentId, timelineStepSequence, substeps);
+        return {
+            '\@self: string `/experiments/${experimentId}/timeline/${timelineStepSequence}/substeps`,
+            items: substepsResponse
+        };
     }
 
     # Get a specific substep of a timeline entry.
     #
     # + experimentId - the id of the experiment
-    # + timelineStep - the step number of the timeline step
+    # + timelineStepSequence - the step number of the timeline step
     # + substepNr - the step number of the timeline substep
     # + return - the requested timline substep
-    resource function get experiments/[int experimentId]/timeline/[int timelineStep]/substeps/[int substepNr]() returns TimelineSubstepResponse|http:InternalServerError {
-        database:TimelineSubstepWithParams step;
+    resource function get experiments/[int experimentId]/timeline/[int timelineStepSequence]/substeps/[int substepNr]() returns TimelineSubstepResponseWithParams|http:InternalServerError {
+        database:TimelineSubstepWithParams substep;
         database:ExperimentDataReference[] inputData;
 
         transaction {
-            // FIXME timelineStep != database step id!!!!
-            step = check database:getTimelineSubstepWithParams(experimentId, timelineStep, substepNr);
-            inputData = check database:getSubstepInputData(step.stepId, step.substepNr);
+            // FIXME timelineStep != database step id!!!! Requested timelineStepSequence is in fact stepId (ui should not know that id) 
+            substep = check database:getTimelineSubstepWithParams(experimentId, timelineStepSequence, substepNr);
+            inputData = check database:getSubstepInputData(substep.stepId, substep.substepNr);
             check commit;
         } on fail error err {
             log:printError("Could not get timeline substep entry.", 'error = err, stackTrace = err.stackTrace().callStack);
@@ -819,11 +825,11 @@ service / on new http:Listener(serverPort) {
             http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
             return resultErr;
         }
-        return mapToTimelineSubstepResponse(experimentId, step, inputData);
+        return mapToTimelineSubstepResponse(experimentId, timelineStepSequence, substep, inputData);
     }
 
     resource function get experiments/[int experimentId]/timeline/[int timelineStep]/substeps/[int substepNr]/parameters(http:Caller caller) returns error? {
-        database:TimelineSubstepWithParams step;
+        database:TimelineSubstepWithParams substep;
 
         http:Response resp = new;
         resp.addHeader("Access-Control-Allow-Origin", "*");
@@ -831,8 +837,7 @@ service / on new http:Listener(serverPort) {
         resp.addHeader("Access-Control-Allow-Headers", "range,Content-Type,Depth,User-Agent,X-File-Size,X-Requested-With,If-Modified-Since,X-File-Name,Cache-Control,Access-Control-Allow-Origin");
 
         transaction {
-            // FIXME timelineStep != database step id!!!!
-            step = check database:getTimelineSubstepWithParams(experimentId, timelineStep, substepNr);
+            substep = check database:getTimelineSubstepWithParams(experimentId, timelineStep, substepNr);
             check commit;
         } on fail error err {
             log:printError("Could not get parameters for timeline substep.", 'error = err, stackTrace = err.stackTrace().callStack);
@@ -844,13 +849,13 @@ service / on new http:Listener(serverPort) {
         }
 
         resp.statusCode = http:STATUS_OK;
-        var cType = step.parametersContentType;
+        var cType = substep.parametersContentType;
         if cType.startsWith("text/") || cType.startsWith("application/json") || cType.startsWith("application/X-lines+json") {
             resp.addHeader("Content-Disposition", "inline; filename=\"parameters\"");
         } else {
             resp.addHeader("Content-Disposition", "attachment; filename=\"parameters\"");
         }
-        resp.setTextPayload(step.parameters, contentType = step.parametersContentType);
+        resp.setTextPayload(substep.parameters, contentType = substep.parametersContentType);
 
         check caller->respond(resp);
     }
