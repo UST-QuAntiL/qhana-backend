@@ -455,7 +455,7 @@ public isolated function mapToTimelineSubstepResponse(
     var inputDataLinks = from var dataRef in inputData
         select string `/experiments/${experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
     return {
-        '\@self: string `/experiments/${experimentId}/timeline/${timelineStepSequence}/substeps/${timelineStepSequence}`,
+        '\@self: string `/experiments/${experimentId}/timeline/${timelineStepSequence}/substeps/${substep.substepNr}`,
         stepId: timelineStepSequence,
         sequence: timelineStepSequence,
         substepId: substep.substepId,
@@ -501,7 +501,7 @@ public isolated function mapToTimelineSubstepListResponse(
 # + return - the parsed parameters
 public isolated function mapFileUrlToDataRef(int experimentId, string url) returns database:ExperimentDataReference|error {
     // TODO refactor once regex supports extrating group matches
-    var regex = string ` ^ (https ?: \/\/) ? [ ^ \/] * \/experiments\/ ${experimentId}\/data\/[^\/]+\/download\?version = (latest | [0 - 9] + )$`;
+    var regex = string `^(https?:\/\/)?[^\/]*\/experiments\/${experimentId}\/data\/[^\/]+\/download\?version=(latest|[0-9]+)$`;
     if !regex:matches(url, regex) {
         return error("url does not match any file from the experiment." + url);
     }
