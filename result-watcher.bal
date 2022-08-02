@@ -429,7 +429,7 @@ public isolated class ResultWatcher {
             lock {
                 self.errorCounter += 1;
             }
-            log:printError("Could not get task status response.", 'error = result, stackTrace = result.stackTrace().callStack);
+            log:printError("Could not get task status response.", 'error = result, stackTrace = result.stackTrace().callStack, resultEndpoint = self.resultEndpoint);
 
         } else {
             lock {
