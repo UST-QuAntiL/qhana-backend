@@ -685,8 +685,12 @@ public isolated transactional function getStepsUsingData(int|ExperimentDataFull 
 // Timeline ////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
-public isolated transactional function getTimelineStepCount(int experimentId, string? plugin\-name, string? 'version, string? status) returns int|error {
-    sql:ParameterizedQuery query = `SELECT count(*) AS rowCount FROM TimelineStep WHERE experimentId = ${experimentId}`;
+public isolated transactional function getTimelineStepCount(int experimentId, string? plugin\-name, string? 'version, string? status, int? uncleared\-substep) returns int|error {
+    sql:ParameterizedQuery query = `SELECT count(*) AS rowCount FROM TimelineStep `;
+    if uncleared\-substep != () {
+        query = sql:queryConcat(query, `JOIN TimelineSubstep ON TimelineStep.stepId = TimelineSubstep.stepId `);
+    }
+    query = sql:queryConcat(query, `WHERE experimentId = ${experimentId}`);
     if plugin\-name != () {
         query = sql:queryConcat(query, ` AND processorName = ${plugin\-name}`);
     }
@@ -695,6 +699,11 @@ public isolated transactional function getTimelineStepCount(int experimentId, st
     }
     if status != () {
         query = sql:queryConcat(query, ` AND status = ${status}`);
+    }
+    if uncleared\-substep != () {
+        // (COUNT(*) - SUM(TimelineSubstep.cleared)) is the number of uncleared substeps (at most 1)
+        // e.g., must be 1 if uncleared substep is required (uncleared\-substep = 1)
+        query = sql:queryConcat(query, ` GROUP BY TimelineStep.stepId HAVING (COUNT(*) - SUM(TimelineSubstep.cleared))=${uncleared\-substep}`);
     }
 
     stream<RowCount, sql:Error?> result = experimentDB->query(
@@ -738,7 +747,7 @@ public isolated transactional function castToTimelineStepFull(TimelineStepSQL st
 
 public isolated transactional function getTimelineStepList(int experimentId, string? plugin\-name, string? 'version, string? status, int? uncleared\-substep, boolean allAttributes = false, int 'limit = 100, int offset = 0) returns TimelineStepFull[]|error {
 
-    sql:ParameterizedQuery baseQuery = `SELECT stepId, experimentId, sequence, `;
+    sql:ParameterizedQuery baseQuery = `SELECT TimelineStep.stepId, experimentId, sequence, `;
     if configuredDBType == "sqlite" {
         baseQuery = sql:queryConcat(baseQuery, `cast(start as TEXT) AS start, cast(end as TEXT) AS end, `);
     } else {
@@ -746,26 +755,35 @@ public isolated transactional function getTimelineStepList(int experimentId, str
     }
     baseQuery = sql:queryConcat(baseQuery, `status, processorName, processorVersion, processorLocation `);
     if allAttributes {
-        baseQuery = sql:queryConcat(baseQuery, `, resultQuality, resultLog, parameters, parametersContentType, notes `);
+        baseQuery = sql:queryConcat(baseQuery, `, resultQuality, resultLog, TimelineSubstep.parameters, TimelineSubstep.parametersContentType, notes `);
     } else {
         baseQuery = sql:queryConcat(baseQuery, `, resultQuality, NULL AS resultLog `);
     }
-    baseQuery = sql:queryConcat(baseQuery, `FROM TimelineStep WHERE experimentId=${experimentId}`);
+    baseQuery = sql:queryConcat(baseQuery, `FROM TimelineStep `);
 
-    sql:ParameterizedQuery filter = ``;
+    if uncleared\-substep != () {
+        baseQuery = sql:queryConcat(baseQuery, `JOIN TimelineSubstep ON TimelineStep.stepId = TimelineSubstep.stepId `);
+    }
+
+    baseQuery = sql:queryConcat(baseQuery, `WHERE experimentId=${experimentId}`);
+
     if plugin\-name != () {
-        filter = sql:queryConcat(filter, ` AND processorName = ${plugin\-name}`);
+        baseQuery = sql:queryConcat(baseQuery, ` AND processorName = ${plugin\-name}`);
     }
     if 'version != () {
-        filter = sql:queryConcat(filter, ` AND processorVersion = ${'version}`);
+        baseQuery = sql:queryConcat(baseQuery, ` AND processorVersion = ${'version}`);
     }
     if status != () {
-        filter = sql:queryConcat(filter, ` AND status = ${status}`);
+        baseQuery = sql:queryConcat(baseQuery, ` AND status = ${status}`);
+    }
+    // filtering for (un)cleared substeps
+    if uncleared\-substep != () {
+        // (COUNT(*) - SUM(TimelineSubstep.cleared)) is the number of uncleared substeps (at most 1)
+        // e.g., must be 1 if uncleared substep is required (uncleared\-substep = 1)
+        baseQuery = sql:queryConcat(baseQuery, ` GROUP BY TimelineStep.stepId HAVING (COUNT(*) - SUM(TimelineSubstep.cleared))=${uncleared\-substep}`);
     }
 
-    // filtering for (un)cleared substeps done later 
-
-    stream<TimelineStepSQL, sql:Error?> timelineSteps = experimentDB->query(check new ConcatQuery(baseQuery, filter, ` ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`));
+    stream<TimelineStepSQL, sql:Error?> timelineSteps = experimentDB->query(check new ConcatQuery(baseQuery, ` ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`));
 
     (TimelineStepSQL|TimelineStepFull)[]|error|() tempList = from var step in timelineSteps
         select step;
@@ -780,34 +798,8 @@ public isolated transactional function getTimelineStepList(int experimentId, str
     } else {
         // convert timestamps to correct utc type if timestamps come from sqlite
         foreach var step in tempList {
-            // filter by (not) having uncleared substeps
-            if uncleared\-substep != () {
-                stream<RowCount, sql:Error?> result = experimentDB->query(`SELECT count(*) AS rowCount FROM TimelineSubstep WHERE stepId = ${step.stepId} AND cleared = 0;`);
-                var count = result.next();
-                check result.close();
-                if count is error {
-                    return count;
-                }
-                if count is record {RowCount value;} {
-                    if (count.value.rowCount >= 1) {
-                        if (uncleared\-substep == 1) {
-                            TimelineStepFull stepFull = check castToTimelineStepFull(step);
-                            stepList.push(stepFull);
-                        }
-                    } else {
-                        if (uncleared\-substep == 0) {
-                            TimelineStepFull stepFull = check castToTimelineStepFull(step);
-                            stepList.push(stepFull);
-                        }
-                    }
-                } else {
-                    // should never happen based on the sql query
-                    return error("Could not determine the experiment count!");
-                }
-            } else {
-                TimelineStepFull stepFull = check castToTimelineStepFull(step);
-                stepList.push(stepFull);
-            }
+            TimelineStepFull stepFull = check castToTimelineStepFull(step);
+            stepList.push(stepFull);
         }
     }
 

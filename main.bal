@@ -601,9 +601,7 @@ service / on new http:Listener(serverPort) {
 
         transaction {
 
-            if uncleared\-substep == () {
-                stepCount = check database:getTimelineStepCount(experimentId, plugin\-name, 'version, status);
-            }
+            stepCount = check database:getTimelineStepCount(experimentId, plugin\-name, 'version, status, uncleared\-substep);
 
             // calculating stepCount with substep filter (has cleared/uncleared substeps) inefficient
             steps = check database:getTimelineStepList(experimentId, plugin\-name, 'version, status, uncleared\-substep, 'limit = item\-count, offset = offset);
