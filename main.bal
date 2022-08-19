@@ -334,8 +334,9 @@ service / on new http:Listener(serverPort) {
     #
     # + page - the requested page (starting with page 0)
     # + 'item\-count - the number of items per page (5 <= item-count <= 500)
+    # + ascending - 1 for asc sort, 0 for desc sort by step sequence
     # + return - the list resource containing the experiments
-    resource function get experiments(int? page = 0, int? 'item\-count = 10) returns ExperimentListResponse|http:InternalServerError|http:BadRequest|http:NotFound {
+    resource function get experiments(int? page = 0, int? 'item\-count = 10, int? 'ascending = 1) returns ExperimentListResponse|http:InternalServerError|http:BadRequest|http:NotFound {
         int intPage = (page is ()) ? 0 : page;
         int itemCount = (item\-count is ()) ? 10 : item\-count;
 
@@ -359,7 +360,7 @@ service / on new http:Listener(serverPort) {
                 check commit;
                 return <http:NotFound>{};
             } else {
-                experiments = check database:getExperiments('limit = itemCount, offset = offset);
+                experiments = check database:getExperiments('limit = itemCount, offset = offset, 'ascending = 'ascending);
                 check commit;
             }
         } on fail error err {
@@ -467,8 +468,9 @@ service / on new http:Listener(serverPort) {
     # The data is sorted with newer versions appearing before oder versions.
     #
     # + experimentId - the id of the experiment
+    # + ascending - 1 for asc sort, 0 for desc sort by step sequence
     # + return - the paginated list of data resources
-    resource function get experiments/[int experimentId]/data(boolean? allVersions, int page = 0, int item\-count = 10) returns ExperimentDataListResponse|http:NotFound|http:InternalServerError|http:BadRequest {
+    resource function get experiments/[int experimentId]/data(boolean? allVersions, int page = 0, int item\-count = 10, int? 'ascending = 1) returns ExperimentDataListResponse|http:NotFound|http:InternalServerError|http:BadRequest {
         boolean includeAllVersions = allVersions == true || allVersions == ();
 
         if (page < 0) {
@@ -491,7 +493,7 @@ service / on new http:Listener(serverPort) {
                 check commit;
                 return <http:NotFound>{};
             } else {
-                data = check database:getDataList(experimentId, all = includeAllVersions, 'limit = item\-count, offset = offset);
+                data = check database:getDataList(experimentId, all = includeAllVersions, 'limit = item\-count, offset = offset, ascending = 'ascending);
                 check commit;
             }
         } on fail error err {
@@ -584,8 +586,9 @@ service / on new http:Listener(serverPort) {
     # + uncleared\-substep - filter by step status (whether there is an uncleared substep that requires user inputs) - 1 for true, 0 for false 
     # + page - the requested page (starting with page 0)
     # + 'item\-count - the number of items per page (5 <= item-count <= 500)
+    # + ascending - 1 for asc sort, 0 for desc sort by step sequence
     # + return - the list resource containing the timeline entries
-    resource function get experiments/[int experimentId]/timeline(string? plugin\-name, string? 'version, string? status, int? uncleared\-substep, int page = 0, int item\-count = 0) returns TimelineStepListResponse|http:BadRequest|http:NotFound|http:InternalServerError {
+    resource function get experiments/[int experimentId]/timeline(string? plugin\-name, string? 'version, string? status, int? uncleared\-substep, int page = 0, int item\-count = 0, int? ascending = 1) returns TimelineStepListResponse|http:BadRequest|http:NotFound|http:InternalServerError {
         if (page < 0) {
             return <http:BadRequest>{body: "Cannot retrieve a negative page number!"};
         }
@@ -604,7 +607,7 @@ service / on new http:Listener(serverPort) {
             stepCount = check database:getTimelineStepCount(experimentId, plugin\-name, 'version, status, uncleared\-substep);
 
             // calculating stepCount with substep filter (has cleared/uncleared substeps) inefficient
-            steps = check database:getTimelineStepList(experimentId, plugin\-name, 'version, status, uncleared\-substep, 'limit = item\-count, offset = offset);
+            steps = check database:getTimelineStepList(experimentId, plugin\-name, 'version, status, uncleared\-substep, 'limit = item\-count, offset = offset, 'ascending = 'ascending);
             stepCount = steps.length();
             if (offset >= stepCount) {
                 // page is out of range!

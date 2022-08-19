@@ -462,10 +462,17 @@ public isolated transactional function getExperimentCount() returns int|error {
 # + 'limit - The maximum number of experiments fetched in one call (default: `100`)
 # + offset - The offset applied to the sql query (default: `0`)
 # + return - The list of experiments or the encountered error
-public isolated transactional function getExperiments(int 'limit = 100, int offset = 0) returns ExperimentFull[]|error {
-    stream<ExperimentFull, sql:Error?> experiments = experimentDB->query(
-        `SELECT experimentId, name, description FROM Experiment ORDER BY name ASC LIMIT ${'limit} OFFSET ${offset};`
-    );
+public isolated transactional function getExperiments(int 'limit = 100, int offset = 0, int? 'ascending = 1) returns ExperimentFull[]|error {
+    stream<ExperimentFull, sql:Error?> experiments;
+    if 'ascending != () && 'ascending == 1 {
+        experiments = experimentDB->query(
+            `SELECT experimentId, name, description FROM Experiment ORDER BY name ASC LIMIT ${'limit} OFFSET ${offset};`
+        );
+    } else {
+        experiments = experimentDB->query(
+            `SELECT experimentId, name, description FROM Experiment ORDER BY name DESC LIMIT ${'limit} OFFSET ${offset};`
+        );
+    }
 
     ExperimentFull[]? experimentList = check from var experiment in experiments
         select experiment;
@@ -588,11 +595,17 @@ public isolated transactional function getDataTypesSummary(int experimentId) ret
     return dataSummary;
 }
 
-public isolated transactional function getDataList(int experimentId, boolean all = true, int 'limit = 100, int offset = 0) returns ExperimentDataFull[]|error {
+public isolated transactional function getDataList(int experimentId, boolean all = true, int 'limit = 100, int offset = 0, int? 'ascending = 1) returns ExperimentDataFull[]|error {
     sql:ParameterizedQuery baseQuery = `SELECT dataId, experimentId, name, version, location, type, contentType 
                      FROM ExperimentData WHERE experimentId=${experimentId} `;
-    sql:ParameterizedQuery baseQuerySuffix = `ORDER BY name ASC, version DESC 
+    sql:ParameterizedQuery baseQuerySuffix;
+    if 'ascending != () && 'ascending == 1 {
+        baseQuerySuffix = `ORDER BY name ASC, version DESC 
                            LIMIT ${'limit} OFFSET ${offset};`;
+    } else {
+        baseQuerySuffix = `ORDER BY name DESC, version DESC 
+                           LIMIT ${'limit} OFFSET ${offset};`;
+    }
 
     stream<ExperimentDataFull, sql:Error?> experimentData;
     if all {
@@ -745,7 +758,7 @@ public isolated transactional function castToTimelineStepFull(TimelineStepSQL st
     return step.cloneWithType();
 }
 
-public isolated transactional function getTimelineStepList(int experimentId, string? plugin\-name, string? 'version, string? status, int? uncleared\-substep, boolean allAttributes = false, int 'limit = 100, int offset = 0) returns TimelineStepFull[]|error {
+public isolated transactional function getTimelineStepList(int experimentId, string? plugin\-name, string? 'version, string? status, int? uncleared\-substep, boolean allAttributes = false, int 'limit = 100, int offset = 0, int? 'ascending = 1) returns TimelineStepFull[]|error {
 
     sql:ParameterizedQuery baseQuery = `SELECT TimelineStep.stepId, experimentId, sequence, `;
     if configuredDBType == "sqlite" {
@@ -782,8 +795,12 @@ public isolated transactional function getTimelineStepList(int experimentId, str
         // e.g., must be 1 if uncleared substep is required (uncleared\-substep = 1)
         baseQuery = sql:queryConcat(baseQuery, ` GROUP BY TimelineStep.stepId HAVING (COUNT(*) - SUM(TimelineSubstep.cleared))=${uncleared\-substep}`);
     }
-
-    stream<TimelineStepSQL, sql:Error?> timelineSteps = experimentDB->query(check new ConcatQuery(baseQuery, ` ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`));
+    stream<TimelineStepSQL, sql:Error?> timelineSteps;
+    if 'ascending != () && 'ascending == 1 {
+        timelineSteps = experimentDB->query(check new ConcatQuery(baseQuery, ` ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`));
+    } else {
+        timelineSteps = experimentDB->query(check new ConcatQuery(baseQuery, ` ORDER BY sequence DESC LIMIT ${'limit} OFFSET ${offset};`));
+    }
 
     (TimelineStepSQL|TimelineStepFull)[]|error|() tempList = from var step in timelineSteps
         select step;
