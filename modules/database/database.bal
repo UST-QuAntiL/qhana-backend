@@ -461,10 +461,11 @@ public isolated transactional function getExperimentCount() returns int|error {
 #
 # + 'limit - The maximum number of experiments fetched in one call (default: `100`)
 # + offset - The offset applied to the sql query (default: `0`)
+# + 'ascending - 1 for asc sort, 0 for desc sort by step sequence
 # + return - The list of experiments or the encountered error
 public isolated transactional function getExperiments(int 'limit = 100, int offset = 0, int? 'ascending = 1) returns ExperimentFull[]|error {
     stream<ExperimentFull, sql:Error?> experiments;
-    if 'ascending != () && 'ascending == 1 {
+    if ('ascending != () && 'ascending == 1) || 'ascending == () {
         experiments = experimentDB->query(
             `SELECT experimentId, name, description FROM Experiment ORDER BY name ASC LIMIT ${'limit} OFFSET ${offset};`
         );
@@ -553,13 +554,20 @@ public isolated transactional function updateExperiment(int experimentId, *Exper
 # Get the number of data entries for a specific experiment.
 #
 # + experimentId - The experiment id
+# + search - search keyword in name, data type and content type (insensitive)
 # + all - If true count all experiment data including old version, if false count only the newest verwions (e.g. distinct data names)
 # + return - The count or the encountered error
-public isolated transactional function getExperimentDataCount(int experimentId, boolean all = true) returns int|error {
+public isolated transactional function getExperimentDataCount(int experimentId, string? search, boolean all = true) returns int|error {
     stream<RowCount, sql:Error?> result;
     if all {
+        if search != () && search != "" {
+            result = experimentDB->query(`SELECT count(*) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId} AND ((name LIKE '%${search}%') OR (type  LIKE '%${search}%') OR (contentType LIKE '%${search}%'));`);
+        }
         result = experimentDB->query(`SELECT count(*) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId};`);
     } else {
+        if search != () && search != "" {
+            result = experimentDB->query(`SELECT count(*) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId} AND ((name LIKE '%${search}%') OR (type  LIKE '%${search}%') OR (contentType LIKE '%${search}%'));`);
+        }
         result = experimentDB->query(`SELECT count(DISTINCT name) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId};`);
     }
     var count = result.next();
@@ -595,27 +603,28 @@ public isolated transactional function getDataTypesSummary(int experimentId) ret
     return dataSummary;
 }
 
-public isolated transactional function getDataList(int experimentId, boolean all = true, int 'limit = 100, int offset = 0, int? 'ascending = 1) returns ExperimentDataFull[]|error {
+public isolated transactional function getDataList(int experimentId, string? search, boolean all = true, int 'limit = 100, int offset = 0, int? 'ascending = 1) returns ExperimentDataFull[]|error {
+    log:printDebug(">>>>>" + 'ascending.toString());
     sql:ParameterizedQuery baseQuery = `SELECT dataId, experimentId, name, version, location, type, contentType 
                      FROM ExperimentData WHERE experimentId=${experimentId} `;
-    sql:ParameterizedQuery baseQuerySuffix;
-    if 'ascending != () && 'ascending == 1 {
-        baseQuerySuffix = `ORDER BY name ASC, version DESC 
-                           LIMIT ${'limit} OFFSET ${offset};`;
+    if search != () && search != "" {
+        string searchString = "%" + search + "%";
+        baseQuery = sql:queryConcat(baseQuery, `AND ((name LIKE ${searchString}) OR (type LIKE ${searchString}) OR (contentType LIKE ${searchString})) `);
+    }
+    if !all {
+        baseQuery = sql:queryConcat(baseQuery, `AND version=(SELECT MAX(t2.version)
+                                FROM ExperimentData AS t2 
+                                WHERE ExperimentData.name=t2.name AND t2.experimentId=${experimentId}) `);
+    }
+    if ('ascending != () && 'ascending == 1) || 'ascending == () {
+        baseQuery = sql:queryConcat(baseQuery, `ORDER BY name ASC, version DESC 
+                           LIMIT ${'limit} OFFSET ${offset};`);
     } else {
-        baseQuerySuffix = `ORDER BY name DESC, version DESC 
-                           LIMIT ${'limit} OFFSET ${offset};`;
+        baseQuery = sql:queryConcat(baseQuery, `ORDER BY name DESC, version DESC 
+                           LIMIT ${'limit} OFFSET ${offset};`);
     }
 
-    stream<ExperimentDataFull, sql:Error?> experimentData;
-    if all {
-        experimentData = experimentDB->query(sql:queryConcat(baseQuery, baseQuerySuffix));
-    } else {
-        sql:ParameterizedQuery extraFilter = `AND version=(SELECT MAX(t2.version)
-                                FROM ExperimentData AS t2 
-                                WHERE ExperimentData.name=t2.name AND t2.experimentId=${experimentId}) `;
-        experimentData = experimentDB->query(sql:queryConcat(baseQuery, extraFilter, baseQuerySuffix));
-    }
+    stream<ExperimentDataFull, sql:Error?> experimentData = experimentDB->query(baseQuery);
 
     ExperimentDataFull[]? experimentDataList = check from var data in experimentData
         select data;
@@ -796,7 +805,7 @@ public isolated transactional function getTimelineStepList(int experimentId, str
         baseQuery = sql:queryConcat(baseQuery, ` GROUP BY TimelineStep.stepId HAVING (COUNT(*) - SUM(TimelineSubstep.cleared))=${uncleared\-substep}`);
     }
     stream<TimelineStepSQL, sql:Error?> timelineSteps;
-    if 'ascending != () && 'ascending == 1 {
+    if ('ascending != () && 'ascending == 1) || 'ascending == () {
         timelineSteps = experimentDB->query(check new ConcatQuery(baseQuery, ` ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`));
     } else {
         timelineSteps = experimentDB->query(check new ConcatQuery(baseQuery, ` ORDER BY sequence DESC LIMIT ${'limit} OFFSET ${offset};`));
