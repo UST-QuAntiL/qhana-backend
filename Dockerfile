@@ -38,9 +38,6 @@ COPY --chown=ballerina changelog.xml /app/
 
 COPY --chown=ballerina start-docker.sh /app/
 
-# # Apply docker specific config
-# COPY --chown=ballerina Config-docker.toml /app/Config.toml
-
 EXPOSE 9090
 
 # Wait for database

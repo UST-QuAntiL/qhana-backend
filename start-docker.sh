@@ -15,9 +15,6 @@ liquibase.secureParsing=false
 liquibase.hub.mode=off
 EOF
 
-# copy config and qhana db into volume
-cp -n /app/Config.toml /app/qhana-backend.db /app/data/
-
 # wait for db to start
 /app/wait
 
