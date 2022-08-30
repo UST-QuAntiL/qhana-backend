@@ -5,12 +5,12 @@ RUN apt-get -y update && apt-get install unzip
 WORKDIR /app
 
 # install ballerina
-RUN wget https://dist.ballerina.io/downloads/swan-lake-beta3/ballerina-swan-lake-beta3.zip
+RUN wget --no-verbose https://dist.ballerina.io/downloads/swan-lake-beta3/ballerina-swan-lake-beta3.zip
 RUN unzip ballerina-swan-lake-beta3.zip
 ENV PATH="${PATH}:/app/ballerina-swan-lake-beta3/bin"
 
 # install liquibase
-RUN wget https://github.com/liquibase/liquibase/releases/download/v4.11.0/liquibase-4.11.0.zip
+RUN wget --no-verbose https://github.com/liquibase/liquibase/releases/download/v4.11.0/liquibase-4.11.0.zip
 RUN unzip liquibase-4.11.0.zip -d /app/liquibase
 
 # copy files
@@ -28,8 +28,8 @@ RUN apt-get -y update && apt-get install -y sqlite3
 RUN useradd ballerina
 
 # create persistent data volume and change its owner to the new user
-VOLUME /app/data
 RUN mkdir --parents /app/data && chown --recursive ballerina /app
+VOLUME /app/data
 
 WORKDIR /app/data
 
