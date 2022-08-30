@@ -6,6 +6,7 @@ liquibase --url=jdbc:sqlite:qhana-backend.db --classpath=/app --driver=org.sqlit
 # insert env var for mariadb liquibase config
 cat << EOF > /app/liquibase.properties
 classpath: /app
+driver: org.mariadb.jdbc.Driver
 url: jdbc:$QHANA_DB_TYPE://$QHANA_DB_HOST/$QHANA_DB_NAME
 changelog-file: changelog.xml
 username: $QHANA_DB_USER
