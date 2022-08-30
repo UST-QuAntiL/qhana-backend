@@ -1,4 +1,6 @@
-FROM openjdk:11 AS builder
+FROM eclipse-temurin:11 AS builder
+
+RUN apt-get -y update && apt-get install unzip
 
 WORKDIR /app
 
