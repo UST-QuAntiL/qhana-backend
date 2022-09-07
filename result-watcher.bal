@@ -112,11 +112,13 @@ type Progress record {|
 # + href - the URL to the API endpoint corresponding to that substep
 # + uiHref - the URL of the micro frontend corresponding to that substep
 # + cleared - a boolean flag indicating that this substep is cleared
+# + links - a map that contains additional links for plugin interactions
 public type TimelineSubstep record {|
     string? stepId;
     string href;
     string? uiHref;
     boolean cleared;
+    map<string> links;
 |};
 
 # Helper function to convert `TimelineSubstep` records to db records.
