@@ -374,7 +374,7 @@ isolated class ResultWatcherRescheduler {
 
     # The rescheduling logic.
     public isolated function execute() {
-        log:printError(string `Reschedule watcher ${self.watcher.stepId} after new substep was found.`);
+        log:printInfo(string `Reschedule watcher ${self.watcher.stepId} after new substep was found.`);
         // TODO: Probably needs to be changed in the future
         (decimal|int)[] initialIntervals = configuredWatcherIntervalls;
         error? err = self.watcher.schedule(...initialIntervals);

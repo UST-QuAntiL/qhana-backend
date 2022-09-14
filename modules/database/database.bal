@@ -21,8 +21,8 @@ import ballerina/mime;
 
 # The connection pool config for sqlite databases.
 sql:ConnectionPool sqlitePool = {
-    maxOpenConnections: 5, // limit the concurrent connections as sqlite is not really concurrency friendly
-    maxConnectionLifeTime: 1800, // limit keepalive to ensure pool resets faster on errors
+    maxOpenConnections: 5,  // limit the concurrent connections as sqlite is not really concurrency friendly
+    maxConnectionLifeTime: 1800,  // limit keepalive to ensure pool resets faster on errors
     minIdleConnections: 0
 };
 
