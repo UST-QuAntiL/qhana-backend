@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import ballerina/io;
+import ballerina/log;
 import ballerina/time;
 import ballerina/sql;
 import ballerinax/java.jdbc;
@@ -49,7 +49,6 @@ configurable string dbUser = "QHAna";
 # Can also be configured by setting the `QHANA_DB_PASSWORD` environment variable.
 configurable string dbPassword = "";
 
-
 # Get the db type from the `QHANA_DB_TYPE` environment variable.
 # If not present use the configurable variable `dbType` as fallback.
 #
@@ -63,8 +62,7 @@ function getDBType() returns string {
 }
 
 # The final configured db type.
-final string&readonly configuredDBType = getDBType().cloneReadOnly();
-
+final string & readonly configuredDBType = getDBType().cloneReadOnly();
 
 # Initialize the database client from the supplied config.
 #
@@ -103,7 +101,7 @@ function initClient() returns jdbc:Client|error {
             string passwordPart = string `&password=${dbPasswordLocal}`;
             connection = connection + passwordPart;
         }
-        io:println(connection); // FIXME remove to stop outputting password to stdout
+        log:printDebug(connection); // FIXME remove to stop outputting password to stdout
         return new jdbc:Client(connection);
     } else {
         return error(string `Db type ${configuredDBType} is unknownn!`);

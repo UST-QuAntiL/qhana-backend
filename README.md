@@ -24,18 +24,23 @@ In these cases try deleting the ballerina repository cache in the folder `~/.bal
 
 :waring: When updating to the swan-lake release from a beta release please follow <https://ballerina.io/downloads/swan-lake-release-notes/2201-0-0-swan-lake/> closely!
 
-```bash
-# first time only
-bash create-sqlite-db.sh
+Install [Liquibase](https://www.liquibase.org/download) following the instructions in the link. 
 
-# insert localhost plugin runner endpoint
-echo 'INSERT INTO PluginEndpoints (url, type) VALUES ("http://localhost:5005", "PluginRunner");' | sqlite3 qhana-backend.db
+```bash
+# create or update the sqlite db 
+bash update-sqlite-db.sh
 
 # start qhana backend
 bal run
 ```
 
 The API is available at the configured port in `main.bal` (currently 9090).
+
+## DB schema changes
+Schema changes need to be added as changesets in the respective changelogs for sqlite and mariadb. For more information, visit [Liquibase](https://www.liquibase.org/get-started/quickstart). To apply all changes in the dev environment, you can run:
+```bash
+liquibase update
+```
 
 ## Troubleshooting
 - Running ballerina in a directory with a space in its name currently does not work and results in the following error:  
@@ -96,6 +101,8 @@ Environment variables to configure the backend with:
 | QHANA_CORS_DOMAINS | `http://localhost:4200` | Domains for which cors requests are allowed. Entries are separated by any whitespace. |
 | QHANA_WATCHER_INTERVALLS | `1 10 10 5 60` | Configuration for the result watcher intervalls. Event entries are intervalls (in seconds) and odd entries specify after how many iterations the next intervall in the list is used. |
 | QHANA_URL_MAPPING | `{"(?<=^\|https?://)localhost(:[0-9]+)?": "host.docker.internal$1"}` | A map of rewrite rules for plugin result URLs. The map is a JSON object whose keys are regex patterns and whose values are the replacement strings for these patterns. All rules are applied to an URL without a guaranteed order. |
+| QHANA_PLUGINS | `["http://localhost:5005/plugins/hello-world@v0-1-0/", "http://localhost:5005/plugins/entity-filter@v0-1-0/"]` | A list (JSON list/array) of plugin URLs. |
+| QHANA_PLUGIN_RUNNERS | `["http://localhost:5005"]` | The list (JSON list/array) of plugin runner URLs. |
 
 
 ## Acknowledgements
