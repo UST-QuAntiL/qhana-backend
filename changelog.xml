@@ -1,0 +1,450 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+	https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+	<changeSet id="create-experiment" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<tableExists tableName="Experiment" />
+			</not>
+		</preConditions>
+		<createTable tableName="Experiment">
+			<column name="experimentId" type="int" autoIncrement="true">
+				<constraints primaryKey="true" nullable="false" />
+			</column>
+			<column name="name" type="varchar(500) COLLATION">
+				<constraints nullable="false" />
+			</column>
+			<column name="description" type="text">
+				<constraints nullable="false" />
+			</column>
+		</createTable>
+		<createIndex tableName="Experiment" indexName="ix_pk_experiment">
+			<column name="experimentId" descending="false" />
+		</createIndex>
+		<rollback>
+			<dropTable tableName="Experiment" />
+		</rollback>
+		<modifySql dbms="sqlite">
+			<replace replace="COLLATION" with="collate nocase" />
+		</modifySql>
+		<modifySql dbms="mariadb">
+			<replace replace="COLLATION" with="collate utf8_unicode_ci" />
+		</modifySql>
+	</changeSet>
+
+	<changeSet id="create-experiment-data" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<tableExists tableName="ExperimentData" />
+			</not>
+		</preConditions>
+		<createTable tableName="ExperimentData">
+			<column name="dataId" type="int" autoIncrement="true">
+				<constraints primaryKey="true" nullable="false" />
+			</column>
+			<column name="experimentId" type="int">
+				<constraints foreignKeyName="fk_experiment_data_to_experiment" references="Experiment(experimentId) PLACEHOLDER" nullable="false" uniqueConstraintName="ux_name_and_version" />
+			</column>
+			<column name="name" type="varchar(500) COLLATION">
+				<constraints nullable="false" />
+			</column>
+			<column name="version" type="int">
+				<constraints nullable="false" />
+			</column>
+			<column name="location" type="text">
+				<constraints nullable="false" />
+			</column>
+			<column name="type" type="varchar(500)">
+				<constraints nullable="false" />
+			</column>
+			<column name="contentType" type="varchar(500)">
+				<constraints nullable="false" />
+			</column>
+		</createTable>
+		<rollback>
+			<dropTable tableName="ExperimentData" />
+		</rollback>
+		<modifySql applyToRollback="false" dbms="mariadb">
+			<replace replace="PLACEHOLDER" with=", CONSTRAINT `ux_name_and_version` UNIQUE(`experimentId`,`name`,`version`)" />
+			<replace replace="COLLATION" with="collate utf8_unicode_ci" />
+		</modifySql>
+		<modifySql applyToRollback="false" dbms="!mariadb">
+			<replace replace="PLACEHOLDER" with=', CONSTRAINT "ux_name_and_version" UNIQUE("experimentId","name","version")' />
+			<replace replace="COLLATION" with="collate nocase" />
+		</modifySql>
+	</changeSet>
+
+	<changeSet id="create-ix-experiment-data-1" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<indexExists indexName="ix_pk_experiment_data" />
+			</not>
+		</preConditions>
+		<createIndex tableName="ExperimentData" indexName="ix_pk_experiment_data">
+			<column name="dataId" descending="false" />
+		</createIndex>
+	</changeSet>
+	<changeSet id="create-ix-experiment-data-2" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<indexExists indexName="ix_fk_data_to_experiment" />
+			</not>
+		</preConditions>
+		<createIndex tableName="ExperimentData" indexName="ix_fk_data_to_experiment">
+			<column name="experimentId" descending="false" />
+		</createIndex>
+	</changeSet>
+	<changeSet id="create-ix-experiment-data-3" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<indexExists indexName="ix_data_name" />
+			</not>
+		</preConditions>
+		<createIndex tableName="ExperimentData" indexName="ix_data_name">
+			<column name="name" descending="false" />
+		</createIndex>
+	</changeSet>
+	<changeSet id="create-ix-experiment-data-4" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<indexExists indexName="ix_data_version" />
+			</not>
+		</preConditions>
+		<createIndex tableName="ExperimentData" indexName="ix_data_version">
+			<column name="version" descending="false" />
+		</createIndex>
+	</changeSet>
+	<changeSet id="create-ix-experiment-data-5" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<indexExists indexName="ix_data_type" />
+			</not>
+		</preConditions>
+		<createIndex tableName="ExperimentData" indexName="ix_data_type">
+			<column name="type" descending="false" />
+		</createIndex>
+	</changeSet>
+	<changeSet id="create-ix-experiment-data-6" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<indexExists indexName="ix_data_contenttype" />
+			</not>
+		</preConditions>
+		<createIndex tableName="ExperimentData" indexName="ix_data_contenttype">
+			<column name="contentType" descending="false" />
+		</createIndex>
+	</changeSet>
+
+	<changeSet id="create-timeline-step" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<tableExists tableName="TimelineStep" />
+			</not>
+		</preConditions>
+		<createTable tableName="TimelineStep">
+			<column name="stepId" type="int" autoIncrement="true">
+				<constraints primaryKey="true" nullable="false" />
+			</column>
+			<column name="experimentId" type="int">
+				<constraints foreignKeyName="fk_timeline_step_to_experiment" references="Experiment(experimentId) PLACEHOLDER" nullable="false" />
+			</column>
+			<column name="sequence" type="int">
+				<constraints nullable="false" />
+			</column>
+			<column name="start" type="datetime">
+				<constraints nullable="false" />
+			</column>
+			<column name="end" type="datetime"></column>
+			<column name="status" type="varchar(50)" defaultValue="PENDING"></column>
+			<column name="resultQuality" type="varchar(50)" defaultValue="UNKNOWN">
+				<constraints nullable="false" />
+			</column>
+			<column name="resultLog" type="text"></column>
+			<column name="processorName" type="varchar(500)">
+				<constraints nullable="false" />
+			</column>
+			<column name="processorVersion" type="varchar(150)" />
+			<column name="processorLocation" type="text" />
+			<column name="parameters" type="text">
+				<constraints nullable="false" />
+			</column>
+			<column name="parametersContentType" type="varchar(500)" defaultValue="application/x-www-form-urlencoded">
+				<constraints nullable="false" />
+			</column>
+			<column name="pStart" type="real" />
+			<column name="pTarget" type="real" />
+			<column name="pValue" type="real" />
+			<column name="pUnit" type="varchar(500)" />
+			<column name="notes" type="text" />
+		</createTable>
+		<rollback>
+			<dropTable tableName="TimelineStep" />
+		</rollback>
+		<modifySql applyToRollback="false" dbms="mariadb">
+			<replace replace="PLACEHOLDER" with=", CONSTRAINT `ux_experiment_step` UNIQUE(`experimentId`,`sequence`)" />
+		</modifySql>
+		<modifySql applyToRollback="false" dbms="!mariadb">
+			<replace replace="PLACEHOLDER" with=', CONSTRAINT "ux_experiment_step" UNIQUE("experimentId","sequence")' />
+		</modifySql>
+	</changeSet>
+
+	<changeSet id="create-ix-timeline-step-1" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<indexExists indexName="ix_pk_experiment_step" />
+			</not>
+		</preConditions>
+		<createIndex tableName="TimelineStep" indexName="ix_pk_experiment_step">
+			<column name="stepId" descending="false" />
+		</createIndex>
+	</changeSet>
+	<changeSet id="create-ix-timeline-step-2" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<indexExists indexName="ix_fk_step_to_experiment" />
+			</not>
+		</preConditions>
+		<createIndex tableName="TimelineStep" indexName="ix_fk_step_to_experiment">
+			<column name="experimentId" descending="false" />
+		</createIndex>
+	</changeSet>
+	<changeSet id="create-ix-timeline-step-3" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<indexExists indexName="ix_step_sequence" />
+			</not>
+		</preConditions>
+		<createIndex tableName="TimelineStep" indexName="ix_step_sequence">
+			<column name="sequence" descending="false" />
+		</createIndex>
+	</changeSet>
+	<changeSet id="create-ix-timeline-step-4" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<indexExists indexName="ix_step_processor" />
+			</not>
+		</preConditions>
+		<createIndex tableName="TimelineStep" indexName="ix_step_processor">
+			<column name="processorName" descending="false" />
+		</createIndex>
+	</changeSet>
+
+	<changeSet id="create-step-data" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<tableExists tableName="StepData" />
+			</not>
+		</preConditions>
+		<createTable tableName="StepData">
+			<column name="id" type="int" autoIncrement="true">
+				<constraints primaryKey="true" nullable="false" />
+			</column>
+			<column name="stepId" type="int">
+				<constraints foreignKeyName="fk_step_data_to_timeline_step" references="TimelineStep(stepId)" nullable="false" />
+			</column>
+			<column name="dataId" type="int">
+				<constraints foreignKeyName="fk_step_data_to_experiment_data" references="ExperimentData(dataId)" nullable="false" />
+			</column>
+			<column name="relationType" type="varchar(50) COLLATION">
+				<constraints nullable="false" />
+			</column>
+		</createTable>
+		<createIndex tableName="StepData" indexName="ix_pk_step_data">
+			<column name="id" descending="false" />
+		</createIndex>
+		<createIndex tableName="StepData" indexName="ix_fk_step_data_to_step">
+			<column name="stepId" descending="false" />
+		</createIndex>
+		<createIndex tableName="StepData" indexName="ix_fk_step_data_to_data">
+			<column name="dataId" descending="false" />
+		</createIndex>
+		<createIndex tableName="StepData" indexName="ix_fk_step_data_relation">
+			<column name="relationType" descending="false" />
+		</createIndex>
+		<rollback>
+			<dropTable tableName="StepData" />
+		</rollback>
+		<modifySql dbms="sqlite">
+			<replace replace="COLLATION" with="collate nocase" />
+		</modifySql>
+		<modifySql dbms="mariadb">
+			<replace replace="COLLATION" with="collate utf8_unicode_ci" />
+		</modifySql>
+	</changeSet>
+
+	<changeSet id="create-timeline-substep" author="nicolaikrebs">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<tableExists tableName="TimelineSubstep" />
+			</not>
+		</preConditions>
+		<createTable tableName="TimelineSubstep">
+			<column name="stepId" type="int">
+				<constraints foreignKeyName="fk_timeline_substep_to_timeline_step" references="TimelineStep(stepId)" nullable="false" primaryKey="true" />
+			</column>
+			<column name="substepNr" type="int">
+				<constraints nullable="false" primaryKey="true" />
+			</column>
+			<column name="substepId" type="varchar(500)">
+				<constraints nullable="false" />
+			</column>
+			<column name="href" type="text">
+				<constraints nullable="false" />
+			</column>
+			<column name="hrefUi" type="text" />
+			<column name="cleared" type="int" defaultValue="0">
+				<constraints checkConstraint="CHECK(cleared=0 or cleared=1)" />
+			</column>
+			<column name="parameters" type="text" />
+			<column name="parametersContentType" type="varchar(500)" defaultValue="application/x-www-form-urlencoded">
+				<constraints nullable="false" />
+			</column>
+		</createTable>
+		<createIndex tableName="TimelineSubstep" indexName="ix_pk_substep_to_step">
+			<column name="stepId" descending="false" />
+		</createIndex>
+		<createIndex tableName="TimelineSubstep" indexName="ix_pk_substep_nr">
+			<column name="substepNr" descending="false" />
+		</createIndex>
+		<createIndex tableName="TimelineSubstep" indexName="ix_substep_id">
+			<column name="substepId" descending="false" />
+		</createIndex>
+		<rollback>
+			<dropTable tableName="TimelineSubstep" />
+		</rollback>
+	</changeSet>
+
+	<changeSet id="create-substep-data" author="nicolaikrebs">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<tableExists tableName="SubstepData" />
+			</not>
+		</preConditions>
+		<createTable tableName="SubstepData">
+			<column name="id" type="int" autoIncrement="true">
+				<constraints primaryKey="true" nullable="false" />
+			</column>
+			<column name="stepId" type="int">
+				<constraints nullable="false" />
+			</column>
+			<column name="substepNr" type="int">
+				<constraints nullable="false" />
+			</column>
+			<column name="dataId" type="int">
+				<constraints foreignKeyName="fk_substep_data_to_experiment_data" references="ExperimentData(dataId) PLACEHOLDER" nullable="false" />
+			</column>
+			<column name="relationType" type="varchar(50) COLLATION">
+				<constraints nullable="false" />
+			</column>
+		</createTable>
+		<rollback>
+			<dropTable tableName="SubstepData" />
+		</rollback>
+		<modifySql applyToRollback="false" dbms="mariadb">
+			<replace replace="PLACEHOLDER" with=", FOREIGN KEY(`stepId`, `substepNr`) REFERENCES `TimelineSubstep`(`stepId`, `substepNr`)" />
+			<replace replace="COLLATION" with="collate utf8_unicode_ci" />
+		</modifySql>
+		<modifySql applyToRollback="false" dbms="!mariadb">
+			<replace replace="PLACEHOLDER" with=', FOREIGN KEY("stepId", "substepNr") REFERENCES "TimelineSubstep"("stepId", "substepNr")' />
+			<replace replace="COLLATION" with="collate nocase" />
+		</modifySql>
+	</changeSet>
+
+	<changeSet id="create-ix-substep-data-1" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<indexExists indexName="ix_pk_substep_data" />
+			</not>
+		</preConditions>
+		<createIndex tableName="SubstepData" indexName="ix_pk_substep_data">
+			<column name="id" descending="false" />
+		</createIndex>
+	</changeSet>
+	<changeSet id="create-ix-substep-data-2" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<indexExists indexName="ix_fk_substep_data_to_step" />
+			</not>
+		</preConditions>
+		<createIndex tableName="SubstepData" indexName="ix_fk_substep_data_to_step">
+			<column name="stepId" descending="false" />
+			<column name="substepNr" descending="false"></column>
+		</createIndex>
+		<rollback />
+	</changeSet>
+	<changeSet id="create-ix-substep-data-3" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<indexExists indexName="ix_fk_substep_data_to_data" />
+			</not>
+		</preConditions>
+		<createIndex tableName="SubstepData" indexName="ix_fk_substep_data_to_data">
+			<column name="dataId" descending="false" />
+		</createIndex>
+		<rollback />
+	</changeSet>
+	<changeSet id="create-ix-substep-data-4" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<indexExists indexName="ix_fk_substep_data_relation" />
+			</not>
+		</preConditions>
+		<createIndex tableName="SubstepData" indexName="ix_fk_substep_data_relation">
+			<column name="relationType" descending="false" />
+		</createIndex>
+	</changeSet>
+
+	<changeSet id="create-result-watchers" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<tableExists tableName="ResultWatchers" />
+			</not>
+		</preConditions>
+		<createTable tableName="ResultWatchers">
+			<column name="stepId" type="int">
+				<constraints primaryKey="true" nullable="false" foreignKeyName="fk_result_watchers_to_timeline_step" references="TimelineStep(stepId)" />
+			</column>
+			<column name="resultEndpoint" type="text">
+				<constraints nullable="false" />
+			</column>
+		</createTable>
+		<rollback>
+			<dropTable tableName="ResultWatchers" />
+		</rollback>
+	</changeSet>
+
+	<changeSet id="create-plugin-endpoints" author="fabianbuehler">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<tableExists tableName="PluginEndpoints" />
+			</not>
+		</preConditions>
+		<createTable tableName="PluginEndpoints">
+			<column name="id" type="int" autoIncrement="true">
+				<constraints primaryKey="true" nullable="false" />
+			</column>
+			<column name="url" type="text">
+				<constraints nullable="false" />
+			</column>
+			<column name="type" type="varchar(64)" defaultValue="PluginRunner">
+				<constraints nullable="false" />
+			</column>
+		</createTable>
+		<rollback>
+			<dropTable tableName="PluginEndpoints" />
+		</rollback>
+	</changeSet>
+
+	<changeSet id="insert-plugin-endpoint" author="fabianbuehler">
+		<insert tableName="PluginEndpoints">
+			<column name="url" value="http://localhost:5005" />
+			<column name="type" value="PluginRunner" />
+		</insert>
+		<rollback>
+			<delete tableName="PluginEndpoints">
+				<where>url="http://localhost:5005" AND type="PluginRunner"</where>
+			</delete>
+		</rollback>
+	</changeSet>
+</databaseChangeLog>
