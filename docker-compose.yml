@@ -13,6 +13,7 @@ services:
       QHANA_DB_NAME: 'QHAnaExperiments'
       QHANA_DB_USER: 'qhana'
       QHANA_DB_PASSWORD: 'qhana'
+      QHANA_HOST: 'http://localhost:9090'
       QHANA_PLUGIN_RUNNERS: '["http://localhost:5005/"]'
       QHANA_PLUGINS: '[]'
       WAIT_HOSTS: 'db:3306'
