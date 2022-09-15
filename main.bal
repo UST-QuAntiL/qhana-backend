@@ -51,7 +51,7 @@ function getPort() returns int {
     if (regex:matches(p, "^[0-9]+$")) {
         do {
             return check int:fromString(p);
-        } on fail error err {
+        } on fail {
             // error should never happen if regex is correct...
         }
     }
