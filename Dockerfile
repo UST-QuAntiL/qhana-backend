@@ -1,13 +1,12 @@
 FROM eclipse-temurin:11 AS builder
 
-RUN apt-get -y update && apt-get install unzip
-
+RUN apt-get -y update && apt-get install unzip 
 WORKDIR /app
 
 # install ballerina
-RUN wget --no-verbose https://dist.ballerina.io/downloads/swan-lake-beta3/ballerina-swan-lake-beta3.zip
-RUN unzip ballerina-swan-lake-beta3.zip
-ENV PATH="${PATH}:/app/ballerina-swan-lake-beta3/bin"
+RUN wget --no-verbose https://dist.ballerina.io/downloads/2201.2.0/ballerina-2201.2.0-swan-lake.zip
+RUN unzip ballerina-2201.2.0-swan-lake
+ENV PATH="${PATH}:/app/ballerina-2201.2.0-swan-lake/bin"
 
 # install liquibase
 RUN wget --no-verbose https://github.com/liquibase/liquibase/releases/download/v4.11.0/liquibase-4.11.0.zip
@@ -16,7 +15,7 @@ RUN unzip liquibase-4.11.0.zip -d /app/liquibase
 # copy files
 COPY . /app
 
-RUN bal build --observability-included --skip-tests
+RUN bal build --observability-included
 
 FROM eclipse-temurin:11-jre
 

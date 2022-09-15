@@ -436,7 +436,7 @@
 		</rollback>
 	</changeSet>
 
-	<changeSet id="insert-plugin-endpoint" author="fabianbuehler">
+	<changeSet id="insert-plugin-endpoint" author="fabianbuehler" dbms="sqlite">
 		<insert tableName="PluginEndpoints">
 			<column name="url" value="http://localhost:5005" />
 			<column name="type" value="PluginRunner" />

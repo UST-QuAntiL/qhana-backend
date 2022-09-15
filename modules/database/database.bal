@@ -21,8 +21,8 @@ import ballerina/mime;
 
 # The connection pool config for sqlite databases.
 sql:ConnectionPool sqlitePool = {
-    maxOpenConnections: 5,  // limit the concurrent connections as sqlite is not really concurrency friendly
-    maxConnectionLifeTime: 1800,  // limit keepalive to ensure pool resets faster on errors
+    maxOpenConnections: 5, // limit the concurrent connections as sqlite is not really concurrency friendly
+    maxConnectionLifeTime: 1800, // limit keepalive to ensure pool resets faster on errors
     minIdleConnections: 0
 };
 
@@ -399,7 +399,7 @@ public isolated transactional function getPluginEndpoint(int endpointId) returns
 
 public isolated transactional function addPluginEndpoint(*PluginEndpoint endpoint) returns PluginEndpointFull|error {
     var result = check experimentDB->execute(
-        `INSERT INTO PluginEndpoints (url, type) VALUES (${endpoint.url}, ${endpoint.'type});`
+        `INSERT INTO PluginEndpoints (url, type) VALUES (${endpoint.url}, ${endpoint.'type}) WHERE NOT EXISTS(SELECT * FROM PluginEndpoints WHERE url=${endpoint.url} and type=${endpoint.'type});`
     );
 
     var endpointId = result.lastInsertId;
