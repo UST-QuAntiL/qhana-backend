@@ -436,6 +436,13 @@
 		</rollback>
 	</changeSet>
 
+	<changeSet id="unique-constraint-plugin-endpoints" author="nicolaikrebs" dbms="mariadb">
+		<addUniqueConstraint tableName="PluginEndpoints" constraintName="url-unique-const" columnNames="url"></addUniqueConstraint>
+		<rollback>
+			<dropUniqueConstraint tableName="PluginEndpoints" constraintName="url-unique-const" />
+		</rollback>
+	</changeSet>
+
 	<changeSet id="insert-plugin-endpoint" author="fabianbuehler" dbms="sqlite">
 		<insert tableName="PluginEndpoints">
 			<column name="url" value="http://localhost:5005" />

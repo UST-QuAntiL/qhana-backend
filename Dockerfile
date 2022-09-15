@@ -4,9 +4,11 @@ RUN apt-get -y update && apt-get install unzip
 WORKDIR /app
 
 # install ballerina
-RUN wget --no-verbose https://dist.ballerina.io/downloads/2201.2.0/ballerina-2201.2.0-swan-lake.zip
-RUN unzip ballerina-2201.2.0-swan-lake
-ENV PATH="${PATH}:/app/ballerina-2201.2.0-swan-lake/bin"
+ARG BAL_VERSION="2201.2.0-swan-lake"
+RUN echo "${BAL_VERSION}"
+RUN wget --no-verbose https://dist.ballerina.io/downloads/2201.2.0/ballerina-${BAL_VERSION}.zip
+RUN unzip ballerina-${BAL_VERSION}
+ENV PATH="${PATH}:/app/ballerina-${BAL_VERSION}/bin"
 
 # install liquibase
 RUN wget --no-verbose https://github.com/liquibase/liquibase/releases/download/v4.11.0/liquibase-4.11.0.zip

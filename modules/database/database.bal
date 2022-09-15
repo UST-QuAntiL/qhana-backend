@@ -399,7 +399,7 @@ public isolated transactional function getPluginEndpoint(int endpointId) returns
 
 public isolated transactional function addPluginEndpoint(*PluginEndpoint endpoint) returns PluginEndpointFull|error {
     var result = check experimentDB->execute(
-        `INSERT INTO PluginEndpoints (url, type) VALUES (${endpoint.url}, ${endpoint.'type}) WHERE NOT EXISTS(SELECT * FROM PluginEndpoints WHERE url=${endpoint.url} and type=${endpoint.'type});`
+        `INSERT INTO PluginEndpoints (url, type) VALUES (${endpoint.url}, ${endpoint.'type});`
     );
 
     var endpointId = result.lastInsertId;
