@@ -604,7 +604,6 @@ public isolated transactional function getDataTypesSummary(int experimentId) ret
 }
 
 public isolated transactional function getDataList(int experimentId, string? search, boolean all = true, int 'limit = 100, int offset = 0, int? 'ascending = 1) returns ExperimentDataFull[]|error {
-    log:printDebug(">>>>>" + 'ascending.toString());
     sql:ParameterizedQuery baseQuery = `SELECT dataId, experimentId, name, version, location, type, contentType 
                      FROM ExperimentData WHERE experimentId=${experimentId} `;
     if search != () && search != "" {
