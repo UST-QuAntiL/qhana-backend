@@ -5,7 +5,6 @@ WORKDIR /app
 
 # install ballerina
 ARG BAL_VERSION="2201.2.0-swan-lake"
-RUN echo "${BAL_VERSION}"
 RUN wget --no-verbose https://dist.ballerina.io/downloads/2201.2.0/ballerina-${BAL_VERSION}.zip
 RUN unzip ballerina-${BAL_VERSION}
 ENV PATH="${PATH}:/app/ballerina-${BAL_VERSION}/bin"
