@@ -494,7 +494,7 @@ service / on new http:Listener(serverPort) {
                 check commit;
                 return <http:NotFound>{};
             } else {
-                data = check database:getDataList(experimentId, search, all = includeAllVersions, 'limit = item\-count, offset = offset, ascending = 'ascending);
+                data = check database:getDataList(experimentId, search, all = includeAllVersions, 'limit = item\-count, offset = offset, 'ascending = 'ascending);
                 check commit;
             }
         } on fail error err {
@@ -589,7 +589,7 @@ service / on new http:Listener(serverPort) {
     # + 'item\-count - the number of items per page (5 <= item-count <= 500)
     # + ascending - 1 for asc sort, 0 for desc sort by step sequence
     # + return - the list resource containing the timeline entries
-    resource function get experiments/[int experimentId]/timeline(string? plugin\-name, string? 'version, string? status, int? uncleared\-substep, int page = 0, int item\-count = 0, int? ascending = 1) returns TimelineStepListResponse|http:BadRequest|http:NotFound|http:InternalServerError {
+    resource function get experiments/[int experimentId]/timeline(string? plugin\-name, string? 'version, string? status, int? uncleared\-substep, int page = 0, int item\-count = 0, int? 'ascending = 1) returns TimelineStepListResponse|http:BadRequest|http:NotFound|http:InternalServerError {
         if (page < 0) {
             return <http:BadRequest>{body: "Cannot retrieve a negative page number!"};
         }
