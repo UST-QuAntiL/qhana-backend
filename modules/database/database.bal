@@ -21,8 +21,8 @@ import ballerina/mime;
 
 # The connection pool config for sqlite databases.
 sql:ConnectionPool sqlitePool = {
-    maxOpenConnections: 5,  // limit the concurrent connections as sqlite is not really concurrency friendly
-    maxConnectionLifeTime: 1800,  // limit keepalive to ensure pool resets faster on errors
+    maxOpenConnections: 5, // limit the concurrent connections as sqlite is not really concurrency friendly
+    maxConnectionLifeTime: 1800, // limit keepalive to ensure pool resets faster on errors
     minIdleConnections: 0
 };
 
@@ -806,9 +806,9 @@ public isolated transactional function getTimelineStepList(int experimentId, str
     }
     stream<TimelineStepSQL, sql:Error?> timelineSteps;
     if ('ascending != () && 'ascending == 1) || 'ascending == () {
-        timelineSteps = experimentDB->query(check new ConcatQuery(baseQuery, ` ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`));
+        timelineSteps = experimentDB->query(sql:queryConcat(baseQuery, ` ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`));
     } else {
-        timelineSteps = experimentDB->query(check new ConcatQuery(baseQuery, ` ORDER BY sequence DESC LIMIT ${'limit} OFFSET ${offset};`));
+        timelineSteps = experimentDB->query(sql:queryConcat(baseQuery, ` ORDER BY sequence DESC LIMIT ${'limit} OFFSET ${offset};`));
     }
 
     (TimelineStepSQL|TimelineStepFull)[]|error|() tempList = from var step in timelineSteps
@@ -886,8 +886,7 @@ public isolated transactional function getTimelineStep(int? experimentId = (), i
     } else if experimentId != () && sequence != () && stepId != () {
         return error("Must not provide all parameters at the same time!");
     } else if experimentId != () && sequence != () {
-        timelineStep = experimentDB->query(
-            sql:queryConcat(baseQuery, `WHERE experimentId=${experimentId} AND sequence=${sequence} LIMIT 1;`)
+        timelineStep = experimentDB->query(sql:queryConcat(baseQuery, `WHERE experimentId=${experimentId} AND sequence=${sequence} LIMIT 1;`)
         );
         ref = {experimentId: experimentId, sequence: sequence};
     } else if stepId != () {
@@ -1033,7 +1032,7 @@ public isolated transactional function updateTimelineStepNotes(int experimentId,
 }
 
 public isolated transactional function updateTimelineStepResultQuality(int experimentId, int sequence, string resultQuality) returns error? {
-    var test = check experimentDB->execute(
+    _ = check experimentDB->execute(
         `UPDATE TimelineStep SET resultQuality=${resultQuality} WHERE experimentId = ${experimentId} AND sequence=${sequence};`
     );
 }
