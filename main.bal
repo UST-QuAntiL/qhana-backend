@@ -61,6 +61,29 @@ function getPort() returns int {
 # The final configured server port.
 final int & readonly serverPort = getPort().cloneReadOnly();
 
+# User specified host ip address of backend server (with protocol and port)
+# Can also be specified by setting the `QHANA_HOST` environment variable.
+configurable string host = "http://localhost:" + serverPort.toString();
+
+# Determine the base host url from the `QHANA_HOST` environment variable.
+# If not present use the configurable variable `host` as fallback.
+#
+# + return - the configured host base path (including protocol and port)
+function getHost() returns string {
+    string h = os:getEnv("QHANA_HOST");
+    if (regex:matches(h, "^https?://")) {
+        do {
+            return h;
+        } on fail error err {
+            // error should never happen if regex is correct...
+        }
+    }
+    return host;
+}
+
+# The final configured server host.
+final string & readonly serverHost = getHost().cloneReadOnly();
+
 # User configurable watcher intervall configuration.
 # Can also be configured by setting the `QHANA_WATCHER_INTERVALLS` environment variable.
 # The numbers are interpreted as folowing: `[<intervall in seconds>, [<iterations until next intervall>]]*`
@@ -226,10 +249,10 @@ service / on new http:Listener(serverPort) {
     # + return - the root resource
     resource function get .() returns RootResponse {
         return {
-            '\@self: "/",
-            experiments: "/experiments/",
-            pluginRunners: "/pluginRunners/",
-            tasks: "/tasks/"
+            '\@self: serverHost + "/",
+            experiments: serverHost + "/experiments/",
+            pluginRunners: serverHost + "/pluginRunners/",
+            tasks: serverHost + "/tasks/"
         };
     }
 
@@ -255,7 +278,7 @@ service / on new http:Listener(serverPort) {
             select mapToPluginEndpointResponse(endpoint);
         // FIXME load from database...
         return {
-            '\@self: "/plugin-endpoints",
+            '\@self: serverHost + "/plugin-endpoints",
             items: result,
             itemCount: endpointCount
         };
@@ -374,7 +397,7 @@ service / on new http:Listener(serverPort) {
         var result = from var exp in experiments
             select mapToExperimentResponse(exp);
         // TODO include query params in self link
-        return {'\@self: string `/experiments/`, items: result, itemCount: experimentCount};
+        return {'\@self: serverHost + "/experiments/", items: result, itemCount: experimentCount};
     }
 
     # Create a new experiment.
@@ -508,7 +531,7 @@ service / on new http:Listener(serverPort) {
         var dataList = from var d in data
             select mapToExperimentDataResponse(d);
         // TODO add query params to self URL
-        return {'\@self: string `/experiments/${experimentId}/data/?allVersions=${includeAllVersions}`, items: dataList, itemCount: dataCount};
+        return {'\@self: string `${serverHost}/experiments/${experimentId}/data/?allVersions=${includeAllVersions}`, items: dataList, itemCount: dataCount};
     }
 
     # Get a specific experiment data resource.
@@ -627,7 +650,7 @@ service / on new http:Listener(serverPort) {
 
         var stepList = from var s in steps
             select mapToTimelineStepMinResponse(s);
-        return {'\@self: string `/experiments/${experimentId}/timeline`, items: stepList, itemCount: stepCount};
+        return {'\@self: string `${serverHost}/experiments/${experimentId}/timeline`, items: stepList, itemCount: stepCount};
     }
 
     # Create a new timeline step entry.
@@ -739,7 +762,7 @@ service / on new http:Listener(serverPort) {
         }
 
         return {
-            '\@self: string `/experiments/${experimentId}/timeline/${timelineStepSequence}/notes`,
+            '\@self: string `${serverHost}/experiments/${experimentId}/timeline/${timelineStepSequence}/notes`,
             notes: result
         };
     }
@@ -857,7 +880,7 @@ service / on new http:Listener(serverPort) {
         }
         TimelineSubstepResponseWithoutParams[] substepsResponse = mapToTimelineSubstepListResponse(experimentId, timelineStepSequence, substeps);
         return {
-            '\@self: string `/experiments/${experimentId}/timeline/${timelineStepSequence}/substeps`,
+            '\@self: string `${serverHost}/experiments/${experimentId}/timeline/${timelineStepSequence}/substeps`,
             items: substepsResponse
         };
     }
