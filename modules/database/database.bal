@@ -21,8 +21,8 @@ import ballerina/mime;
 
 # The connection pool config for sqlite databases.
 sql:ConnectionPool sqlitePool = {
-    maxOpenConnections: 5,  // limit the concurrent connections as sqlite is not really concurrency friendly
-    maxConnectionLifeTime: 1800,  // limit keepalive to ensure pool resets faster on errors
+    maxOpenConnections: 5, // limit the concurrent connections as sqlite is not really concurrency friendly
+    maxConnectionLifeTime: 1800, // limit keepalive to ensure pool resets faster on errors
     minIdleConnections: 0
 };
 
@@ -589,19 +589,19 @@ public isolated transactional function getDataTypesSummary(int experimentId) ret
 }
 
 public isolated transactional function getDataList(int experimentId, boolean all = true, int 'limit = 100, int offset = 0) returns ExperimentDataFull[]|error {
-    var baseQuery = `SELECT dataId, experimentId, name, version, location, type, contentType 
+    sql:ParameterizedQuery baseQuery = `SELECT dataId, experimentId, name, version, location, type, contentType 
                      FROM ExperimentData WHERE experimentId=${experimentId} `;
-    var baseQuerySuffix = `ORDER BY name ASC, version DESC 
+    sql:ParameterizedQuery baseQuerySuffix = `ORDER BY name ASC, version DESC 
                            LIMIT ${'limit} OFFSET ${offset};`;
 
     stream<ExperimentDataFull, sql:Error?> experimentData;
     if all {
-        experimentData = experimentDB->query(check new ConcatQuery(baseQuery, baseQuerySuffix));
+        experimentData = experimentDB->query(sql:queryConcat(baseQuery, baseQuerySuffix));
     } else {
-        var extraFilter = `AND version=(SELECT MAX(t2.version)
+        sql:ParameterizedQuery extraFilter = `AND version=(SELECT MAX(t2.version)
                                 FROM ExperimentData AS t2 
                                 WHERE ExperimentData.name=t2.name AND t2.experimentId=${experimentId}) `;
-        experimentData = experimentDB->query(check new ConcatQuery(baseQuery, extraFilter, baseQuerySuffix));
+        experimentData = experimentDB->query(sql:queryConcat(baseQuery, extraFilter, baseQuerySuffix));
     }
 
     ExperimentDataFull[]? experimentDataList = check from var data in experimentData
@@ -617,16 +617,16 @@ public isolated transactional function getDataList(int experimentId, boolean all
 }
 
 public isolated transactional function getData(int experimentId, string name, string|int|() 'version) returns ExperimentDataFull|error {
-    var baseQuery = `SELECT dataId, experimentId, name, version, location, type, contentType 
+    sql:ParameterizedQuery baseQuery = `SELECT dataId, experimentId, name, version, location, type, contentType 
                      FROM ExperimentData WHERE experimentId=${experimentId} AND name=${name}`;
     stream<ExperimentDataFull, sql:Error?> data;
 
     if 'version == () || 'version == "latest" {
         // get latest version with order by descending and limit to one
-        data = experimentDB->query(check new ConcatQuery(baseQuery, ` ORDER BY version DESC LIMIT 1;`));
+        data = experimentDB->query(sql:queryConcat(baseQuery, ` ORDER BY version DESC LIMIT 1;`));
     } else {
         // get a specific version with order by descending and limit to one
-        data = experimentDB->query(check new ConcatQuery(baseQuery, ` AND version=${'version} LIMIT 1;`));
+        data = experimentDB->query(sql:queryConcat(baseQuery, ` AND version=${'version} LIMIT 1;`));
     }
 
     var result = data.next();
@@ -726,25 +726,25 @@ public isolated transactional function castToTimelineStepFull(TimelineStepSQL st
 }
 
 public isolated transactional function getTimelineStepList(int experimentId, boolean allAttributes = false, int 'limit = 100, int offset = 0) returns TimelineStepFull[]|error {
-    object:RawTemplate[] query = [`SELECT stepId, experimentId, sequence, `];
+    sql:ParameterizedQuery query = `SELECT stepId, experimentId, sequence, `;
 
     if configuredDBType == "sqlite" {
-        query.push(`cast(start as TEXT) AS start, cast(end as TEXT) AS end, `);
+        query = sql:queryConcat(query, `cast(start as TEXT) AS start, cast(end as TEXT) AS end, `);
     } else {
-        query.push(`DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, `);
+        query = sql:queryConcat(query, `DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, `);
     }
 
-    query.push(`status, processorName, processorVersion, processorLocation `);
+    query = sql:queryConcat(query, `status, processorName, processorVersion, processorLocation `);
 
     if allAttributes {
-        query.push(`, resultQuality, resultLog, parameters, parametersContentType, notes `);
+        query = sql:queryConcat(query, `, resultQuality, resultLog, parameters, parametersContentType, notes `);
     } else {
-        query.push(`, resultQuality, NULL AS resultLog `);
+        query = sql:queryConcat(query, `, resultQuality, NULL AS resultLog `);
     }
 
-    query.push(`FROM TimelineStep WHERE experimentId=${experimentId} ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`);
+    query = sql:queryConcat(query, `FROM TimelineStep WHERE experimentId=${experimentId} ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`);
 
-    stream<TimelineStepSQL, sql:Error?> timelineSteps = experimentDB->query(check new ConcatQuery(...query));
+    stream<TimelineStepSQL, sql:Error?> timelineSteps = experimentDB->query(query);
 
     (TimelineStepSQL|TimelineStepFull)[]|error|() tempList = from var step in timelineSteps
         select step;
@@ -783,8 +783,7 @@ public isolated transactional function createTimelineStep(
     if configuredDBType != "sqlite" {
         currentTime = `DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%S')`;
     }
-    var insertResult = check experimentDB->execute(
-        check new ConcatQuery(
+    var insertResult = check experimentDB->execute(sql:queryConcat(
             `INSERT INTO TimelineStep (experimentId, sequence, start, end, processorName, processorVersion, processorLocation, parameters, parametersContentType) 
             VALUES (${experimentId}, (SELECT sequence from (SELECT count(*)+1 AS sequence FROM TimelineStep WHERE experimentId = ${experimentId}) subquery), `,
             currentTime,
@@ -805,7 +804,7 @@ public isolated transactional function createTimelineStep(
 }
 
 public isolated transactional function getTimelineStep(int? experimentId = (), int? sequence = (), int? stepId = ()) returns TimelineStepWithParams|error {
-    var baseQuery = `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart AS progressStart, pTarget AS progressTarget, pValue AS progressValue, pUnit AS progressUnit
+    sql:ParameterizedQuery baseQuery = `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart AS progressStart, pTarget AS progressTarget, pValue AS progressValue, pUnit AS progressUnit
                      FROM TimelineStep `;
     if configuredDBType != "sqlite" {
         baseQuery = `SELECT stepId, experimentId, sequence, DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart AS progressStart, pTarget AS progressTarget, pValue AS progressValue, pUnit AS progressUnit
@@ -821,12 +820,11 @@ public isolated transactional function getTimelineStep(int? experimentId = (), i
     } else if experimentId != () && sequence != () && stepId != () {
         return error("Must not provide all parameters at the same time!");
     } else if experimentId != () && sequence != () {
-        timelineStep = experimentDB->query(
-            check new ConcatQuery(baseQuery, `WHERE experimentId=${experimentId} AND sequence=${sequence} LIMIT 1;`)
+        timelineStep = experimentDB->query(sql:queryConcat(baseQuery, `WHERE experimentId=${experimentId} AND sequence=${sequence} LIMIT 1;`)
         );
         ref = {experimentId: experimentId, sequence: sequence};
     } else if stepId != () {
-        timelineStep = experimentDB->query(check new ConcatQuery(baseQuery, `WHERE stepId=${stepId} LIMIT 1;`));
+        timelineStep = experimentDB->query(sql:queryConcat(baseQuery, `WHERE stepId=${stepId} LIMIT 1;`));
         ref = {stepId: stepId};
     } else {
         return error("Must provide either experimentId and sequence or the stepId!");
@@ -859,7 +857,7 @@ public isolated transactional function updateTimelineStepStatus(int|TimelineStep
     }
 
     _ = check experimentDB->execute(
-        check new ConcatQuery(
+        sql:queryConcat(
             `UPDATE TimelineStep 
                 SET 
                     end=`, currentTime, `, 
@@ -929,12 +927,12 @@ public isolated transactional function getStepOutputData(int|TimelineStepFull st
 }
 
 public isolated transactional function saveTimelineStepOutputData(int stepId, int experimentId, ExperimentData[] outputData) returns error? {
-    var baseQuery = `INSERT INTO ExperimentData (experimentId, name, version, location, type, contentType) VALUES `;
-    var dataQuery = from var d in outputData
+    sql:ParameterizedQuery baseQuery = `INSERT INTO ExperimentData (experimentId, name, version, location, type, contentType) VALUES `;
+    sql:ParameterizedQuery[] dataQuery = from var d in outputData
         select `(${experimentId}, ${d.name}, (SELECT version FROM (SELECT count(*) + 1 AS version FROM ExperimentData WHERE name = ${d.name}) subquery), ${d.location}, ${d.'type}, ${d.contentType})`;
 
     foreach var insertData in dataQuery {
-        var result = check experimentDB->execute(check new ConcatQuery(baseQuery, insertData));
+        var result = check experimentDB->execute(sql:queryConcat(baseQuery, insertData));
         var dataId = result.lastInsertId;
         _ = check experimentDB->execute(`INSERT INTO StepData (stepId, dataId, relationType) VALUES (${stepId}, ${dataId}, ${"output"});`);
     }
@@ -968,7 +966,7 @@ public isolated transactional function updateTimelineStepNotes(int experimentId,
 }
 
 public isolated transactional function updateTimelineStepResultQuality(int experimentId, int sequence, string resultQuality) returns error? {
-    var test = check experimentDB->execute(
+    _ = check experimentDB->execute(
         `UPDATE TimelineStep SET resultQuality=${resultQuality} WHERE experimentId = ${experimentId} AND sequence=${sequence};`
     );
 }

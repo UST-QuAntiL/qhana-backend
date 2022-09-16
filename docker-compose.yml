@@ -1,13 +1,16 @@
 services:
   backend:
-    build: .
+    build:
+      context: .
+      args:
+        BAL_VERSION: 2201.2.0-swan-lake
     image: qhana-backend
     volumes:
       - ./experimentData:/app/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      QHANA_URL_MAPPING: '{"(?<=^|https?://)localhost(:[0-9]+)?": "host.docker.internal$$1"}'
+      QHANA_URL_MAPPING: '{"(?<=^|https?://)localhost": "host.docker.internal"}'
       QHANA_DB_TYPE: 'mariadb'
       QHANA_DB_HOST: 'db:3306'
       QHANA_DB_NAME: 'QHAnaExperiments'
