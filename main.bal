@@ -74,7 +74,7 @@ function getHost() returns string {
     if (regex:matches(h, "^https?://")) {
         do {
             return h;
-        } on fail error err {
+        } on fail {
             // error should never happen if regex is correct...
         }
     }
@@ -355,13 +355,15 @@ service / on new http:Listener(serverPort) {
     #
     # The experiments list resource is paginated
     #
+    # + name - filter by experiment name
     # + page - the requested page (starting with page 0)
     # + 'item\-count - the number of items per page (5 <= item-count <= 500)
-    # + ascending - 1 for asc sort, 0 for desc sort by step sequence
+    # + sort - 1 for asc sort, -1 for desc sort by step sequence
     # + return - the list resource containing the experiments
-    resource function get experiments(int? page = 0, int? 'item\-count = 10, int? 'ascending = 1) returns ExperimentListResponse|http:InternalServerError|http:BadRequest|http:NotFound {
+    resource function get experiments(string? name, int? page = 0, int? 'item\-count = 10, int? sort = 1) returns ExperimentListResponse|http:InternalServerError|http:BadRequest|http:NotFound {
         int intPage = (page is ()) ? 0 : page;
         int itemCount = (item\-count is ()) ? 10 : item\-count;
+        int intSort = (sort is ()) ? 1 : sort;
 
         if (intPage < 0) {
             return <http:BadRequest>{body: "Cannot retrieve a negative page number!"};
@@ -377,13 +379,13 @@ service / on new http:Listener(serverPort) {
         database:ExperimentFull[] experiments;
 
         transaction {
-            experimentCount = check database:getExperimentCount();
+            experimentCount = check database:getExperimentCount(name = name);
             if (offset >= experimentCount) {
                 // page is out of range!
                 check commit;
                 return <http:NotFound>{};
             } else {
-                experiments = check database:getExperiments('limit = itemCount, offset = offset, 'ascending = 'ascending);
+                experiments = check database:getExperiments(name = name, 'limit = itemCount, offset = offset, sort = intSort);
                 check commit;
             }
         } on fail error err {
@@ -491,11 +493,13 @@ service / on new http:Listener(serverPort) {
     # The data is sorted with newer versions appearing before oder versions.
     #
     # + experimentId - the id of the experiment
-    # + ascending - 1 for asc sort, 0 for desc sort by step sequence
+    # + sort - 1 for asc sort, -1 for desc sort by step sequence
     # + search - search keyword in name, data type and content type (insensitive)
     # + return - the paginated list of data resources
-    resource function get experiments/[int experimentId]/data(boolean? allVersions, string? search, int page = 0, int item\-count = 10, int? 'ascending = 1) returns ExperimentDataListResponse|http:NotFound|http:InternalServerError|http:BadRequest {
+    resource function get experiments/[int experimentId]/data(boolean? allVersions, string? search, int page = 0, int item\-count = 10, int? sort = 1) returns ExperimentDataListResponse|http:NotFound|http:InternalServerError|http:BadRequest {
         boolean includeAllVersions = allVersions == true || allVersions == ();
+        int intSort = (sort is ()) ? 1 : sort;
+        string searchString = (search is ()) ? "" : search;
 
         if (page < 0) {
             return <http:BadRequest>{body: "Cannot retrieve a negative page number!"};
@@ -511,13 +515,13 @@ service / on new http:Listener(serverPort) {
         database:ExperimentDataFull[] data;
 
         transaction {
-            dataCount = check database:getExperimentDataCount(experimentId, search, all = includeAllVersions);
+            dataCount = check database:getExperimentDataCount(experimentId, searchString, all = includeAllVersions);
             if (offset >= dataCount) {
                 // page is out of range!
                 check commit;
                 return <http:NotFound>{};
             } else {
-                data = check database:getDataList(experimentId, search, all = includeAllVersions, 'limit = item\-count, offset = offset, 'ascending = 'ascending);
+                data = check database:getDataList(experimentId, searchString, all = includeAllVersions, 'limit = item\-count, offset = offset, sort = intSort);
                 check commit;
             }
         } on fail error err {
@@ -610,9 +614,10 @@ service / on new http:Listener(serverPort) {
     # + uncleared\-substep - filter by step status (whether there is an uncleared substep that requires user inputs) - 1 for true, 0 for false 
     # + page - the requested page (starting with page 0)
     # + 'item\-count - the number of items per page (5 <= item-count <= 500)
-    # + ascending - 1 for asc sort, 0 for desc sort by step sequence
+    # + sort - 1 for asc sort, -1 for desc sort by step sequence
     # + return - the list resource containing the timeline entries
-    resource function get experiments/[int experimentId]/timeline(string? plugin\-name, string? 'version, string? status, int? uncleared\-substep, int page = 0, int item\-count = 0, int? 'ascending = 1) returns TimelineStepListResponse|http:BadRequest|http:NotFound|http:InternalServerError {
+    resource function get experiments/[int experimentId]/timeline(string? plugin\-name, string? 'version, string? status, int? uncleared\-substep, int page = 0, int item\-count = 0, int? sort = 1) returns TimelineStepListResponse|http:BadRequest|http:NotFound|http:InternalServerError {
+
         if (page < 0) {
             return <http:BadRequest>{body: "Cannot retrieve a negative page number!"};
         }
@@ -621,6 +626,7 @@ service / on new http:Listener(serverPort) {
             return <http:BadRequest>{body: "Item count must be between 5 and 500 (both inclusive)!"};
         }
 
+        int intSort = (sort is ()) ? 1 : sort;
         var offset = page * item\-count;
 
         int stepCount;
@@ -629,15 +635,12 @@ service / on new http:Listener(serverPort) {
         transaction {
 
             stepCount = check database:getTimelineStepCount(experimentId, plugin\-name, 'version, status, uncleared\-substep);
-
-            // calculating stepCount with substep filter (has cleared/uncleared substeps) inefficient
-            steps = check database:getTimelineStepList(experimentId, plugin\-name, 'version, status, uncleared\-substep, 'limit = item\-count, offset = offset, 'ascending = 'ascending);
-            stepCount = steps.length();
             if (offset >= stepCount) {
                 // page is out of range!
                 check commit;
                 return <http:NotFound>{};
             } else {
+                steps = check database:getTimelineStepList(experimentId, plugin\-name, 'version, status, uncleared\-substep, 'limit = item\-count, offset = offset, sort = intSort);
                 check commit;
             }
 
@@ -824,7 +827,7 @@ service / on new http:Listener(serverPort) {
     # + return - the updated timline substep
     resource function post experiments/[int experimentId]/timeline/[int timelineStepSequence]/substeps/[int substepNr](@http:Payload TimelineSubstepPost substepData) returns TimelineSubstepResponseWithParams|http:InternalServerError {
         database:TimelineStepWithParams step;
-        database:TimelineSubstepWithParams substep;
+        database:TimelineSubstepSQL substep;
         database:ExperimentDataReference[] inputData;
 
         transaction {
@@ -832,7 +835,7 @@ service / on new http:Listener(serverPort) {
                 select checkpanic mapFileUrlToDataRef(experimentId, inputUrl); // FIXME move back to check if https://github.com/ballerina-platform/ballerina-lang/issues/34894 is resolved
             step = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStepSequence);
             // verify that substep is in database
-            substep = check database:getTimelineSubstepWithParams(experimentId, timelineStepSequence, substepNr);
+            substep = check database:getTimelineSubstep(step.stepId, substepNr);
             // save input data and update progress
             check database:saveTimelineSubstepParams(step.stepId, substepNr, substepData.parameters, substepData.parametersContentType);
             check database:saveTimelineSubstepInputData(step.stepId, substepNr, experimentId, inputData);

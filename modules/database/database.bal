@@ -441,9 +441,18 @@ public isolated transactional function deletePluginEndpoint(int endpointId) retu
 
 # Return the number of experiments in the database.
 #
+# + name - Filter experiments by experiment name
 # + return - The number of experiments or the encountered error
-public isolated transactional function getExperimentCount() returns int|error {
-    stream<RowCount, sql:Error?> result = experimentDB->query(`SELECT count(*) AS rowCount FROM Experiment;`);
+public isolated transactional function getExperimentCount(string? name) returns int|error {
+    sql:ParameterizedQuery filter = ``;
+    if name != () {
+        string tmpName = "%" + name + "%";
+        filter = ` WHERE name LIKE ${tmpName} `;
+    }
+    stream<RowCount, sql:Error?> result = experimentDB->query(
+        sql:queryConcat(`SELECT count(*) AS rowCount FROM Experiment `, filter, `;`)
+    );
+
     var count = result.next();
     check result.close();
     if count is error {
@@ -459,21 +468,22 @@ public isolated transactional function getExperimentCount() returns int|error {
 
 # Get the list of experiments from the database.
 #
+# + name - Filter by experiment name
 # + 'limit - The maximum number of experiments fetched in one call (default: `100`)
 # + offset - The offset applied to the sql query (default: `0`)
-# + 'ascending - 1 for asc sort, 0 for desc sort by step sequence
+# + sort - 1 for asc sort, -1 for desc sort by step sequence
 # + return - The list of experiments or the encountered error
-public isolated transactional function getExperiments(int 'limit = 100, int offset = 0, int? 'ascending = 1) returns ExperimentFull[]|error {
+public isolated transactional function getExperiments(string? name, int 'limit = 100, int offset = 0, int sort = 1) returns ExperimentFull[]|error {
     stream<ExperimentFull, sql:Error?> experiments;
-    if ('ascending != () && 'ascending == 1) || 'ascending == () {
-        experiments = experimentDB->query(
-            `SELECT experimentId, name, description FROM Experiment ORDER BY name ASC LIMIT ${'limit} OFFSET ${offset};`
-        );
-    } else {
-        experiments = experimentDB->query(
-            `SELECT experimentId, name, description FROM Experiment ORDER BY name DESC LIMIT ${'limit} OFFSET ${offset};`
-        );
+    sql:ParameterizedQuery filter = ``;
+    if name != () {
+        string tmpName = "%" + name + "%";
+        filter = ` WHERE name LIKE ${tmpName} `;
     }
+    sql:ParameterizedQuery sortOrder = sort >= 0 ? ` ASC ` : ` DESC `;
+    experiments = experimentDB->query(sql:queryConcat(
+        `SELECT experimentId, name, description FROM Experiment `, filter, ` ORDER BY name `, sortOrder, ` LIMIT ${'limit} OFFSET ${offset};`)
+    );
 
     ExperimentFull[]? experimentList = check from var experiment in experiments
         select experiment;
@@ -557,19 +567,15 @@ public isolated transactional function updateExperiment(int experimentId, *Exper
 # + search - search keyword in name, data type and content type (insensitive)
 # + all - If true count all experiment data including old version, if false count only the newest verwions (e.g. distinct data names)
 # + return - The count or the encountered error
-public isolated transactional function getExperimentDataCount(int experimentId, string? search, boolean all = true) returns int|error {
+public isolated transactional function getExperimentDataCount(int experimentId, string search, boolean all = true) returns int|error {
     stream<RowCount, sql:Error?> result;
+    sql:ParameterizedQuery baseQuery;
     if all {
-        if search != () && search != "" {
-            result = experimentDB->query(`SELECT count(*) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId} AND ((name LIKE '%${search}%') OR (type  LIKE '%${search}%') OR (contentType LIKE '%${search}%'));`);
-        }
-        result = experimentDB->query(`SELECT count(*) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId};`);
+        baseQuery = `SELECT count(*) AS rowCount FROM ExperimentData `;
     } else {
-        if search != () && search != "" {
-            result = experimentDB->query(`SELECT count(*) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId} AND ((name LIKE '%${search}%') OR (type  LIKE '%${search}%') OR (contentType LIKE '%${search}%'));`);
-        }
-        result = experimentDB->query(`SELECT count(DISTINCT name) AS rowCount FROM ExperimentData WHERE experimentId = ${experimentId};`);
+        baseQuery = `SELECT count(DISTINCT name) AS rowCount FROM ExperimentData `;
     }
+    result = experimentDB->query(sql:queryConcat(baseQuery, experimentDataFilter(experimentId, search), `;`));
     var count = result.next();
 
     check result.close();
@@ -603,7 +609,7 @@ public isolated transactional function getDataTypesSummary(int experimentId) ret
     return dataSummary;
 }
 
-public isolated transactional function getDataList(int experimentId, string? search, boolean all = true, int 'limit = 100, int offset = 0, int? 'ascending = 1) returns ExperimentDataFull[]|error {
+public isolated transactional function getDataList(int experimentId, string? search, boolean all = true, int 'limit = 100, int offset = 0, int sort = 1) returns ExperimentDataFull[]|error {
     sql:ParameterizedQuery baseQuery = `SELECT dataId, experimentId, name, version, location, type, contentType 
                      FROM ExperimentData WHERE experimentId=${experimentId} `;
     if search != () && search != "" {
@@ -615,13 +621,8 @@ public isolated transactional function getDataList(int experimentId, string? sea
                                 FROM ExperimentData AS t2 
                                 WHERE ExperimentData.name=t2.name AND t2.experimentId=${experimentId}) `);
     }
-    if ('ascending != () && 'ascending == 1) || 'ascending == () {
-        baseQuery = sql:queryConcat(baseQuery, `ORDER BY name ASC, version DESC 
-                           LIMIT ${'limit} OFFSET ${offset};`);
-    } else {
-        baseQuery = sql:queryConcat(baseQuery, `ORDER BY name DESC, version DESC 
-                           LIMIT ${'limit} OFFSET ${offset};`);
-    }
+    sql:ParameterizedQuery sortOrder = sort >= 0 ? ` ASC ` : ` DESC `;
+    baseQuery = sql:queryConcat(baseQuery, `ORDER BY name `, sortOrder, `, version DESC LIMIT ${'limit} OFFSET ${offset};`);
 
     stream<ExperimentDataFull, sql:Error?> experimentData = experimentDB->query(baseQuery);
 
@@ -706,30 +707,22 @@ public isolated transactional function getStepsUsingData(int|ExperimentDataFull 
 // Timeline ////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
+# Description
+#
+# + experimentId - The experiment id
+# + plugin\-name - The plugin name
+# + 'version - The plugin version  
+# + status - Filter for the current status of the timeline step result
+# + uncleared\-substep - Filter for (un)cleared substeps. If set to 1 (or any postivie number), steps must have at least one uncleared substeps. Else, must be set to -1 (or any negative number).
+# + return - Return timeline step count
 public isolated transactional function getTimelineStepCount(int experimentId, string? plugin\-name, string? 'version, string? status, int? uncleared\-substep) returns int|error {
     sql:ParameterizedQuery query = `SELECT count(*) AS rowCount FROM TimelineStep `;
-    if uncleared\-substep != () {
-        query = sql:queryConcat(query, `JOIN TimelineSubstep ON TimelineStep.stepId = TimelineSubstep.stepId `);
-    }
-    query = sql:queryConcat(query, `WHERE experimentId = ${experimentId}`);
-    if plugin\-name != () {
-        query = sql:queryConcat(query, ` AND processorName = ${plugin\-name}`);
-    }
-    if 'version != () {
-        query = sql:queryConcat(query, ` AND processorVersion = ${'version}`);
-    }
-    if status != () {
-        query = sql:queryConcat(query, ` AND status = ${status}`);
-    }
-    if uncleared\-substep != () {
-        // (COUNT(*) - SUM(TimelineSubstep.cleared)) is the number of uncleared substeps (at most 1)
-        // e.g., must be 1 if uncleared substep is required (uncleared\-substep = 1)
-        query = sql:queryConcat(query, ` GROUP BY TimelineStep.stepId HAVING (COUNT(*) - SUM(TimelineSubstep.cleared))=${uncleared\-substep}`);
-    }
 
-    stream<RowCount, sql:Error?> result = experimentDB->query(
-        sql:queryConcat(query, `;`)
-    );
+    stream<RowCount, sql:Error?> result = experimentDB->query(sql:queryConcat(
+        query,
+        timelineStepListFilter(experimentId, plugin\-name, 'version, status, uncleared\-substep),
+        `;`
+    ));
 
     var count = result.next();
     check result.close();
@@ -766,49 +759,41 @@ public isolated transactional function castToTimelineStepFull(TimelineStepSQL st
     return step.cloneWithType();
 }
 
-public isolated transactional function getTimelineStepList(int experimentId, string? plugin\-name, string? 'version, string? status, int? uncleared\-substep, boolean allAttributes = false, int 'limit = 100, int offset = 0, int? 'ascending = 1) returns TimelineStepFull[]|error {
+# Get the list of timeline steps from the database.
+#
+# + experimentId - The experiment id
+# + plugin\-name - The plugin name
+# + 'version - The plugin version  
+# + status - Filter for the current status of the timeline step result
+# + uncleared\-substep - Filter for (un)cleared substeps. If set to 1 (or any postivie number), steps must have at least one uncleared substeps. Else, must be set to -1 (or any negative number).
+# + allAttributes - Include all attributes in result
+# + 'limit - The maximum number of timline steps fetched in one call (default: `100`)
+# + offset - The offset applied to the sql query (default: `0`)
+# + sort - 1 for asc sort, -1 for desc sort by step sequence
+# + return - The list of timpline steps or the encountered error
+public isolated transactional function getTimelineStepList(int experimentId, string? plugin\-name, string? 'version, string? status, int? uncleared\-substep, boolean allAttributes = false, int 'limit = 100, int offset = 0, int sort = 1) returns TimelineStepFull[]|error {
 
     sql:ParameterizedQuery baseQuery = `SELECT TimelineStep.stepId, experimentId, sequence, `;
     if configuredDBType == "sqlite" {
-        baseQuery = sql:queryConcat(baseQuery, `cast(start as TEXT) AS start, cast(end as TEXT) AS end, `);
+        baseQuery = sql:queryConcat(baseQuery, ` cast(start as TEXT) AS start, cast(end as TEXT) AS end, `);
     } else {
-        baseQuery = sql:queryConcat(baseQuery, `DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, `);
+        baseQuery = sql:queryConcat(baseQuery, ` DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end, `);
     }
-    baseQuery = sql:queryConcat(baseQuery, `status, processorName, processorVersion, processorLocation `);
+    baseQuery = sql:queryConcat(baseQuery, ` status, processorName, processorVersion, processorLocation `);
     if allAttributes {
         baseQuery = sql:queryConcat(baseQuery, `, resultQuality, resultLog, TimelineSubstep.parameters, TimelineSubstep.parametersContentType, notes `);
     } else {
         baseQuery = sql:queryConcat(baseQuery, `, resultQuality, NULL AS resultLog `);
     }
-    baseQuery = sql:queryConcat(baseQuery, `FROM TimelineStep `);
+    baseQuery = sql:queryConcat(baseQuery, ` FROM TimelineStep `);
 
-    if uncleared\-substep != () {
-        baseQuery = sql:queryConcat(baseQuery, `JOIN TimelineSubstep ON TimelineStep.stepId = TimelineSubstep.stepId `);
-    }
-
-    baseQuery = sql:queryConcat(baseQuery, `WHERE experimentId=${experimentId}`);
-
-    if plugin\-name != () {
-        baseQuery = sql:queryConcat(baseQuery, ` AND processorName = ${plugin\-name}`);
-    }
-    if 'version != () {
-        baseQuery = sql:queryConcat(baseQuery, ` AND processorVersion = ${'version}`);
-    }
-    if status != () {
-        baseQuery = sql:queryConcat(baseQuery, ` AND status = ${status}`);
-    }
-    // filtering for (un)cleared substeps
-    if uncleared\-substep != () {
-        // (COUNT(*) - SUM(TimelineSubstep.cleared)) is the number of uncleared substeps (at most 1)
-        // e.g., must be 1 if uncleared substep is required (uncleared\-substep = 1)
-        baseQuery = sql:queryConcat(baseQuery, ` GROUP BY TimelineStep.stepId HAVING (COUNT(*) - SUM(TimelineSubstep.cleared))=${uncleared\-substep}`);
-    }
+    sql:ParameterizedQuery sortOrder = sort >= 0 ? ` ASC ` : ` DESC `;
     stream<TimelineStepSQL, sql:Error?> timelineSteps;
-    if ('ascending != () && 'ascending == 1) || 'ascending == () {
-        timelineSteps = experimentDB->query(sql:queryConcat(baseQuery, ` ORDER BY sequence ASC LIMIT ${'limit} OFFSET ${offset};`));
-    } else {
-        timelineSteps = experimentDB->query(sql:queryConcat(baseQuery, ` ORDER BY sequence DESC LIMIT ${'limit} OFFSET ${offset};`));
-    }
+    timelineSteps = experimentDB->query(sql:queryConcat(
+        baseQuery,
+        timelineStepListFilter(experimentId, plugin\-name, 'version, status, uncleared\-substep),
+        ` ORDER BY sequence `, sortOrder, ` LIMIT ${'limit} OFFSET ${offset};`
+    ));
 
     (TimelineStepSQL|TimelineStepFull)[]|error|() tempList = from var step in timelineSteps
         select step;
@@ -1133,7 +1118,7 @@ public isolated transactional function getTimelineSubstepsWithInputData(int step
     }
 }
 
-# Returns timeline substep with available experiment data reference if available
+# Return timeline substep with available experiment data reference if available
 #
 # + stepId - ID of step 
 # + substepNr - number of substep
@@ -1193,7 +1178,7 @@ public isolated transactional function createTimelineSubstep(int stepId, Timelin
     );
 }
 
-# Updates cleared field of timeline substep
+# Update cleared field of timeline substep
 #
 # + stepId - stepId
 # + substep - substep
@@ -1231,7 +1216,7 @@ public isolated transactional function updateTimelineSubstep(int stepId, Timelin
     }
 }
 
-# Updates cleared field of all timeline substeps with substepNr <= substepNrBound
+# Update cleared field of all timeline substeps with substepNr <= substepNrBound
 #
 # + stepId - stepId
 # + substepNrBound - bound of substepNr's
@@ -1249,7 +1234,9 @@ public isolated transactional function clearTimelineSubsteps(int stepId, int sub
     return false;
 }
 
-# Updates database from a list of received substeps. First checks received list against old list of substeps for the given step in the database to find updated and new substeps. If steps are missing or illegal changes were made (apart from setting cleared to 1) or multiple new uncleared substeps are added an appropriate error is returned. If at least one new substep is added, all old substeps are automatically cleared (in case they are not cleared in the received list). A warning is printed if more than one new substep is added. 
+# Update database from a list of received substeps. 
+#
+# First checks received list against old list of substeps for the given step in the database to find updated and new substeps. If steps are missing or illegal changes were made (apart from setting cleared to 1) or multiple new uncleared substeps are added an appropriate error is returned. If at least one new substep is added, all old substeps are automatically cleared (in case they are not cleared in the received list). A warning is printed if more than one new substep is added. 
 #
 # + stepId - Timeline step id
 # + receivedSubsteps - list of received substeps
@@ -1350,4 +1337,50 @@ public isolated transactional function saveTimelineSubstepInputData(int stepId, 
         var experimentData = check getData(experimentId, data.name, data.'version);
         _ = check experimentDB->execute(`INSERT INTO SubstepData (stepId, substepNr, dataId, relationType) VALUES (${stepId}, ${substepNr}, ${experimentData.dataId}, ${"input"});`);
     }
+}
+
+# # Filter functions
+
+# Build filter query fragment to find matches in name, type and content of experiment data.
+#
+# + experimentId - Experiment id
+# + search - Search string to match
+# + return - Return filter query fragment
+public isolated function experimentDataFilter(int experimentId, string search) returns sql:ParameterizedQuery {
+    sql:ParameterizedQuery filter = `  WHERE experimentId = ${experimentId} `;
+    if search != "" {
+        string searchString = "%" + search + "%";
+        return sql:queryConcat(filter, ` AND ((name LIKE ${searchString}) OR (type  LIKE ${searchString}) OR (contentType LIKE ${searchString})) `);
+    }
+    return filter;
+}
+
+# Build filter query fragment or timeline step list queries
+#
+# + experimentId - Experiment id
+# + plugin\-name - Plugin name filter  
+# + 'version - Plugin version filter
+# + status - Plugin status filter
+# + uncleared\-substep - Filter for (un)cleared substeps. If set to 1 (or any postivie number), steps must have at least one uncleared substeps. Else, must be set to -1 (or any negative number).
+# + return - Return filter query fragment
+public isolated function timelineStepListFilter(int experimentId, string? plugin\-name, string? 'version, string? status, int? uncleared\-substep) returns sql:ParameterizedQuery {
+    sql:ParameterizedQuery filter = ` WHERE experimentId = ${experimentId} `;
+    if plugin\-name != () {
+        filter = sql:queryConcat(filter, ` AND processorName = ${plugin\-name} `);
+    }
+    if 'version != () {
+        filter = sql:queryConcat(filter, ` AND processorVersion = ${'version} `);
+    }
+    if status != () {
+        filter = sql:queryConcat(filter, ` AND status = ${status} `);
+    }
+    if uncleared\-substep != () {
+        filter = sql:queryConcat(filter, ` AND EXISTS (SELECT * FROM TimelineSubstep WHERE TimelineSubstep.stepId = TimelineStep.stepId AND `);
+        if uncleared\-substep >= 0 {
+            filter = sql:queryConcat(filter, ` TimelineSubstep.cleared = 0) `);
+        } else {
+            filter = sql:queryConcat(filter, ` TimelineSubstep.cleared = 1) `);
+        }
+    }
+    return filter;
 }
