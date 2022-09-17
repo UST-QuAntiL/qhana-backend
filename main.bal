@@ -16,6 +16,7 @@ import ballerina/http;
 import ballerina/regex;
 import ballerina/os;
 import ballerina/log;
+import ballerina/io;
 import qhana_backend.database;
 
 // start configuration values
@@ -71,7 +72,7 @@ configurable string host = "http://localhost:" + serverPort.toString();
 # + return - the configured host base path (including protocol and port)
 function getHost() returns string {
     string h = os:getEnv("QHANA_HOST");
-    if (regex:matches(h, "^https?://")) {
+    if (regex:matches(h, "^https?:\\/\\/.*")) {
         do {
             return h;
         } on fail error err {
