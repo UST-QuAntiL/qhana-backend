@@ -355,12 +355,12 @@ service / on new http:Listener(serverPort) {
     #
     # The experiments list resource is paginated
     #
-    # + name - filter by experiment name
+    # + search - filter by experiment name
     # + page - the requested page (starting with page 0)
     # + 'item\-count - the number of items per page (5 <= item-count <= 500)
-    # + sort - 1 for asc sort, -1 for desc sort by step sequence
+    # + sort - 1 for asc sort, -1 for desc sort by experiment name
     # + return - the list resource containing the experiments
-    resource function get experiments(string? name, int? page = 0, int? 'item\-count = 10, int? sort = 1) returns ExperimentListResponse|http:InternalServerError|http:BadRequest|http:NotFound {
+    resource function get experiments(string? search, int? page = 0, int? 'item\-count = 10, int? sort = 1) returns ExperimentListResponse|http:InternalServerError|http:BadRequest|http:NotFound {
         int intPage = (page is ()) ? 0 : page;
         int itemCount = (item\-count is ()) ? 10 : item\-count;
         int intSort = (sort is ()) ? 1 : sort;
@@ -379,13 +379,13 @@ service / on new http:Listener(serverPort) {
         database:ExperimentFull[] experiments;
 
         transaction {
-            experimentCount = check database:getExperimentCount(name = name);
+            experimentCount = check database:getExperimentCount(search = search);
             if (offset >= experimentCount) {
                 // page is out of range!
                 check commit;
                 return <http:NotFound>{};
             } else {
-                experiments = check database:getExperiments(name = name, 'limit = itemCount, offset = offset, sort = intSort);
+                experiments = check database:getExperiments(search = search, 'limit = itemCount, offset = offset, sort = intSort);
                 check commit;
             }
         } on fail error err {
@@ -493,7 +493,7 @@ service / on new http:Listener(serverPort) {
     # The data is sorted with newer versions appearing before oder versions.
     #
     # + experimentId - the id of the experiment
-    # + sort - 1 for asc sort, -1 for desc sort by step sequence
+    # + sort - 1 for asc sort, -1 for desc sort by name 
     # + search - search keyword in name, data type and content type (insensitive)
     # + return - the paginated list of data resources
     resource function get experiments/[int experimentId]/data(boolean? allVersions, string? search, int page = 0, int item\-count = 10, int? sort = 1) returns ExperimentDataListResponse|http:NotFound|http:InternalServerError|http:BadRequest {
