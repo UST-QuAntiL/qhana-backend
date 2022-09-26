@@ -449,11 +449,15 @@ public isolated function mapToTimelineStepResponse(
 public isolated function mapToTimelineSubstepResponse(
         int experimentId,
         int timelineStepSequence,
-        database:TimelineSubstepWithParams substep,
+        database:TimelineSubstepWithParams|database:TimelineSubstepSQL substep,
         database:ExperimentDataReference[] inputData = []
 ) returns TimelineSubstepResponseWithParams {
     var inputDataLinks = from var dataRef in inputData
         select string `${serverHost}/experiments/${experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
+    string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
+    if substep is database:TimelineSubstepWithParams {
+        parametersContentType = substep.parametersContentType;
+    }
     return {
         '\@self: string `${serverHost}/experiments/${experimentId}/timeline/${timelineStepSequence}/substeps/${substep.substepNr}`,
         stepId: timelineStepSequence,
@@ -464,7 +468,7 @@ public isolated function mapToTimelineSubstepResponse(
         hrefUi: substep.hrefUi,
         cleared: substep.cleared == 1 ? true : false,
         parameters: string `${serverHost}/experiments/${experimentId}/timeline/${timelineStepSequence}/substeps/${substep.substepNr}/parameters`,
-        parametersContentType: substep?.parametersContentType,
+        parametersContentType: parametersContentType,
         inputData: inputData,
         inputDataLinks: inputDataLinks
     };
