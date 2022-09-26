@@ -493,7 +493,7 @@ service / on new http:Listener(serverPort) {
     # The data is sorted with newer versions appearing before oder versions.
     #
     # + experimentId - the id of the experiment
-    # + sort - 1 for asc sort, -1 for desc sort by name 
+    # + sort - 1 for asc sort, -1 for desc sort by name and version
     # + search - search keyword in name, data type and content type (insensitive)
     # + return - the paginated list of data resources
     resource function get experiments/[int experimentId]/data(boolean? allVersions, string? search, int page = 0, int item\-count = 10, int? sort = 1) returns ExperimentDataListResponse|http:NotFound|http:InternalServerError|http:BadRequest {
