@@ -739,13 +739,18 @@ public isolated transactional function castToTimelineStepFull(TimelineStepSQL st
     }
     var endString = step.end; // needed for correct type narrowing
     if endString is string {
-        var utcString = endString; // needed for correct type narrowing
-        if !endString.endsWith("Z") {
-            utcString += ".00Z";
+        if endString == "" {
+            step.end = ();
+        } else {
+            var utcString = endString; // needed for correct type narrowing
+            if !endString.endsWith("Z") {
+                utcString += ".00Z";
+            }
+            time:Utc end = check time:utcFromString(utcString);
+            step.end = end;
         }
-        time:Utc end = check time:utcFromString(utcString);
-        step.end = end;
     }
+
     return step.cloneWithType();
 }
 
@@ -818,16 +823,17 @@ public isolated transactional function createTimelineStep(
         return error("When parameters are given the parameters content type is required!");
     }
 
-    sql:ParameterizedQuery currentTime = `strftime('%Y-%m-%dT%H:%M:%S', 'now')`;
+    // end time is empty string for sqlite. Converted back to () in castToTimelineStepFull. 
+    sql:ParameterizedQuery currentTime = `strftime('%Y-%m-%dT%H:%M:%S', 'now'), ''`;
     if configuredDBType != "sqlite" {
-        currentTime = `DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%S')`;
+        currentTime = `DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%S'), NULL`;
     }
     var insertResult = check experimentDB->execute(
         sql:queryConcat(
             `INSERT INTO TimelineStep (experimentId, sequence, start, end, processorName, processorVersion, processorLocation, parameters, parametersContentType) 
             VALUES (${experimentId}, (SELECT sequence from (SELECT count(*)+1 AS sequence FROM TimelineStep WHERE experimentId = ${experimentId}) subquery), `,
             currentTime,
-            `, NULL, ${processorName}, ${processorVersion}, ${processorLocation}, ${parameters}, ${parametersContentType});`
+            `, ${processorName}, ${processorVersion}, ${processorLocation}, ${parameters}, ${parametersContentType});`
         )
     );
 
@@ -892,8 +898,11 @@ public isolated transactional function getTimelineStep(int? experimentId = (), i
 public isolated transactional function updateTimelineStepStatus(int|TimelineStepFull step, string status, string? resultLog) returns error? {
     var stepId = step is int ? step : step.stepId;
     sql:ParameterizedQuery currentTime = `strftime('%Y-%m-%dT%H:%M:%S', 'now')`;
+    // end is set to empty string in sqlite
+    sql:ParameterizedQuery end = `''`;
     if configuredDBType != "sqlite" {
         currentTime = `DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%S')`;
+        end = `NULL`;
     }
 
     _ = check experimentDB->execute(
@@ -903,7 +912,7 @@ public isolated transactional function updateTimelineStepStatus(int|TimelineStep
                     end=`, currentTime, `, 
                     status=${status},
                     resultLog=${resultLog}
-                WHERE stepId = ${stepId} AND end IS NULL;`
+                WHERE stepId = ${stepId} AND end IS `, end, `;`
         )
     );
 }
