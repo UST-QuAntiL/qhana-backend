@@ -17,6 +17,8 @@ import ballerina/regex;
 import ballerina/os;
 import ballerina/log;
 import qhana_backend.database;
+import ballerina/file;
+import ballerina/io;
 
 // start configuration values
 # List of domains that are allowed CORS requests to the backend.
@@ -960,19 +962,16 @@ service / on new http:Listener(serverPort) {
     # Export an experiment as a zip.
     #
     # + experimentId - the id of the experiment to be cloned
-    # + exportConfig - configuration of export
+    # + exportConfig - configuration of export // TODO
     # + return - the cloned experiment resource
-    @http:ResourceConfig {
-        consumes: ["application/json"]
-    }
-    resource function get experiments/[int experimentId]/export(@http:Payload database:ExperimentExportConfig exportConfig, http:Caller caller) returns error? {
+    resource function get experiments/[int experimentId]/export(string? exportConfig, http:Caller caller) returns error? {
         database:ExperimentExportZip experimentZip;
         http:Response resp = new;
         transaction {
             experimentZip = check database:exportExperiment(experimentId, exportConfig);
             check commit;
         } on fail error err {
-            io:println(err);
+            log:printError("Exporting experiment unsuccessful.", 'error = err, stackTrace = err.stackTrace());
 
             resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
             resp.setPayload("Something went wrong. Please try again later.");
@@ -983,49 +982,30 @@ service / on new http:Listener(serverPort) {
         resp.statusCode = http:STATUS_OK;
         resp.addHeader("Content-Disposition", string `attachment; filename="${experimentZip.name}"`);
         resp.setFileAsPayload(experimentZip.location, contentType = "application/zip");
-
+        // TODO: length? 
         check caller->respond(resp);
     }
 
     # Import an experiment from a zip.
     #
-    # + return - the cloned experiment resource
+    # + return - TODO
     @http:ResourceConfig {
         consumes: ["application/json"]
     }
-    resource function get experiments/[int experimentId]/'import(@http:Payload database:ExperimentExportConfig exportConfig, http:Caller caller) returns error? {
-        // TODO: only draft
-        database:ExperimentExportZip experimentZip;
-        http:Response resp = new;
-        transaction {
-            experimentZip = check database:exportExperiment(experimentId, exportConfig);
-            check commit;
-        } on fail error err {
-            io:println(err);
-
-            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
-            resp.setPayload("Something went wrong. Please try again later.");
-
-            check caller->respond(resp);
+    resource function post experiments/[int experimentId]/'import(http:Caller caller, http:Request request) returns error? {
+        stream<byte[], io:Error?> streamer = check request.getByteStream();
+        var exists = file:test("tmp", file:EXISTS);
+        if exists !is error && !exists {
+            check file:createDir("tmp");
         }
-
-        resp.statusCode = http:STATUS_OK;
-        resp.addHeader("Content-Disposition", string `attachment; filename="${experimentZip.name}"`);
-        resp.addHeader("Content-Length", experimentZip.fileLength.toString());
-
-        // TODO: probably need to write zip file as bytestream...
-        byte[]|io:Error zipStream = io:fileReadBytes(experimentZip.location);
-
-        if zipStream !is error {
-            resp.setPayload(zipStream, contentType = "application/zip");
-            check caller->respond(resp);
-
-        } else {
-            io:println(zipStream);
-            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
-            resp.setPayload("Something went wrong. Please try again later.");
-            check caller->respond(resp);
+        var zipPath = check file:joinPath("tmp", "import.zip"); // TODO: remove if 
+        exists = file:test(zipPath, file:EXISTS);
+        if exists !is error && exists {
+            check file:remove(zipPath);
         }
+        check io:fileWriteBlocksFromStream(zipPath, streamer);
+        check streamer.close();
+        // TODO: import file
     }
 }
 

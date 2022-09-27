@@ -18,8 +18,8 @@ import ballerina/mime;
 import ballerina/time;
 import ballerina/file;
 import ballerina/log;
-import qhana_backend.java.io as javaio;
-import qhana_backend.java.util.zip as javazip;
+import ballerina/os;
+import ballerina/regex;
 
 public type IdSQL record {|
     int id;
@@ -436,7 +436,7 @@ public isolated transactional function getExperimentDBExport(int experimentId) r
     int[] dataIdList = [];
 
     // iterate over timeline steps
-    TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experimentId, allAttributes = true, allSteps = true);
+    TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experimentId, (), (), (), (), allAttributes = true, noLimit = true);
     foreach TimelineStepFull timelineStepDb in timelineStepListDb {
         TimelineStepExport timelineStepExport = check castToTimelineStepExport(timelineStepDb);
         // retrieve associated step data
@@ -475,13 +475,11 @@ public isolated transactional function getExperimentDBExport(int experimentId) r
 # Prepare zip file for export of an experiment.
 #
 # + experimentId - experiment id of the new (cloned) experiment
-# + config - export configuration
+# + config - export configuration // TODO
 # + return - record with details about created zip files or error
-public transactional function exportExperiment(int experimentId, ExperimentExportConfig config) returns ExperimentExportZip|error {
+public transactional function exportExperiment(int experimentId, string? config) returns ExperimentExportZip|error {
 
-    string zipFilename = "";
-    string zipFileLocation = "";
-    int fileLength = 0;
+    // TODO: config
 
     ExperimentCompleteExport experimentComplete = check getExperimentDBExport(experimentId);
     // data files
@@ -519,35 +517,21 @@ public transactional function exportExperiment(int experimentId, ExperimentExpor
     check io:fileWriteJson(jsonPath, experimentCompleteJson);
 
     // create zip-  add all files (experiment file(s) + data files) to ZIP
-    string zipFileName = "experiment.zip";
-    var zipPath = check file:joinPath("tmp", zipFileName); //TODO: replace with var jsonPath = check file:joinPath(tmpDir, zipFileName);
-    javaio:File zipFile = javaio:newFile2(zipPath);
-    javaio:FileOutputStream fileOutStream = check javaio:newFileOutputStream1(zipFile);
-    javazip:ZipOutputStream zipOutStream = javazip:newZipOutputStream1(fileOutStream);
+    string zipFileName = regex:replaceAll(experimentComplete.experiment.name, "\\s+", "-");
+    var zipPath = check file:joinPath("tmp", zipFileName);
 
     // add experiment.json
-    javaio:FileInputStream inStream = check javaio:newFileInputStream1(javaio:newFile2(jsonPath));
-    javazip:ZipEntry entry = javazip:newZipEntry1(jsonFile);
-    _ = check zipOutStream.putNextEntry(entry);
-    byte[] data = check inStream.readAllBytes();
-    _ = check zipOutStream.write(data);
-    _ = check zipOutStream.closeEntry();
-    _ = check inStream.close();
+    os:Process result = check os:exec({value: "zip", arguments: ["-ur", zipPath, jsonPath]});
+    _ = check result.waitForExit();
 
     // add experiment data files
     foreach string dataFile in dataFileLocations {
-        inStream = check javaio:newFileInputStream1(javaio:newFile2(dataFile));
-        entry = javazip:newZipEntry1(dataFile);
-        _ = check zipOutStream.putNextEntry(entry);
-        data = check inStream.readAllBytes();
-        _ = check zipOutStream.write(data);
-        _ = check zipOutStream.closeEntry();
-        _ = check inStream.close();
+        result = check os:exec({value: "zip", arguments: ["-ur", zipPath, dataFile]});
+        _ = check result.waitForExit();
     }
-    _ = check zipOutStream.close();
-    _ = check fileOutStream.close();
 
-    fileLength = zipFile.length();
-    ExperimentExportZip exportResult = {name: zipPath, location: zipFileLocation, fileLength: fileLength};
+    (file:MetaData & readonly) metaData = check file:getMetaData(zipPath);
+
+    ExperimentExportZip exportResult = {name: zipFileName, location: zipPath, fileLength: metaData.size};
     return exportResult;
 }
