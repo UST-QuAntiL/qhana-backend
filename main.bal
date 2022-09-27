@@ -51,7 +51,7 @@ function getPort() returns int {
     if (regex:matches(p, "^[0-9]+$")) {
         do {
             return check int:fromString(p);
-        } on fail error err {
+        } on fail {
             // error should never happen if regex is correct...
         }
     }
@@ -60,6 +60,25 @@ function getPort() returns int {
 
 # The final configured server port.
 final int & readonly serverPort = getPort().cloneReadOnly();
+
+# User specified host ip address of backend server (with protocol and port)
+# Can also be specified by setting the `QHANA_HOST` environment variable.
+configurable string host = "http://localhost:" + serverPort.toString();
+
+# Determine the base host url from the `QHANA_HOST` environment variable.
+# If not present use the configurable variable `host` as fallback.
+#
+# + return - the configured host base path (including protocol and port)
+function getHost() returns string {
+    string h = os:getEnv("QHANA_HOST");
+    if (regex:matches(h, "^https?:\\/\\/.*$")) {
+        return h;
+    }
+    return host;
+}
+
+# The final configured server host.
+final string & readonly serverHost = getHost().cloneReadOnly();
 
 # User configurable watcher intervall configuration.
 # Can also be configured by setting the `QHANA_WATCHER_INTERVALLS` environment variable.
@@ -95,7 +114,7 @@ function getWatcherIntervallConfig() returns (decimal|int)[] {
             return from string i in regex:split(intervalls, "[\\s\\(\\),;]+")
                 select check coerceToPositiveNumber(i);
         } on fail error err {
-            log:printError("Failed to parse environment variable QHANA_WATCHER_INTERVALLS!\n", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Failed to parse environment variable QHANA_WATCHER_INTERVALLS!\n", 'error = err, stackTrace = err.stackTrace());
         }
     }
     return watcherIntervallConfig;
@@ -122,7 +141,7 @@ function getInternalUrlMap() returns map<string> {
         do {
             return check mapping.fromJsonStringWithType();
         } on fail error err {
-            log:printError("Failed to parse environment variable QHANA_URL_MAPPING!\n", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Failed to parse environment variable QHANA_URL_MAPPING!\n", 'error = err, stackTrace = err.stackTrace());
         }
     }
     map<string> newMapping = {};
@@ -160,7 +179,7 @@ function getPluginRunnersConfig() returns string[] {
         do {
             return check pRunners.fromJsonStringWithType();
         } on fail error err {
-            log:printError("Failed to parse environment variable QHANA_PLUGIN_RUNNERS!\n", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Failed to parse environment variable QHANA_PLUGIN_RUNNERS!\n", 'error = err, stackTrace = err.stackTrace());
         }
     }
     return pluginRunners;
@@ -179,7 +198,7 @@ function getPluginsConfig() returns string[] {
         do {
             return check pluginList.fromJsonStringWithType();
         } on fail error err {
-            log:printError("Failed to parse environment variable QHANA_PLUGINS!\n", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Failed to parse environment variable QHANA_PLUGINS!\n", 'error = err, stackTrace = err.stackTrace());
         }
     }
     return plugins;
@@ -201,7 +220,7 @@ isolated function mapToInternalUrl(string url) returns string {
     // apply all replacements specified in the url map, keys are interpreted as regex
     var replacedUrl = url;
     foreach var [pattern, replacement] in configuredUrlMap.entries() {
-        replacedUrl = regex:replaceFirst(replacedUrl, pattern, replacement);
+        replacedUrl = regex:replace(replacedUrl, pattern, replacement);
     }
     return replacedUrl;
 }
@@ -226,10 +245,10 @@ service / on new http:Listener(serverPort) {
     # + return - the root resource
     resource function get .() returns RootResponse {
         return {
-            '\@self: "/",
-            experiments: "/experiments/",
-            pluginRunners: "/pluginRunners/",
-            tasks: "/tasks/"
+            '\@self: serverHost + "/",
+            experiments: serverHost + "/experiments/",
+            pluginRunners: serverHost + "/pluginRunners/",
+            tasks: serverHost + "/tasks/"
         };
     }
 
@@ -245,7 +264,7 @@ service / on new http:Listener(serverPort) {
             endpoints = check database:getPluginEndpoints();
             check commit;
         } on fail error err {
-            log:printError("Could not get plugin endpoints.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not get plugin endpoints.", 'error = err, stackTrace = err.stackTrace());
             // if with return does not correctly narrow type for rest of function... this does.
             http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
             return resultErr;
@@ -255,7 +274,7 @@ service / on new http:Listener(serverPort) {
             select mapToPluginEndpointResponse(endpoint);
         // FIXME load from database...
         return {
-            '\@self: "/plugin-endpoints",
+            '\@self: serverHost + "/plugin-endpoints",
             items: result,
             itemCount: endpointCount
         };
@@ -270,7 +289,7 @@ service / on new http:Listener(serverPort) {
             result = check database:addPluginEndpoint(endpoint);
             check commit;
         } on fail error err {
-            log:printError("Could not add new plugin endpoint", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not add new plugin endpoint", 'error = err, stackTrace = err.stackTrace());
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -286,7 +305,7 @@ service / on new http:Listener(serverPort) {
             result = check database:getPluginEndpoint(endpointId);
             check commit;
         } on fail error err {
-            log:printError("Could not get plugin endpoint.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not get plugin endpoint.", 'error = err, stackTrace = err.stackTrace());
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -302,7 +321,7 @@ service / on new http:Listener(serverPort) {
             result = check database:editPluginEndpoint(endpointId, endpoint.'type);
             check commit;
         } on fail error err {
-            log:printError("Could not update plugin endpoint", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not update plugin endpoint", 'error = err, stackTrace = err.stackTrace());
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -317,7 +336,7 @@ service / on new http:Listener(serverPort) {
             check database:deletePluginEndpoint(endpointId);
             check commit;
         } on fail error err {
-            log:printError("Could not delete plugin endpoint", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not delete plugin endpoint", 'error = err, stackTrace = err.stackTrace());
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -332,12 +351,15 @@ service / on new http:Listener(serverPort) {
     #
     # The experiments list resource is paginated
     #
+    # + search - filter by experiment name
     # + page - the requested page (starting with page 0)
     # + 'item\-count - the number of items per page (5 <= item-count <= 500)
+    # + sort - 1 for asc sort, -1 for desc sort by experiment name
     # + return - the list resource containing the experiments
-    resource function get experiments(int? page = 0, int? 'item\-count = 10) returns ExperimentListResponse|http:InternalServerError|http:BadRequest|http:NotFound {
+    resource function get experiments(string? search, int? page = 0, int? 'item\-count = 10, int? sort = 1) returns ExperimentListResponse|http:InternalServerError|http:BadRequest|http:NotFound {
         int intPage = (page is ()) ? 0 : page;
         int itemCount = (item\-count is ()) ? 10 : item\-count;
+        int intSort = (sort is ()) ? 1 : sort;
 
         if (intPage < 0) {
             return <http:BadRequest>{body: "Cannot retrieve a negative page number!"};
@@ -353,17 +375,17 @@ service / on new http:Listener(serverPort) {
         database:ExperimentFull[] experiments;
 
         transaction {
-            experimentCount = check database:getExperimentCount();
+            experimentCount = check database:getExperimentCount(search = search);
             if (offset >= experimentCount) {
                 // page is out of range!
                 check commit;
                 return <http:NotFound>{};
             } else {
-                experiments = check database:getExperiments('limit = itemCount, offset = offset);
+                experiments = check database:getExperiments(search = search, 'limit = itemCount, offset = offset, sort = intSort);
                 check commit;
             }
         } on fail error err {
-            log:printError("Could not get experiments.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not get experiments.", 'error = err, stackTrace = err.stackTrace());
             // if with return does not correctly narrow type for rest of function... this does.
             http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
             return resultErr;
@@ -373,7 +395,7 @@ service / on new http:Listener(serverPort) {
         var result = from var exp in experiments
             select mapToExperimentResponse(exp);
         // TODO include query params in self link
-        return {'\@self: string `/experiments/`, items: result, itemCount: experimentCount};
+        return {'\@self: serverHost + "/experiments/", items: result, itemCount: experimentCount};
     }
 
     # Create a new experiment.
@@ -388,7 +410,7 @@ service / on new http:Listener(serverPort) {
             result = check database:createExperiment(experiment);
             check commit;
         } on fail error err {
-            log:printError("Could not create new experiment", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not create new experiment", 'error = err, stackTrace = err.stackTrace());
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -405,7 +427,7 @@ service / on new http:Listener(serverPort) {
             result = check database:getExperiment(experimentId);
             check commit;
         } on fail error err {
-            log:printError("Could not get experiment.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not get experiment.", 'error = err, stackTrace = err.stackTrace());
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -425,7 +447,7 @@ service / on new http:Listener(serverPort) {
             result = check database:updateExperiment(experimentId, experiment);
             check commit;
         } on fail error err {
-            log:printError("Could not update experiment.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not update experiment.", 'error = err, stackTrace = err.stackTrace());
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -454,7 +476,7 @@ service / on new http:Listener(serverPort) {
             data = check database:getDataTypesSummary(experimentId);
             check commit;
         } on fail error err {
-            log:printError("Could not get data types summary.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not get data types summary.", 'error = err, stackTrace = err.stackTrace());
             // if with return does not correctly narrow type for rest of function... this does.
             http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
             return resultErr;
@@ -467,9 +489,13 @@ service / on new http:Listener(serverPort) {
     # The data is sorted with newer versions appearing before oder versions.
     #
     # + experimentId - the id of the experiment
+    # + sort - 1 for asc sort, -1 for desc sort by name and version
+    # + search - search keyword in name, data type and content type (insensitive)
     # + return - the paginated list of data resources
-    resource function get experiments/[int experimentId]/data(boolean? allVersions, int page = 0, int item\-count = 10) returns ExperimentDataListResponse|http:NotFound|http:InternalServerError|http:BadRequest {
+    resource function get experiments/[int experimentId]/data(boolean? allVersions, string? search, int page = 0, int item\-count = 10, int? sort = 1) returns ExperimentDataListResponse|http:NotFound|http:InternalServerError|http:BadRequest {
         boolean includeAllVersions = allVersions == true || allVersions == ();
+        int intSort = (sort is ()) ? 1 : sort;
+        string searchString = (search is ()) ? "" : search;
 
         if (page < 0) {
             return <http:BadRequest>{body: "Cannot retrieve a negative page number!"};
@@ -485,17 +511,17 @@ service / on new http:Listener(serverPort) {
         database:ExperimentDataFull[] data;
 
         transaction {
-            dataCount = check database:getExperimentDataCount(experimentId, all = includeAllVersions);
+            dataCount = check database:getExperimentDataCount(experimentId, searchString, all = includeAllVersions);
             if (offset >= dataCount) {
                 // page is out of range!
                 check commit;
                 return <http:NotFound>{};
             } else {
-                data = check database:getDataList(experimentId, all = includeAllVersions, 'limit = item\-count, offset = offset);
+                data = check database:getDataList(experimentId, searchString, all = includeAllVersions, 'limit = item\-count, offset = offset, sort = intSort);
                 check commit;
             }
         } on fail error err {
-            log:printError("Could not get experiment data list.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not get experiment data list.", 'error = err, stackTrace = err.stackTrace());
 
             // if with return does not correctly narrow type for rest of function... this does.
             http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
@@ -505,7 +531,7 @@ service / on new http:Listener(serverPort) {
         var dataList = from var d in data
             select mapToExperimentDataResponse(d);
         // TODO add query params to self URL
-        return {'\@self: string `/experiments/${experimentId}/data/?allVersions=${includeAllVersions}`, items: dataList, itemCount: dataCount};
+        return {'\@self: string `${serverHost}/experiments/${experimentId}/data/?allVersions=${includeAllVersions}`, items: dataList, itemCount: dataCount};
     }
 
     # Get a specific experiment data resource.
@@ -524,7 +550,7 @@ service / on new http:Listener(serverPort) {
             inputFor = check database:getStepsUsingData(data);
             check commit;
         } on fail error err {
-            log:printError("Could not get experiment data resource.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not get experiment data resource.", 'error = err, stackTrace = err.stackTrace());
 
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
@@ -549,7 +575,7 @@ service / on new http:Listener(serverPort) {
             data = check database:getData(experimentId, name, 'version);
             check commit;
         } on fail error err {
-            log:printError("Could not get experiment data for download.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not get experiment data for download.", 'error = err, stackTrace = err.stackTrace());
 
             resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
             resp.setPayload("Something went wrong. Please try again later.");
@@ -578,10 +604,16 @@ service / on new http:Listener(serverPort) {
     # The list resource of timeline entries is paginated
     #
     # + experimentId - the id of the experiment
+    # + plugin\-name - filter by plugin name
+    # + 'version - filter by version (name + version for exact match)
+    # + status - filter by status (pending/finished)
+    # + uncleared\-substep - filter by step status (whether there is an uncleared substep that requires user inputs) - 1 for true, 0 for false 
     # + page - the requested page (starting with page 0)
     # + 'item\-count - the number of items per page (5 <= item-count <= 500)
+    # + sort - 1 for asc sort, -1 for desc sort by step sequence
     # + return - the list resource containing the timeline entries
-    resource function get experiments/[int experimentId]/timeline(int page = 0, int item\-count = 0) returns TimelineStepListResponse|http:BadRequest|http:NotFound|http:InternalServerError {
+    resource function get experiments/[int experimentId]/timeline(string? plugin\-name, string? 'version, string? status, int? uncleared\-substep, int page = 0, int item\-count = 0, int? sort = 1) returns TimelineStepListResponse|http:BadRequest|http:NotFound|http:InternalServerError {
+
         if (page < 0) {
             return <http:BadRequest>{body: "Cannot retrieve a negative page number!"};
         }
@@ -590,23 +622,26 @@ service / on new http:Listener(serverPort) {
             return <http:BadRequest>{body: "Item count must be between 5 and 500 (both inclusive)!"};
         }
 
+        int intSort = (sort is ()) ? 1 : sort;
         var offset = page * item\-count;
 
         int stepCount;
         database:TimelineStepFull[] steps;
 
         transaction {
-            stepCount = check database:getTimelineStepCount(experimentId);
+
+            stepCount = check database:getTimelineStepCount(experimentId, plugin\-name, 'version, status, uncleared\-substep);
             if (offset >= stepCount) {
                 // page is out of range!
                 check commit;
                 return <http:NotFound>{};
             } else {
-                steps = check database:getTimelineStepList(experimentId, 'limit = item\-count, offset = offset);
+                steps = check database:getTimelineStepList(experimentId, plugin\-name, 'version, status, uncleared\-substep, 'limit = item\-count, offset = offset, sort = intSort);
                 check commit;
             }
+
         } on fail error err {
-            log:printError("Could not get timeline step list.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not get timeline step list.", 'error = err, stackTrace = err.stackTrace());
             // if with return does not correctly narrow type for rest of function... this does.
             http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
             return resultErr;
@@ -614,7 +649,7 @@ service / on new http:Listener(serverPort) {
 
         var stepList = from var s in steps
             select mapToTimelineStepMinResponse(s);
-        return {'\@self: string `/experiments/${experimentId}/timeline`, items: stepList, itemCount: stepCount};
+        return {'\@self: string `${serverHost}/experiments/${experimentId}/timeline`, items: stepList, itemCount: stepCount};
     }
 
     # Create a new timeline step entry.
@@ -643,7 +678,7 @@ service / on new http:Listener(serverPort) {
             check database:createTimelineStepResultWatcher(createdStep.stepId, mapToInternalUrl(stepData.resultLocation));
             check commit;
         } on fail error err {
-            log:printError("Could not create new timeline step entry.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not create new timeline step entry.", 'error = err, stackTrace = err.stackTrace());
             // if with return does not correctly narrow type for rest of function... this does.
             http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
             return resultErr;
@@ -652,7 +687,7 @@ service / on new http:Listener(serverPort) {
             ResultWatcher watcher = check new (createdStep.stepId);
             check watcher.schedule(...configuredWatcherIntervalls);
         } on fail error err {
-            log:printError("Failed to start watcher.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Failed to start watcher.", 'error = err, stackTrace = err.stackTrace());
             // if with return does not correctly narrow type for rest of function... this does.
             http:InternalServerError resultErr = {body: "Failed to start watcher."};
             return resultErr;
@@ -679,7 +714,7 @@ service / on new http:Listener(serverPort) {
             substeps = check database:getTimelineSubstepsWithInputData(step.stepId);
             check commit;
         } on fail error err {
-            log:printError("Could not get timeline step.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not get timeline step.", 'error = err, stackTrace = err.stackTrace());
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -702,7 +737,7 @@ service / on new http:Listener(serverPort) {
             check database:updateTimelineStepResultQuality(experimentId, timelineStep, resultQuality.resultQuality);
             check commit;
         } on fail error err {
-            log:printError("Could not update result quality of timeline step.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not update result quality of timeline step.", 'error = err, stackTrace = err.stackTrace());
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -721,12 +756,12 @@ service / on new http:Listener(serverPort) {
             result = check database:getTimelineStepNotes(experimentId, timelineStepSequence);
             check commit;
         } on fail error err {
-            log:printError("Could not get timeline step notes.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not get timeline step notes.", 'error = err, stackTrace = err.stackTrace());
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
         return {
-            '\@self: string `/experiments/${experimentId}/timeline/${timelineStepSequence}/notes`,
+            '\@self: string `${serverHost}/experiments/${experimentId}/timeline/${timelineStepSequence}/notes`,
             notes: result
         };
     }
@@ -741,7 +776,7 @@ service / on new http:Listener(serverPort) {
             check database:updateTimelineStepNotes(experimentId, timelineStep, notes.notes);
             check commit;
         } on fail error err {
-            log:printError("Could not update timeline step notes.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not update timeline step notes.", 'error = err, stackTrace = err.stackTrace());
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -760,7 +795,7 @@ service / on new http:Listener(serverPort) {
             result = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStep);
             check commit;
         } on fail error err {
-            log:printError("Could not get timeline step for parameter retrieval.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not get timeline step for parameter retrieval.", 'error = err, stackTrace = err.stackTrace());
 
             resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
             resp.setPayload("Something went wrong. Please try again later.");
@@ -788,7 +823,7 @@ service / on new http:Listener(serverPort) {
     # + return - the updated timline substep
     resource function post experiments/[int experimentId]/timeline/[int timelineStepSequence]/substeps/[int substepNr](@http:Payload TimelineSubstepPost substepData) returns TimelineSubstepResponseWithParams|http:InternalServerError {
         database:TimelineStepWithParams step;
-        database:TimelineSubstepWithParams substep;
+        database:TimelineSubstepSQL substep;
         database:ExperimentDataReference[] inputData;
 
         transaction {
@@ -796,13 +831,13 @@ service / on new http:Listener(serverPort) {
                 select checkpanic mapFileUrlToDataRef(experimentId, inputUrl); // FIXME move back to check if https://github.com/ballerina-platform/ballerina-lang/issues/34894 is resolved
             step = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStepSequence);
             // verify that substep is in database
-            substep = check database:getTimelineSubstepWithParams(experimentId, timelineStepSequence, substepNr);
+            substep = check database:getTimelineSubstep(step.stepId, substepNr);
             // save input data and update progress
             check database:saveTimelineSubstepParams(step.stepId, substepNr, substepData.parameters, substepData.parametersContentType);
             check database:saveTimelineSubstepInputData(step.stepId, substepNr, experimentId, inputData);
             check commit;
         } on fail error err {
-            log:printError("Could not save input data for timeline substep.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not save input data for timeline substep.", 'error = err, stackTrace = err.stackTrace());
             // if with return does not correctly narrow type for rest of function... this does.
             http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
             return resultErr;
@@ -815,7 +850,7 @@ service / on new http:Listener(serverPort) {
             }
             check watcher.schedule(...configuredWatcherIntervalls);
         } on fail error err {
-            log:printError("Failed to restart watcher.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Failed to restart watcher.", 'error = err, stackTrace = err.stackTrace());
             // if with return does not correctly narrow type for rest of function... this does.
             http:InternalServerError resultErr = {body: "Failed to restart watcher."};
             return resultErr;
@@ -837,14 +872,14 @@ service / on new http:Listener(serverPort) {
             substeps = check database:getTimelineSubsteps(step.stepId, experimentId);
             check commit;
         } on fail error err {
-            log:printError("Could not get list of timeline substeps.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not get list of timeline substeps.", 'error = err, stackTrace = err.stackTrace());
             // if with return does not correctly narrow type for rest of function... this does.
             http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
             return resultErr;
         }
         TimelineSubstepResponseWithoutParams[] substepsResponse = mapToTimelineSubstepListResponse(experimentId, timelineStepSequence, substeps);
         return {
-            '\@self: string `/experiments/${experimentId}/timeline/${timelineStepSequence}/substeps`,
+            '\@self: string `${serverHost}/experiments/${experimentId}/timeline/${timelineStepSequence}/substeps`,
             items: substepsResponse
         };
     }
@@ -865,7 +900,7 @@ service / on new http:Listener(serverPort) {
             inputData = check database:getSubstepInputData(substep.stepId, substep.substepNr);
             check commit;
         } on fail error err {
-            log:printError("Could not get timeline substep entry.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not get timeline substep entry.", 'error = err, stackTrace = err.stackTrace());
             // if with return does not correctly narrow type for rest of function... this does.
             http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
             return resultErr;
@@ -885,7 +920,7 @@ service / on new http:Listener(serverPort) {
             substep = check database:getTimelineSubstepWithParams(experimentId, timelineStep, substepNr);
             check commit;
         } on fail error err {
-            log:printError("Could not get parameters for timeline substep.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not get parameters for timeline substep.", 'error = err, stackTrace = err.stackTrace());
 
             resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
             resp.setPayload("Something went wrong. Please try again later.");
@@ -915,7 +950,7 @@ service / on new http:Listener(serverPort) {
             result = check database:cloneExperiment(experimentId);
             check commit;
         } on fail error err {
-            log:printError("Could not clone the experiment.", 'error = err, stackTrace = err.stackTrace().callStack);
+            log:printError("Could not clone the experiment.", 'error = err, stackTrace = err.stackTrace());
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
 
@@ -1002,18 +1037,18 @@ public function main() {
         foreach string pRunner in preconfiguredPluginRunners {
             x = database:addPluginEndpoint({url: pRunner, 'type: "PluginRunner"});
             if x is error {
-                log:printDebug("Could not load preset plugin-runner endpoint", 'error = x, stackTrace = x.stackTrace().callStack);
+                log:printDebug("Could not load preset plugin-runner endpoint", 'error = x, stackTrace = x.stackTrace());
             }
         }
         foreach string plugin in preconfiguredPlugins {
             x = check database:addPluginEndpoint({url: plugin, 'type: "Plugin"});
             if x is error {
-                log:printDebug("Could not load preset plugin endpoint", 'error = x, stackTrace = x.stackTrace().callStack);
+                log:printDebug("Could not load preset plugin endpoint", 'error = x, stackTrace = x.stackTrace());
             }
         }
         check commit;
     } on fail error err {
-        log:printError("Could not load preset plugin(-runner) endpoints", 'error = err, stackTrace = err.stackTrace().callStack);
+        log:printError("Could not load preset plugin(-runner) endpoints", 'error = err, stackTrace = err.stackTrace());
     }
 
     // registering background tasks
@@ -1025,6 +1060,6 @@ public function main() {
         }
         check commit;
     } on fail error err {
-        log:printError("Could not start result watchers.", 'error = err, stackTrace = err.stackTrace().callStack);
+        log:printError("Could not start result watchers.", 'error = err, stackTrace = err.stackTrace());
     }
 }

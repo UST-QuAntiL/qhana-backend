@@ -83,7 +83,7 @@ public type PluginEndpointsListResponse record {|
 # + return - the mapped record
 public isolated function mapToPluginEndpointResponse(database:PluginEndpointFull endpoint) returns PluginEndpointResponse {
     return {
-        '\@self: string `/plugin-endpoints/${endpoint.id}`,
+        '\@self: string `${serverHost}/plugin-endpoints/${endpoint.id}`,
         endpointId: endpoint.id,
         url: endpoint.url,
         'type: endpoint.'type
@@ -119,7 +119,7 @@ public type ExperimentListResponse record {|
 # + return - The api response
 public isolated function mapToExperimentResponse(database:ExperimentFull experiment) returns ExperimentResponse {
     return {
-        '\@self: string `/experiments/${experiment.experimentId}`,
+        '\@self: string `${serverHost}/experiments/${experiment.experimentId}`,
         experimentId: experiment.experimentId,
         name: experiment.name,
         description: experiment.description
@@ -172,8 +172,8 @@ public type ExperimentDataListResponse record {|
 # + return - the mapped record
 public isolated function mapToExperimentDataResponse(database:ExperimentDataFull data, int? producingStep = (), int[]? inputFor = ()) returns ExperimentDataResponse {
     ExperimentDataResponse dataMapped = {
-        '\@self: string `/experiments/${data.experimentId}/data/${data.name}?version=${data.'version}`,
-        download: string `/experiments/${data.experimentId}/data/${data.name}/download?version=${data.'version}`,
+        '\@self: string `${serverHost}/experiments/${data.experimentId}/data/${data.name}?version=${data.'version}`,
+        download: string `${serverHost}/experiments/${data.experimentId}/data/${data.name}/download?version=${data.'version}`,
         name: data.name,
         'version: data.'version,
         'type: data.'type,
@@ -181,12 +181,12 @@ public isolated function mapToExperimentDataResponse(database:ExperimentDataFull
     };
     if (producingStep != ()) {
         dataMapped.producingStep = producingStep;
-        dataMapped.producingStepLink = string `/experiments/${data.experimentId}/timeline/${producingStep}`;
+        dataMapped.producingStepLink = string `${serverHost}/experiments/${data.experimentId}/timeline/${producingStep}`;
     }
     if (inputFor != ()) {
         dataMapped.inputFor = inputFor;
         dataMapped.inputForLinks = from var step in inputFor
-            select string `/experiments/${data.experimentId}/timeline/${step}`;
+            select string `${serverHost}/experiments/${data.experimentId}/timeline/${step}`;
     }
     return dataMapped;
 }
@@ -371,7 +371,7 @@ public type TimelineStepNotesPost record {|
 public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull step) returns TimelineStepMinResponse {
     var end = step.end;
     return {
-        '\@self: string `/experiments/${step.experimentId}/timeline/${step.sequence}`,
+        '\@self: string `${serverHost}/experiments/${step.experimentId}/timeline/${step.sequence}`,
         notes: string `./notes`,
         sequence: step.sequence,
         'start: time:utcToString(step.'start),
@@ -381,7 +381,7 @@ public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull 
         processorName: step.processorName,
         processorVersion: step.processorVersion,
         processorLocation: step.processorLocation,
-        parameters: string `/experiments/${step.experimentId}/timeline/${step.sequence}/parameters`,
+        parameters: string `${serverHost}/experiments/${step.experimentId}/timeline/${step.sequence}/parameters`,
         parametersContentType: step.parametersContentType,
         progressValue: step.progressValue,
         progressStart: step.progressStart,
@@ -406,15 +406,15 @@ public isolated function mapToTimelineStepResponse(
     var end = step.end;
     var log = step.resultLog;
     var inputDataLinks = from var dataRef in inputData
-        select string `/experiments/${step.experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
+        select string `${serverHost}/experiments/${step.experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
     var outputDataLinks = from var dataRef in outputData
-        select string `/experiments/${step.experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
+        select string `${serverHost}/experiments/${step.experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
     TimelineSubstepResponseWithoutParams[]? substepsResponse = ();
     if substeps != () {
         substepsResponse = mapToTimelineSubstepListResponse(step.experimentId, step.sequence, substeps);
     }
     return {
-        '\@self: string `/experiments/${step.experimentId}/timeline/${step.sequence}`,
+        '\@self: string `${serverHost}/experiments/${step.experimentId}/timeline/${step.sequence}`,
         notes: string `./notes`,
         sequence: step.sequence,
         'start: time:utcToString(step.'start),
@@ -426,7 +426,7 @@ public isolated function mapToTimelineStepResponse(
         processorVersion: step.processorVersion,
         processorLocation: step.processorLocation,
         parametersContentType: step.parametersContentType,
-        parameters: string `/experiments/${step.experimentId}/timeline/${step.sequence}/parameters`,
+        parameters: string `${serverHost}/experiments/${step.experimentId}/timeline/${step.sequence}/parameters`,
         inputData: inputData,
         inputDataLinks: inputDataLinks,
         outputData: outputData,
@@ -449,13 +449,17 @@ public isolated function mapToTimelineStepResponse(
 public isolated function mapToTimelineSubstepResponse(
         int experimentId,
         int timelineStepSequence,
-        database:TimelineSubstepWithParams substep,
+        database:TimelineSubstepWithParams|database:TimelineSubstepSQL substep,
         database:ExperimentDataReference[] inputData = []
 ) returns TimelineSubstepResponseWithParams {
     var inputDataLinks = from var dataRef in inputData
-        select string `/experiments/${experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
+        select string `${serverHost}/experiments/${experimentId}/data/${dataRef.name}?version=${dataRef.'version}`;
+    string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
+    if substep is database:TimelineSubstepWithParams {
+        parametersContentType = substep.parametersContentType;
+    }
     return {
-        '\@self: string `/experiments/${experimentId}/timeline/${timelineStepSequence}/substeps/${substep.substepNr}`,
+        '\@self: string `${serverHost}/experiments/${experimentId}/timeline/${timelineStepSequence}/substeps/${substep.substepNr}`,
         stepId: timelineStepSequence,
         sequence: timelineStepSequence,
         substepId: substep.substepId,
@@ -463,8 +467,8 @@ public isolated function mapToTimelineSubstepResponse(
         href: substep.href,
         hrefUi: substep.hrefUi,
         cleared: substep.cleared == 1 ? true : false,
-        parameters: string `/experiments/${experimentId}/timeline/${timelineStepSequence}/substeps/${substep.substepNr}/parameters`,
-        parametersContentType: substep?.parametersContentType,
+        parameters: string `${serverHost}/experiments/${experimentId}/timeline/${timelineStepSequence}/substeps/${substep.substepNr}/parameters`,
+        parametersContentType: parametersContentType,
         inputData: inputData,
         inputDataLinks: inputDataLinks
     };

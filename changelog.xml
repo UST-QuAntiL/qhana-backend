@@ -425,7 +425,7 @@
 				<constraints primaryKey="true" nullable="false" />
 			</column>
 			<column name="url" type="text">
-				<constraints nullable="false" />
+				<constraints nullable="false" unique="true" />
 			</column>
 			<column name="type" type="varchar(64)" defaultValue="PluginRunner">
 				<constraints nullable="false" />
@@ -436,7 +436,7 @@
 		</rollback>
 	</changeSet>
 
-	<changeSet id="insert-plugin-endpoint" author="fabianbuehler">
+	<changeSet id="insert-plugin-endpoint" author="fabianbuehler" dbms="sqlite">
 		<insert tableName="PluginEndpoints">
 			<column name="url" value="http://localhost:5005" />
 			<column name="type" value="PluginRunner" />

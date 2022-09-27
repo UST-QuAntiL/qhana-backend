@@ -148,6 +148,7 @@ public isolated transactional function cloneTimelineSubstepComplex(int newExperi
         FROM TimelineSubstep
         WHERE stepId = ${oldTimelineStepId} AND substepNr = ${oldTimelineSubstepNr};`
     );
+
     var rowCount = timelineSubstepInsertResult.affectedRowCount;
     if rowCount == () || rowCount < 1 {
         fail error(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}] Cloning of TimelineSubstep with substepNr ${oldTimelineSubstepNr} unsuccessful!`);
@@ -170,8 +171,8 @@ public isolated transactional function cloneTimelineSubstepComplex(int newExperi
                 FROM StepData
                 WHERE stepId = ${oldTimelineStepId} AND dataId = ${substepData.dataId};`
             );
-            rowCount = stepDataInsertResult.affectedRowCount;
-            if rowCount == () || rowCount < 1 {
+            var rowCount2 = stepDataInsertResult.affectedRowCount;
+            if rowCount2 == () || rowCount2 < 1 {
                 fail error(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}, substepNr ${oldTimelineSubstepNr}] Cloning of SubstepData with dataId ${substepData.dataId} unsuccessful.`);
             }
             log:printDebug(string `[experimentId ${oldExperimentId}, stepId ${oldTimelineStepId}, SubstepNr: ${oldTimelineSubstepNr}] Cloned SubstepData item with dataId ${substepData.dataId}.`); // TODO remove
