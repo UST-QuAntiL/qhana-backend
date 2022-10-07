@@ -264,7 +264,7 @@ public type SubstepDataExport record {|
 public type TimelineSubstepExportBase record {|
     int substepNr;
     *TimelineSubstep;
-    string parameters;
+    string? parameters;
     string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
 |};
 
@@ -384,7 +384,7 @@ public isolated transactional function getTimelineSubstepsBaseExport(int stepId)
     TimelineSubstepExportBase[]|error|() substepsBase = from var substep in substepsResult
         select substep;
     if substepsBase is error {
-        return error(string `[stepId ${stepId}] Could not retrieve substep list for export from database.`);
+        return substepsBase;
     } else if substepsBase is () {
         return [];
     } else {
@@ -514,11 +514,13 @@ public transactional function exportExperiment(int experimentId, string? config)
     if exists !is error && exists {
         check file:remove(jsonPath);
     }
+    log:printDebug("Write " + jsonPath + " ...");
     check io:fileWriteJson(jsonPath, experimentCompleteJson);
 
     // create zip-  add all files (experiment file(s) + data files) to ZIP
-    string zipFileName = regex:replaceAll(experimentComplete.experiment.name, "\\s+", "-");
+    string zipFileName = regex:replaceAll(experimentComplete.experiment.name, "\\s+", "-") + ".zip";
     var zipPath = check file:joinPath("tmp", zipFileName);
+    log:printDebug("Create zip " + zipPath + " ...");
 
     // add experiment.json
     os:Process result = check os:exec({value: "zip", arguments: ["-ur", zipPath, jsonPath]});
@@ -526,6 +528,7 @@ public transactional function exportExperiment(int experimentId, string? config)
 
     // add experiment data files
     foreach string dataFile in dataFileLocations {
+        log:printDebug("Add file to zip... " + dataFile);
         result = check os:exec({value: "zip", arguments: ["-ur", zipPath, dataFile]});
         _ = check result.waitForExit();
     }

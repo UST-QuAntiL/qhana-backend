@@ -21,8 +21,8 @@ import ballerina/mime;
 
 # The connection pool config for sqlite databases.
 sql:ConnectionPool sqlitePool = {
-    maxOpenConnections: 5,  // limit the concurrent connections as sqlite is not really concurrency friendly
-    maxConnectionLifeTime: 1800,  // limit keepalive to ensure pool resets faster on errors
+    maxOpenConnections: 5, // limit the concurrent connections as sqlite is not really concurrency friendly
+    maxConnectionLifeTime: 1800, // limit keepalive to ensure pool resets faster on errors
     minIdleConnections: 0
 };
 
@@ -788,7 +788,7 @@ public isolated transactional function getTimelineStepList(int experimentId, str
     }
     baseQuery = sql:queryConcat(baseQuery, ` status, processorName, processorVersion, processorLocation `);
     if allAttributes {
-        baseQuery = sql:queryConcat(baseQuery, `, resultQuality, resultLog, TimelineSubstep.parameters, TimelineSubstep.parametersContentType, notes `);
+        baseQuery = sql:queryConcat(baseQuery, `, resultQuality, resultLog, TimelineStep.parameters, TimelineStep.parametersContentType, COALESCE(notes, '') as notes `);
     } else {
         baseQuery = sql:queryConcat(baseQuery, `, resultQuality, NULL AS resultLog `);
     }
@@ -823,7 +823,6 @@ public isolated transactional function getTimelineStepList(int experimentId, str
             stepList.push(stepFull);
         }
     }
-
     return stepList;
 }
 
