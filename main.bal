@@ -990,7 +990,7 @@ service / on new http:Listener(serverPort) {
     #
     # + return - TODO
     @http:ResourceConfig {
-        consumes: ["application/json"]
+        consumes: ["application/zip"]
     }
     resource function post experiments/[int experimentId]/'import(http:Request request) returns ExperimentResponse|http:InternalServerError {
         database:ExperimentFull result;
@@ -1000,7 +1000,7 @@ service / on new http:Listener(serverPort) {
             string zipLocation = "tmp";
             var exists = file:test(zipLocation, file:EXISTS);
             if exists !is error && exists {
-                check file:remove(zipLocation);
+                check file:remove(zipLocation, file:RECURSIVE);
             }
             check file:createDir(zipLocation);
             // write zip file to file system

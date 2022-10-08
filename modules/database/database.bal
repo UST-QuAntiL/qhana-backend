@@ -870,7 +870,7 @@ public isolated transactional function createTimelineStep(
 # + experimentId - experiment id
 # + step - step with step data and substep list
 # + return - error or ()
-public isolated transactional function importTimelineStep(int experimentId, TimelineStepExport step) returns error? {
+public isolated transactional function importTimelineStep(int experimentId, TimelineStepExport step, map<int> dataIdMapping) returns error? {
     // import step
     var insertResult = check experimentDB->execute(
             `INSERT INTO TimelineStep (experimentId, sequence, start, end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart, pTarget, pValue, pUnit, notes) 
@@ -887,12 +887,12 @@ public isolated transactional function importTimelineStep(int experimentId, Time
         int stepId = check s.ensureType();
         // import step data db entry
         foreach StepDataExport stepData in step.stepDataList {
-            _ = check experimentDB->execute(`INSERT INTO StepData (stepId, dataId, relationType) VALUES (${stepId}, ${stepData.dataId}, ${stepData.relationType});`);
+            _ = check experimentDB->execute(`INSERT INTO StepData (stepId, dataId, relationType) VALUES (${stepId}, ${dataIdMapping.get(stepData.dataId.toString())}, ${stepData.relationType});`);
         }
 
         // import substeps
         foreach TimelineSubstepExport substep in step.timelineSubsteps {
-            _ = check importTimelineSubstep(experimentId, stepId, substep);
+            _ = check importTimelineSubstep(experimentId, stepId, substep, dataIdMapping);
         }
     }
 }
@@ -903,7 +903,7 @@ public isolated transactional function importTimelineStep(int experimentId, Time
 # + stepId - Step id of associated timeline step  
 # + substep - Substep with substep data list
 # + return - error or ()
-public isolated transactional function importTimelineSubstep(int experimentId, int stepId, TimelineSubstepExport substep) returns error? {
+public isolated transactional function importTimelineSubstep(int experimentId, int stepId, TimelineSubstepExport substep, map<int> dataIdMapping) returns error? {
     // import substep
     _ = check experimentDB->execute(
         `INSERT INTO TimelineSubstep (stepId, substepNr, substepId, href, hrefUi, cleared, parameters, parametersContentType) 
@@ -912,7 +912,7 @@ public isolated transactional function importTimelineSubstep(int experimentId, i
 
     // import substep data db entry
     foreach SubstepDataExport substepData in substep.substepDataList {
-        _ = check experimentDB->execute(`INSERT INTO SubstepData (stepId, substepNr, dataId, relationType) VALUES (${stepId}, ${substepData.substepNr}, ${substepData.dataId}, ${substepData.relationType});`);
+        _ = check experimentDB->execute(`INSERT INTO SubstepData (stepId, substepNr, dataId, relationType) VALUES (${stepId}, ${substepData.substepNr}, ${dataIdMapping.get(substepData.dataId.toString())}, ${substepData.relationType});`);
     }
 }
 
@@ -1054,10 +1054,25 @@ public isolated transactional function saveTimelineStepOutputData(int stepId, in
     }
 }
 
-public isolated transactional function importExperimentData(int experimentId, ExperimentDataExport data) returns error? {
-    _ = check experimentDB->execute(`
-        INSERT INTO ExperimentData (dataId, experimentId, name, version, location, type, contentType) 
-        VALUES (${data.dataId}, ${experimentId}, ${data.name}, ${data.'version}, ${data.location}, ${data.'type}, ${data.contentType})`);
+# Import experiment data into db
+#
+# + experimentId - experiment id  
+# + data - experiment data record
+# + return - dataId of created entry or error
+public isolated transactional function importExperimentData(int experimentId, ExperimentDataExport data) returns int|error {
+    var insertResult = check experimentDB->execute(`
+        INSERT INTO ExperimentData (experimentId, name, version, location, type, contentType) 
+        VALUES (${experimentId}, ${data.name}, ${data.'version}, ${data.location}, ${data.'type}, ${data.contentType})`);
+    // extract experiment id and build full experiment data
+    var dataId = insertResult.lastInsertId;
+    if dataId is string {
+        fail error("Expected integer id but got a string!");
+    } else if dataId == () {
+        fail error("Expected the experiment id back but got nothing!");
+    } else {
+        int id = check dataId.ensureType();
+        return id;
+    }
 }
 
 public isolated transactional function getTimelineStepNotes(int experimentId, int sequence) returns string|error {

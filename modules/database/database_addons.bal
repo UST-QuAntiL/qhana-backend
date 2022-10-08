@@ -564,6 +564,7 @@ public isolated transactional function importExperiment(string zipPath, string s
     ExperimentFull importedExperiment = check createExperiment(experimentComplete.experiment);
 
     // experiment data
+    map<int> dataIdMapping = {};
     string dataStorage = check prepareStorageLocation(importedExperiment.experimentId, storageLocation);
     foreach ExperimentDataExport experimentData in experimentComplete.experimentDataList {
         // create folder for experimentData and copy data files there
@@ -578,12 +579,13 @@ public isolated transactional function importExperiment(string zipPath, string s
         experimentData.location = abspath;
 
         // create db entries
-        _ = check importExperimentData(importedExperiment.experimentId, experimentData);
+        int newDataId = check importExperimentData(importedExperiment.experimentId, experimentData);
+        dataIdMapping[experimentData.dataId.toString()] = newDataId;
     }
 
     // import timeline steps (make sure step/substep data is correct)
     foreach TimelineStepExport timelineStep in experimentComplete.timelineSteps {
-        _ = check importTimelineStep(importedExperiment.experimentId, timelineStep);
+        _ = check importTimelineStep(importedExperiment.experimentId, timelineStep, dataIdMapping);
     }
 
     return importedExperiment;
