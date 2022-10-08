@@ -487,18 +487,21 @@ public transactional function exportExperiment(int experimentId, string? config)
     ExperimentDataExport[] experimentDataList = experimentComplete.experimentDataList;
     foreach var experimentData in experimentDataList {
         string location = experimentData.location;
-        dataFileLocations.push(location);
+
         // remove path from file location
         int? index = location.lastIndexOf("/");
         if index is () {
             index = location.lastIndexOf("\\");
-            if index is () {
-                return error("Unable to determine relative file location.");
-            } else {
-                experimentData.location = location.substring(index + 1, location.length());
-            }
+        }
+        if index is () {
+            return error("Unable to determine relative file location.");
         } else {
-            experimentData.location = location.substring(index + 1, location.length()); // not very pretty but compiler check recognize assignment of index...
+            experimentData.location = location.substring(index + 1, location.length()); // only file name
+            dataFileLocations.push(check file:joinPath(
+                "experimentData",
+                experimentId.toString(),
+                experimentData.location
+            ));
         }
     }
 
@@ -509,7 +512,7 @@ public transactional function exportExperiment(int experimentId, string? config)
     }
     json experimentCompleteJson = experimentComplete;
     string jsonFile = "experiment.json";
-    var jsonPath = check file:joinPath("tmp", jsonFile); //TODO: replace with var jsonPath = check file:joinPath(tmpDir, jsonFile);
+    var jsonPath = check file:joinPath("tmp", jsonFile);
     exists = file:test(jsonPath, file:EXISTS);
     if exists !is error && exists {
         check file:remove(jsonPath);
@@ -523,13 +526,13 @@ public transactional function exportExperiment(int experimentId, string? config)
     log:printDebug("Create zip " + zipPath + " ...");
 
     // add experiment.json
-    os:Process result = check os:exec({value: "zip", arguments: ["-ur", zipPath, jsonPath]});
+    os:Process result = check os:exec({value: "zip", arguments: ["-j", zipPath, jsonPath]});
     _ = check result.waitForExit();
 
     // add experiment data files
     foreach string dataFile in dataFileLocations {
         log:printDebug("Add file to zip... " + dataFile);
-        result = check os:exec({value: "zip", arguments: ["-ur", zipPath, dataFile]});
+        result = check os:exec({value: "zip", arguments: ["-j", zipPath, dataFile]}); // flatten path
         _ = check result.waitForExit();
     }
 

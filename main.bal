@@ -1006,6 +1006,7 @@ service / on new http:Listener(serverPort) {
         check io:fileWriteBlocksFromStream(zipPath, streamer);
         check streamer.close();
         // TODO: import file
+        // relative file links need to be made absolute again
     }
 }
 
