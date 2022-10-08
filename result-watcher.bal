@@ -293,7 +293,7 @@ isolated class ResultProcessor {
                 foreach var output in outputs {
                     http:Client c = check new (output.href);
                     http:Response fileResponse = check c->get("");
-                    var fileDir = check prepareStorageLocation(self.experimentId);
+                    var fileDir = check database:prepareStorageLocation(self.experimentId, storageLocation);
                     var fileId = uuid:createType4AsString();
                     var filePath = check file:joinPath(fileDir, fileId);
                     while check file:test(filePath, file:EXISTS) {
@@ -632,14 +632,3 @@ public isolated class ResultWatcher {
     }
 }
 
-# Prepare the storage location and make sure that the folder exists.
-#
-# + experimentId - the id of the experiment to create a folder for
-# + return - the folder to store experiment data in
-isolated function prepareStorageLocation(int experimentId) returns string|error {
-    var relPath = check file:joinPath(storageLocation, string `${experimentId}`);
-    var normalizedPath = check file:normalizePath(relPath, file:CLEAN);
-    var abspath = check file:getAbsolutePath(normalizedPath);
-    check file:createDir(abspath, file:RECURSIVE);
-    return abspath;
-}

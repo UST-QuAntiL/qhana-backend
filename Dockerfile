@@ -1,6 +1,6 @@
 FROM eclipse-temurin:11 AS builder
 
-RUN apt-get -y update && apt-get install unzip 
+RUN apt-get -y update && apt-get install unzip
 WORKDIR /app
 
 # install ballerina
@@ -23,6 +23,7 @@ FROM eclipse-temurin:11-jre
 LABEL org.opencontainers.image.source="https://github.com/UST-QuAntiL/qhana-backend"
 
 RUN apt-get -y update && apt-get install -y sqlite3
+RUN apt-get -y update && apt-get install unzip && apt-get install zip
 
 # create unpriviledged user
 RUN useradd ballerina

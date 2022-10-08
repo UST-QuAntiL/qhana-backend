@@ -18,6 +18,7 @@ import ballerina/sql;
 import ballerinax/java.jdbc;
 import ballerina/os;
 import ballerina/mime;
+import ballerina/file;
 
 # The connection pool config for sqlite databases.
 sql:ConnectionPool sqlitePool = {
@@ -864,6 +865,57 @@ public isolated transactional function createTimelineStep(
     }
 }
 
+# Import timeline step into db including associated step data db entries and substeps with associated substep data db entries
+#
+# + experimentId - experiment id
+# + step - step with step data and substep list
+# + return - error or ()
+public isolated transactional function importTimelineStep(int experimentId, TimelineStepExport step) returns error? {
+    // import step
+    var insertResult = check experimentDB->execute(
+            `INSERT INTO TimelineStep (experimentId, sequence, start, end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart, pTarget, pValue, pUnit, notes) 
+            VALUES (${experimentId}, ${step.sequence}, ${step.'start}, ${step.end}, ${step.status}, ${step.resultQuality}, ${step.resultLog}, ${step.processorName}, ${step.processorVersion}, ${step.processorLocation}, ${step.parameters}, ${step.parametersContentType}, ${step.progressStart}, ${step.progressTarget}, ${step.progressValue}, ${step.progressUnit}, ${step.notes});`
+    );
+
+    // extract experiment id and build full experiment data
+    var s = insertResult.lastInsertId;
+    if s is string {
+        fail error("Expected integer id but got a string!");
+    } else if s == () {
+        fail error("Expected the experiment id back but got nothing!");
+    } else {
+        int stepId = check s.ensureType();
+        // import step data db entry
+        foreach StepDataExport stepData in step.stepDataList {
+            _ = check experimentDB->execute(`INSERT INTO StepData (stepId, dataId, relationType) VALUES (${stepId}, ${stepData.dataId}, ${stepData.relationType});`);
+        }
+
+        // import substeps
+        foreach TimelineSubstepExport substep in step.timelineSubsteps {
+            _ = check importTimelineSubstep(experimentId, stepId, substep);
+        }
+    }
+}
+
+# Import timeline substep into db including associated substep data db entries
+#
+# + experimentId - Experiment id 
+# + stepId - Step id of associated timeline step  
+# + substep - Substep with substep data list
+# + return - error or ()
+public isolated transactional function importTimelineSubstep(int experimentId, int stepId, TimelineSubstepExport substep) returns error? {
+    // import substep
+    _ = check experimentDB->execute(
+        `INSERT INTO TimelineSubstep (stepId, substepNr, substepId, href, hrefUi, cleared, parameters, parametersContentType) 
+         VALUES (${stepId}, ${substep.substepNr}, ${substep.substepId}, ${substep.href}, ${substep.hrefUi}, ${substep.cleared}, ${substep.parameters}, ${substep.parametersContentType});`
+    );
+
+    // import substep data db entry
+    foreach SubstepDataExport substepData in substep.substepDataList {
+        _ = check experimentDB->execute(`INSERT INTO SubstepData (stepId, substepNr, dataId, relationType) VALUES (${stepId}, ${substepData.substepNr}, ${substepData.dataId}, ${substepData.relationType});`);
+    }
+}
+
 public isolated transactional function getTimelineStep(int? experimentId = (), int? sequence = (), int? stepId = ()) returns TimelineStepWithParams|error {
     sql:ParameterizedQuery baseQuery = `SELECT stepId, experimentId, sequence, cast(start as TEXT) AS start, cast(end as TEXT) AS end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart AS progressStart, pTarget AS progressTarget, pValue AS progressValue, pUnit AS progressUnit
                      FROM TimelineStep `;
@@ -1000,6 +1052,12 @@ public isolated transactional function saveTimelineStepOutputData(int stepId, in
         var dataId = result.lastInsertId;
         _ = check experimentDB->execute(`INSERT INTO StepData (stepId, dataId, relationType) VALUES (${stepId}, ${dataId}, ${"output"});`);
     }
+}
+
+public isolated transactional function importExperimentData(int experimentId, ExperimentDataExport data) returns error? {
+    _ = check experimentDB->execute(`
+        INSERT INTO ExperimentData (dataId, experimentId, name, version, location, type, contentType) 
+        VALUES (${data.dataId}, ${experimentId}, ${data.name}, ${data.'version}, ${data.location}, ${data.'type}, ${data.contentType})`);
 }
 
 public isolated transactional function getTimelineStepNotes(int experimentId, int sequence) returns string|error {
@@ -1410,4 +1468,17 @@ public isolated function timelineStepListFilter(int experimentId, string? plugin
         }
     }
     return filter;
+}
+
+# Prepare the storage location and make sure that the folder exists.
+#
+# + experimentId - the id of the experiment to create a folder for
+# + storageLocation - location of the storage
+# + return - the folder to store experiment data in
+public isolated function prepareStorageLocation(int experimentId, string storageLocation) returns string|error {
+    var relPath = check file:joinPath(storageLocation, string `${experimentId}`);
+    var normalizedPath = check file:normalizePath(relPath, file:CLEAN);
+    var abspath = check file:getAbsolutePath(normalizedPath);
+    check file:createDir(abspath, file:RECURSIVE);
+    return abspath;
 }

@@ -477,7 +477,7 @@ public isolated transactional function getExperimentDBExport(int experimentId) r
 # + experimentId - experiment id of the new (cloned) experiment
 # + config - export configuration // TODO
 # + return - record with details about created zip files or error
-public transactional function exportExperiment(int experimentId, string? config) returns ExperimentExportZip|error {
+public isolated transactional function exportExperiment(int experimentId, string? config) returns ExperimentExportZip|error {
 
     // TODO: config
 
@@ -526,13 +526,13 @@ public transactional function exportExperiment(int experimentId, string? config)
     log:printDebug("Create zip " + zipPath + " ...");
 
     // add experiment.json
-    os:Process result = check os:exec({value: "zip", arguments: ["-j", zipPath, jsonPath]});
+    os:Process result = check os:exec({value: "zip", arguments: ["-j", zipPath, jsonPath]}); // TODO: Windows?
     _ = check result.waitForExit();
 
     // add experiment data files
     foreach string dataFile in dataFileLocations {
         log:printDebug("Add file to zip... " + dataFile);
-        result = check os:exec({value: "zip", arguments: ["-j", zipPath, dataFile]}); // flatten path
+        result = check os:exec({value: "zip", arguments: ["-j", zipPath, dataFile]}); // flatten path  // TODO: Windows?
         _ = check result.waitForExit();
     }
 
@@ -540,4 +540,51 @@ public transactional function exportExperiment(int experimentId, string? config)
 
     ExperimentExportZip exportResult = {name: zipFileName, location: zipPath, fileLength: metaData.size};
     return exportResult;
+}
+
+# Import an experiment from a zip file. Assume that zip file is in directory tmp
+#
+# + zipPath - (relative) path to zip file
+# + storageLocation - location of the storage for experiment data
+# + zipLocation - (tmp) location of the zip file, assume that the directory only contains the zip file (clearing dir must be taken care of by calling function)
+# + return - record with details about created zip files or error
+public isolated transactional function importExperiment(string zipPath, string storageLocation, string zipLocation) returns ExperimentFull|error {
+
+    // unzip file
+    os:Process result = check os:exec({value: "unzip", arguments: [zipPath, "-d", zipLocation]}); // TODO: Windows?
+    _ = check result.waitForExit();
+
+    // read experiment.json
+    string jsonFile = "experiment.json";
+    var jsonPath = check file:joinPath(zipLocation, jsonFile);
+    json experimentCompleteJson = check io:fileReadJson(jsonPath);
+    ExperimentCompleteExport experimentComplete = check experimentCompleteJson.cloneWithType(ExperimentCompleteExport);
+
+    // create experiment
+    ExperimentFull importedExperiment = check createExperiment(experimentComplete.experiment);
+
+    // experiment data
+    string dataStorage = check prepareStorageLocation(importedExperiment.experimentId, storageLocation);
+    foreach ExperimentDataExport experimentData in experimentComplete.experimentDataList {
+        // create folder for experimentData and copy data files there
+        string fileId = experimentData.location;
+        string filePath = check file:joinPath(zipLocation, fileId);
+        result = check os:exec({value: "cp", arguments: [filePath, dataStorage]}); // TODO: Windows?
+        _ = check result.waitForExit();
+        var normalizedPath = check file:normalizePath(filePath, file:CLEAN);
+
+        // replace data location with new absolute location
+        var abspath = check file:getAbsolutePath(normalizedPath);
+        experimentData.location = abspath;
+
+        // create db entries
+        _ = check importExperimentData(importedExperiment.experimentId, experimentData);
+    }
+
+    // import timeline steps (make sure step/substep data is correct)
+    foreach TimelineStepExport timelineStep in experimentComplete.timelineSteps {
+        _ = check importTimelineStep(importedExperiment.experimentId, timelineStep);
+    }
+
+    return importedExperiment;
 }

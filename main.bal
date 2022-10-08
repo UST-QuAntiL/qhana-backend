@@ -992,21 +992,29 @@ service / on new http:Listener(serverPort) {
     @http:ResourceConfig {
         consumes: ["application/json"]
     }
-    resource function post experiments/[int experimentId]/'import(http:Caller caller, http:Request request) returns error? {
-        stream<byte[], io:Error?> streamer = check request.getByteStream();
-        var exists = file:test("tmp", file:EXISTS);
-        if exists !is error && !exists {
-            check file:createDir("tmp");
+    resource function post experiments/[int experimentId]/'import(http:Request request) returns ExperimentResponse|http:InternalServerError {
+        database:ExperimentFull result;
+        transaction {
+            stream<byte[], io:Error?> streamer = check request.getByteStream();
+            // create/renew tmp dir
+            string zipLocation = "tmp";
+            var exists = file:test(zipLocation, file:EXISTS);
+            if exists !is error && exists {
+                check file:remove(zipLocation);
+            }
+            check file:createDir(zipLocation);
+            // write zip file to file system
+            var zipPath = check file:joinPath(zipLocation, "import.zip");
+            check io:fileWriteBlocksFromStream(zipPath, streamer);
+            check streamer.close();
+            // import
+            result = check database:importExperiment(zipPath, storageLocation, zipLocation);
+            check commit;
+        } on fail error err {
+            log:printError("Importing experiment unsuccessful.", 'error = err, stackTrace = err.stackTrace());
+            return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
-        var zipPath = check file:joinPath("tmp", "import.zip"); // TODO: remove if 
-        exists = file:test(zipPath, file:EXISTS);
-        if exists !is error && exists {
-            check file:remove(zipPath);
-        }
-        check io:fileWriteBlocksFromStream(zipPath, streamer);
-        check streamer.close();
-        // TODO: import file
-        // relative file links need to be made absolute again
+        return mapToExperimentResponse(result);
     }
 }
 
@@ -1044,3 +1052,4 @@ public function main() {
         log:printError("Could not start result watchers.", 'error = err, stackTrace = err.stackTrace());
     }
 }
+
