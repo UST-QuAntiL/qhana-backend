@@ -873,9 +873,28 @@ public isolated transactional function createTimelineStep(
 # + return - error or ()
 public isolated transactional function importTimelineStep(int experimentId, TimelineStepExport step, map<int> dataIdMapping) returns error? {
     // import step
-    var insertResult = check experimentDB->execute(
+    sql:ParameterizedQuery startTime = ` strftime('%Y-%m-%dT%H:%M:%S', ${step.'start}), `;
+    if configuredDBType != "sqlite" {
+        startTime = ` DATE_FORMAT(${step.'start}, '%Y-%m-%dT%H:%i:%S'), `;
+    }
+    sql:ParameterizedQuery endTime;
+    if step.end == "" || step.end == () {
+        endTime = ` '', `;
+        if configuredDBType != "sqlite" {
+            endTime = ` NULL, `;
+        }
+    } else {
+        endTime = ` strftime('%Y-%m-%dT%H:%M:%S', ${step.end}), `;
+        if configuredDBType != "sqlite" {
+            endTime = ` DATE_FORMAT(${step.end}, '%Y-%m-%dT%H:%i:%S'), `;
+        }
+    }
+
+    var insertResult = check experimentDB->execute(sql:queryConcat(
             `INSERT INTO TimelineStep (experimentId, sequence, start, end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart, pTarget, pValue, pUnit, notes) 
-            VALUES (${experimentId}, ${step.sequence}, ${step.'start}, ${step.end}, ${step.status}, ${step.resultQuality}, ${step.resultLog}, ${step.processorName}, ${step.processorVersion}, ${step.processorLocation}, ${step.parameters}, ${step.parametersContentType}, ${step.progressStart}, ${step.progressTarget}, ${step.progressValue}, ${step.progressUnit}, ${step.notes});`
+            VALUES (${experimentId}, ${step.sequence}, `,
+            startTime, endTime,
+            ` ${step.status}, ${step.resultQuality}, ${step.resultLog}, ${step.processorName}, ${step.processorVersion}, ${step.processorLocation}, ${step.parameters}, ${step.parametersContentType}, ${step.progressStart}, ${step.progressTarget}, ${step.progressValue}, ${step.progressUnit}, ${step.notes});`)
     );
 
     // extract experiment id and build full experiment data

@@ -351,6 +351,41 @@ public isolated transactional function castToTimelineStepExport(TimelineStepFull
     };
 }
 
+# Get the list of (complete) timeline steps from the database for export.
+#
+# + experimentId - The experiment id
+# + return - The list of timpline steps or the encountered error
+public isolated transactional function getTimelineStepListExport(int experimentId) returns TimelineStepFull[]|error {
+    sql:ParameterizedQuery startEndString = ` cast(start as TEXT) AS start, cast(end as TEXT) AS end, `;
+    if configuredDBType != "sqlite" {
+        startEndString = `DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end,  `;
+    }
+    stream<TimelineStepSQL, sql:Error?> timelineSteps;
+    timelineSteps = experimentDB->query(sql:queryConcat(
+        `SELECT stepId, experimentId, sequence, `, startEndString, ` status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart AS progressStart, pTarget AS progressTarget, pValue AS progressValue, pUnit AS progressUnit
+                     FROM TimelineStep WHERE experimentId=${experimentId};`
+    ));
+
+    (TimelineStepSQL|TimelineStepFull)[]|error|() tempList = from var step in timelineSteps
+        select step;
+
+    check timelineSteps.close();
+
+    TimelineStepFull[] stepList = [];
+    if tempList is error {
+        return tempList;
+    } else if tempList is () {
+        return [];
+    } else {
+        // convert timestamps to correct utc type if timestamps come from sqlite
+        foreach var step in tempList {
+            TimelineStepFull stepFull = check castToTimelineStepFull(step);
+            stepList.push(stepFull);
+        }
+    }
+    return stepList;
+}
+
 public isolated transactional function getTimelineStepDataList(int stepId) returns StepDataExport[]|error {
     stream<StepDataExport, sql:Error?> stepDataResult = experimentDB->query(`SELECT dataId, relationType FROM StepData WHERE stepId = ${stepId};`);
     StepDataExport[]|error|() stepDataList = from var stepData in stepDataResult
@@ -436,7 +471,7 @@ public isolated transactional function getExperimentDBExport(int experimentId) r
     int[] dataIdList = [];
 
     // iterate over timeline steps
-    TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experimentId, (), (), (), (), allAttributes = true, noLimit = true);
+    TimelineStepFull[] timelineStepListDb = check getTimelineStepListExport(experimentId);
     foreach TimelineStepFull timelineStepDb in timelineStepListDb {
         TimelineStepExport timelineStepExport = check castToTimelineStepExport(timelineStepDb);
         // retrieve associated step data
@@ -571,7 +606,7 @@ public isolated transactional function importExperiment(string zipPath, string s
         result = check os:exec({value: "unzip", arguments: [zipPath, "-d", zipLocation]});
     }
     else if os == "windows" {
-        result = check os:exec({value: "powershell", arguments: ["Expand-Archive", "-DestinationPath", ".", zipLocation]});
+        result = check os:exec({value: "powershell", arguments: ["Expand-Archive", "-DestinationPath", zipLocation, zipPath]});
     } else {
         return error("Unsupported operating system! At the moment, we support 'linux' and 'windows' for importing/exporting experiments. Please make sure to properly specify the os env var or config entry.");
     }
@@ -593,7 +628,13 @@ public isolated transactional function importExperiment(string zipPath, string s
         // create folder for experimentData and copy data files there
         string fileId = experimentData.location;
         string filePath = check file:joinPath(zipLocation, fileId);
-        result = check os:exec({value: "cp", arguments: [filePath, dataStorage]}); // TODO: Windows?
+        if os == "linux" {
+            result = check os:exec({value: "cp", arguments: [filePath, dataStorage]});
+        } else if os == "windows" {
+            result = check os:exec({value: "powershell", arguments: ["cp", filePath, dataStorage]});
+        } else {
+            return error("Unsupported operating system! At the moment, we support 'linux' and 'windows' for importing/exporting experiments. Please make sure to properly specify the os env var or config entry.");
+        }
         _ = check result.waitForExit();
         var normalizedPath = check file:normalizePath(filePath, file:CLEAN);
 

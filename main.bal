@@ -16,6 +16,7 @@ import ballerina/http;
 import ballerina/regex;
 import ballerina/os;
 import ballerina/log;
+import ballerina/uuid;
 import qhana_backend.database;
 import ballerina/file;
 import ballerina/io;
@@ -1005,7 +1006,6 @@ service / on new http:Listener(serverPort) {
         resp.statusCode = http:STATUS_OK;
         resp.addHeader("Content-Disposition", string `attachment; filename="${experimentZip.name}"`);
         resp.setFileAsPayload(experimentZip.location, contentType = "application/zip");
-        // TODO: length? 
         check caller->respond(resp);
     }
 
@@ -1015,17 +1015,25 @@ service / on new http:Listener(serverPort) {
     @http:ResourceConfig {
         consumes: ["application/zip"]
     }
-    resource function post experiments/[int experimentId]/'import(http:Request request) returns ExperimentResponse|http:InternalServerError {
+    resource function post experiments/'import(http:Request request) returns ExperimentResponse|http:InternalServerError {
         database:ExperimentFull result;
         transaction {
             stream<byte[], io:Error?> streamer = check request.getByteStream();
             // create/renew tmp dir
-            string zipLocation = "tmp";
+            string zipLocation = check file:joinPath("tmp", "import-" + uuid:createType1AsString());
             var exists = file:test(zipLocation, file:EXISTS);
             if exists !is error && exists {
-                check file:remove(zipLocation, file:RECURSIVE);
+                if configuredOS == "windows" {
+                    os:Process r = check os:exec({value: "powershell", arguments: ["Remove-Item", zipLocation, "-recurse", "-force"]});
+                    _ = check r.waitForExit();
+                } else {
+                    check file:remove(zipLocation, file:RECURSIVE);
+                }
             }
-            check file:createDir(zipLocation);
+            var x = file:createDir(zipLocation);
+            if x is error {
+                log:printDebug("Creating dir unsuccessful. Continue anyways...");
+            }
             // write zip file to file system
             var zipPath = check file:joinPath(zipLocation, "import.zip");
             check io:fileWriteBlocksFromStream(zipPath, streamer);
