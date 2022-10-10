@@ -21,6 +21,29 @@ import ballerina/file;
 import ballerina/io;
 
 // start configuration values
+# User configurable os of the host.
+# Can also be configured by setting the `OS` environment variable.
+configurable string os = "linux";
+
+# Get the os from the `OS` environment variable.
+# If not present use the configurable variable `os` as fallback.
+#
+# + return - the configured os
+function getOS() returns string {
+    string p = os:getEnv("OS");
+    if (regex:matches(p, "\\p{L}")) {
+        do {
+            return p;
+        } on fail {
+            // error should never happen if regex is correct...
+        }
+    }
+    return os;
+}
+
+# The final configured os.
+final string & readonly configuredOS = getOS().cloneReadOnly();
+
 # List of domains that are allowed CORS requests to the backend.
 # Can also be configured by setting the `QHANA_CORS_DOMAINS` environment variable.
 configurable string[] corsDomains = ["*"];
@@ -968,7 +991,7 @@ service / on new http:Listener(serverPort) {
         database:ExperimentExportZip experimentZip;
         http:Response resp = new;
         transaction {
-            experimentZip = check database:exportExperiment(experimentId, exportConfig);
+            experimentZip = check database:exportExperiment(experimentId, exportConfig, configuredOS);
             check commit;
         } on fail error err {
             log:printError("Exporting experiment unsuccessful.", 'error = err, stackTrace = err.stackTrace());
@@ -1008,7 +1031,7 @@ service / on new http:Listener(serverPort) {
             check io:fileWriteBlocksFromStream(zipPath, streamer);
             check streamer.close();
             // import
-            result = check database:importExperiment(zipPath, storageLocation, zipLocation);
+            result = check database:importExperiment(zipPath, storageLocation, zipLocation, configuredOS);
             check commit;
         } on fail error err {
             log:printError("Importing experiment unsuccessful.", 'error = err, stackTrace = err.stackTrace());

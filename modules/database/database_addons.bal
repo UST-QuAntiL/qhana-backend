@@ -476,8 +476,9 @@ public isolated transactional function getExperimentDBExport(int experimentId) r
 #
 # + experimentId - experiment id of the new (cloned) experiment
 # + config - export configuration // TODO
+# + os - os type to determine appropriate exec command
 # + return - record with details about created zip files or error
-public isolated transactional function exportExperiment(int experimentId, string? config) returns ExperimentExportZip|error {
+public isolated transactional function exportExperiment(int experimentId, string? config, string os) returns ExperimentExportZip|error {
 
     // TODO: config
 
@@ -526,13 +527,26 @@ public isolated transactional function exportExperiment(int experimentId, string
     log:printDebug("Create zip " + zipPath + " ...");
 
     // add experiment.json
-    os:Process result = check os:exec({value: "zip", arguments: ["-j", zipPath, jsonPath]}); // TODO: Windows?
+    os:Process result;
+    if os == "linux" {
+        result = check os:exec({value: "zip", arguments: ["-j", zipPath, jsonPath]});
+    } else if os == "windows" {
+        result = check os:exec({value: "powershell", arguments: ["Compress-Archive", "-Update", jsonPath, zipPath]});
+    } else {
+        return error("Unsupported operating system! At the moment, we support 'linux' and 'windows' for importing/exporting experiments. Please make sure to properly specify the os env var or config entry.");
+    }
     _ = check result.waitForExit();
 
     // add experiment data files
     foreach string dataFile in dataFileLocations {
         log:printDebug("Add file to zip... " + dataFile);
-        result = check os:exec({value: "zip", arguments: ["-j", zipPath, dataFile]}); // flatten path  // TODO: Windows?
+        if os == "linux" {
+            result = check os:exec({value: "zip", arguments: ["-j", zipPath, dataFile]});
+        } else if os == "windows" {
+            result = check os:exec({value: "powershell", arguments: ["Compress-Archive", "-Update", dataFile, zipPath]});
+        } else {
+            return error("Unsupported operating system! At the moment, we support 'linux' and 'windows' for importing/exporting experiments. Please make sure to properly specify the os env var or config entry.");
+        }
         _ = check result.waitForExit();
     }
 
@@ -547,11 +561,20 @@ public isolated transactional function exportExperiment(int experimentId, string
 # + zipPath - (relative) path to zip file
 # + storageLocation - location of the storage for experiment data
 # + zipLocation - (tmp) location of the zip file, assume that the directory only contains the zip file (clearing dir must be taken care of by calling function)
+# + os - os type to determine appropriate exec command
 # + return - record with details about created zip files or error
-public isolated transactional function importExperiment(string zipPath, string storageLocation, string zipLocation) returns ExperimentFull|error {
+public isolated transactional function importExperiment(string zipPath, string storageLocation, string zipLocation, string os) returns ExperimentFull|error {
 
     // unzip file
-    os:Process result = check os:exec({value: "unzip", arguments: [zipPath, "-d", zipLocation]}); // TODO: Windows?
+    os:Process result;
+    if os == "linux" {
+        result = check os:exec({value: "unzip", arguments: [zipPath, "-d", zipLocation]});
+    }
+    else if os == "windows" {
+        result = check os:exec({value: "powershell", arguments: ["Expand-Archive", "-DestinationPath", ".", zipLocation]});
+    } else {
+        return error("Unsupported operating system! At the moment, we support 'linux' and 'windows' for importing/exporting experiments. Please make sure to properly specify the os env var or config entry.");
+    }
     _ = check result.waitForExit();
 
     // read experiment.json

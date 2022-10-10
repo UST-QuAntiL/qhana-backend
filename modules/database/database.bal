@@ -869,6 +869,7 @@ public isolated transactional function createTimelineStep(
 #
 # + experimentId - experiment id
 # + step - step with step data and substep list
+# + dataIdMapping - mapping of external dataId to newly created internal dataId
 # + return - error or ()
 public isolated transactional function importTimelineStep(int experimentId, TimelineStepExport step, map<int> dataIdMapping) returns error? {
     // import step
@@ -902,6 +903,7 @@ public isolated transactional function importTimelineStep(int experimentId, Time
 # + experimentId - Experiment id 
 # + stepId - Step id of associated timeline step  
 # + substep - Substep with substep data list
+# + dataIdMapping - mapping of external dataId to newly created internal dataId
 # + return - error or ()
 public isolated transactional function importTimelineSubstep(int experimentId, int stepId, TimelineSubstepExport substep, map<int> dataIdMapping) returns error? {
     // import substep
