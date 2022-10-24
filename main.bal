@@ -987,12 +987,15 @@ service / on new http:Listener(serverPort) {
     #
     # + experimentId - the id of the experiment to be cloned
     # + exportConfig - configuration of export // TODO
-    # + return - the cloned experiment resource
+    # + return - export result resource
+    @http:ResourceConfig { // TODO: test
+        linkedTo: [{name: "Export", relation: "location"}]
+    }
     resource function get experiments/[int experimentId]/export(string? exportConfig, http:Caller caller) returns error? {
-        database:ExperimentExportZip experimentZip;
         http:Response resp = new;
+        int exportId;
         transaction {
-            experimentZip = check database:exportExperiment(experimentId, exportConfig, configuredOS);
+            exportId = check database:createExportJob(experimentId, exportConfig, configuredOS);
             check commit;
         } on fail error err {
             log:printError("Exporting experiment unsuccessful.", 'error = err, stackTrace = err.stackTrace());
@@ -1003,20 +1006,98 @@ service / on new http:Listener(serverPort) {
             check caller->respond(resp);
         }
 
+        resp.statusCode = http:STATUS_ACCEPTED;
+        resp.addHeader("Location", string `/experiments/${experimentId}/export/${exportId}`);
+        resp.setPayload({
+            '\@self: string `${serverHost}/experiments/${experimentId}/export`,
+            exportId: exportId
+        });
+        check caller->respond(resp);
+    }
+
+    # Export an experiment as a zip - get result status. 
+    #
+    # + experimentId - experiment Id
+    # + exportId - export Id
+    # + return - json with export status
+    @http:ResourceConfig { // TODO: test
+        name: "Export"
+    }
+    resource function get experiments/[int experimentId]/export/[int exportId](string? exportConfig, http:Caller caller) returns error? {
+        http:Response resp = new;
+
+        database:ExperimentExportResult exportResult;
+        transaction {
+            exportResult = check database:getExportResult(experimentId, exportId);
+            check commit;
+        } on fail error err {
+            log:printError("Could not read export result from db.", 'error = err, stackTrace = err.stackTrace());
+
+            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+            resp.setPayload("Something went wrong. Please try again later.");
+            check caller->respond(resp);
+        }
+
+        if exportResult.status == "SUCCESS" {
+            resp.statusCode = http:STATUS_SEE_OTHER;
+            resp.setHeader("Location", string `/experiments/${experimentId}/export/${exportId}/result`);
+        } else {
+            resp.statusCode = http:STATUS_OK;
+            resp.setHeader("Content-Type", "application/json");
+            resp.setPayload({
+                '\@self: string `${serverHost}/experiments/${experimentId}/export/${exportId}`,
+                exportId: exportId,
+                status: exportResult.status
+            });
+
+        }
+
+        check caller->respond(resp);
+    }
+
+    # Export an experiment as a zip - get result. 
+    #
+    # + experimentId - experiment Id
+    # + exportId - export Id
+    # + return - export experiment zip
+    resource function get experiments/[int experimentId]/export/[int exportId]/result(string? exportConfig, http:Caller caller) returns error? {
+        http:Response resp = new;
+        boolean failure = false;
+
+        database:ExperimentExportResult exportResult;
+        transaction {
+            exportResult = check database:getExportResult(experimentId, exportId);
+            check commit;
+        } on fail error err {
+            log:printError("Could not read export result from db.", 'error = err, stackTrace = err.stackTrace());
+            failure = true;
+        }
+        if exportResult.status != "SUCCESS" {
+            failure = true;
+        }
+        if failure {
+            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+            resp.setPayload("Something went wrong. Please try again later.");
+            check caller->respond(resp);
+            return;
+        }
+
         resp.statusCode = http:STATUS_OK;
-        resp.addHeader("Content-Disposition", string `attachment; filename="${experimentZip.name}"`);
-        resp.setFileAsPayload(experimentZip.location, contentType = "application/zip");
+        resp.addHeader("Content-Disposition", string `attachment; filename="${exportResult.name}"`);
+        resp.setFileAsPayload(exportResult.location, contentType = "application/zip");
         check caller->respond(resp);
     }
 
     # Import an experiment from a zip.
     #
-    # + return - TODO
+    # + return - import result resource
     @http:ResourceConfig {
-        consumes: ["application/zip"]
+        consumes: ["application/zip"],
+        linkedTo: [{name: "Import", relation: "location"}]
     }
-    resource function post experiments/'import(http:Request request) returns ExperimentResponse|http:InternalServerError {
-        database:ExperimentFull result;
+    resource function post experiments/'import(http:Request request) returns ImportResponse|http:InternalServerError {
+        http:Response resp = new;
+        int importId;
         transaction {
             stream<byte[], io:Error?> streamer = check request.getByteStream();
             // create/renew tmp dir
@@ -1038,14 +1119,80 @@ service / on new http:Listener(serverPort) {
             var zipPath = check file:joinPath(zipLocation, "import.zip");
             check io:fileWriteBlocksFromStream(zipPath, streamer);
             check streamer.close();
-            // import
-            result = check database:importExperiment(zipPath, storageLocation, zipLocation, configuredOS);
+            // start long running import task
+            importId = check database:createImportJob(zipPath, storageLocation, zipLocation, configuredOS);
             check commit;
         } on fail error err {
             log:printError("Importing experiment unsuccessful.", 'error = err, stackTrace = err.stackTrace());
             return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
         }
-        return mapToExperimentResponse(result);
+
+        resp.statusCode = http:STATUS_ACCEPTED;
+        resp.addHeader("Location", string `/experiments/import/${importId}`);
+        return {
+            '\@self: string `${serverHost}/experiments/import`,
+            importId: importId
+        };
+    }
+
+    # Get the result of an experiment import.
+    #
+    # + return - json with export status (includes experiment details once successful)
+    @http:ResourceConfig { // TODO test
+        name: "Import"
+    }
+    resource function post experiments/'import/[int importId](http:Request request, http:Caller caller) returns error? {
+        http:Response resp = new;
+        boolean failure = false;
+
+        database:ExperimentImportResult importResult;
+        transaction {
+            importResult = check database:getImportResult(importId);
+            check commit;
+        } on fail error err {
+            log:printError("Could not read import result from db.", 'error = err, stackTrace = err.stackTrace());
+            failure = true;
+        }
+
+        if !failure && importResult.status == "SUCCESS" {
+            database:ExperimentFull experimentFull;
+            int? experimentId = importResult.experimentId;
+            if experimentId == () {
+                log:printError("Experiment import unsuccessful. Status is 'SUCCESS' but could not retrieve experiment id from db.");
+                failure = true;
+            } else {
+                transaction {
+                    experimentFull = check database:getExperiment(experimentId);
+                    check commit;
+                } on fail error err {
+                    log:printError("Could not read import result from db.", 'error = err, stackTrace = err.stackTrace());
+                    failure = true;
+                }
+                if !failure {
+                    resp.statusCode = http:STATUS_OK;
+                    resp.setHeader("Content-Type", "application/json");
+                    resp.setPayload({
+                        '\@self: string `${serverHost}/experiments/import/${importId}`,
+                        experimentId: experimentFull.experimentId,
+                        name: experimentFull.name,
+                        description: experimentFull.description,
+                        status: importResult.status
+                    });
+                }
+            }
+        } else if !failure {
+            resp.statusCode = http:STATUS_OK;
+            resp.setHeader("Content-Type", "application/json");
+            resp.setPayload({
+                '\@self: string `${serverHost}/experiments/import/${importId}`,
+                importId: importId,
+                status: importResult.status
+            });
+        }
+
+        resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+        resp.setPayload("Something went wrong. Please try again later.");
+        check caller->respond(resp);
     }
 }
 

@@ -202,11 +202,29 @@ public type ExperimentDataFull record {|
 #
 # + name - the (file-)name of the experiment zip
 # + location - the path where the data is stored
-# + fileLength - length of file
 public type ExperimentExportZip record {|
     string name;
     string location;
-    int fileLength;
+|};
+
+# Experiment export result record for exporting experiments as a zip.
+#
+# + status - status of export
+# + name - the (file-)name of the experiment zip
+# + location - the path where the data is stored
+public type ExperimentExportResult record {|
+    string status;
+    string name;
+    string location;
+|};
+
+# Experiment import result record for importing experiments from a zip.
+#
+# + status - status of experiment import task
+# + experimentId - experimentId
+public type ExperimentImportResult record {|
+    string status;
+    int experimentId?;
 |};
 
 // Timeline ////////////////////////////////////////////////////////////////////
