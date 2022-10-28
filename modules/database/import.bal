@@ -18,7 +18,9 @@ import ballerina/log;
 import ballerina/time;
 import ballerina/file;
 import ballerina/io;
+import ballerina/http;
 import ballerina/os;
+import ballerina/uuid;
 
 # Import an experiment from a zip file. Assume that zip file is in directory tmp
 #
@@ -77,8 +79,10 @@ public isolated transactional function importExperiment(string zipPath, string s
     }
 
     // import timeline steps (make sure step/substep data is correct)
+    int stepSequence = 1;
     foreach TimelineStepExport timelineStep in experimentComplete.timelineSteps {
-        _ = check importTimelineStep(importedExperiment.experimentId, timelineStep, dataIdMapping);
+        _ = check importTimelineStep(importedExperiment.experimentId, timelineStep, stepSequence, dataIdMapping);
+        stepSequence += 1;
     }
 
     return importedExperiment;
@@ -86,12 +90,33 @@ public isolated transactional function importExperiment(string zipPath, string s
 
 # Create and start a long running background task for experiment import and a corresponding db entry.
 #
-# + zipPath - (relative) path to zip file
 # + storageLocation - location of the storage for experiment data
-# + zipLocation - (tmp) location of the zip file, assume that the directory only contains the zip file (clearing dir must be taken care of by calling function)
 # + configuredOS - os type to determine appropriate exec command
+# + request - request with received data
 # + return - id of import job db entry
-public isolated transactional function createImportJob(string zipPath, string storageLocation, string zipLocation, string configuredOS) returns int|error {
+public isolated transactional function createImportJob(string storageLocation, string configuredOS, http:Request request) returns int|error {
+
+    stream<byte[], io:Error?> streamer = check request.getByteStream();
+    // create/renew tmp dir
+    string zipLocation = check file:joinPath("tmp", "import-" + uuid:createType1AsString());
+    var exists = file:test(zipLocation, file:EXISTS);
+    if exists !is error && exists {
+        if configuredOS == "windows" {
+            os:Process r = check os:exec({value: "powershell", arguments: ["Remove-Item", zipLocation, "-recurse", "-force"]});
+            _ = check r.waitForExit();
+        } else {
+            check file:remove(zipLocation, file:RECURSIVE);
+        }
+    }
+    var x = file:createDir(zipLocation);
+    if x is error {
+        log:printDebug("Creating dir unsuccessful. Continue anyways...");
+    }
+    // write zip file to file system
+    var zipPath = check file:joinPath(zipLocation, "import.zip");
+    check io:fileWriteBlocksFromStream(zipPath, streamer);
+    check streamer.close();
+
     // create experiment import db entry
     sql:ParameterizedQuery currentTime = ` strftime('%Y-%m-%dT%H:%M:%S', 'now') `;
     if configuredDBType != "sqlite" {

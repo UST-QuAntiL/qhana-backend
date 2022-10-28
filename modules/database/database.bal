@@ -887,9 +887,10 @@ public isolated transactional function createTimelineStep(
 #
 # + experimentId - experiment id
 # + step - step with step data and substep list
+# + sequence - step sequence number
 # + dataIdMapping - mapping of external dataId to newly created internal dataId
 # + return - error or ()
-public isolated transactional function importTimelineStep(int experimentId, TimelineStepExport step, map<int> dataIdMapping) returns error? {
+public isolated transactional function importTimelineStep(int experimentId, TimelineStepExport step, int sequence, map<int> dataIdMapping) returns error? {
     // import step
     sql:ParameterizedQuery startTime = ` strftime('%Y-%m-%dT%H:%M:%S', ${step.'start}), `;
     if configuredDBType != "sqlite" {
@@ -910,7 +911,7 @@ public isolated transactional function importTimelineStep(int experimentId, Time
 
     var insertResult = check experimentDB->execute(sql:queryConcat(
             `INSERT INTO TimelineStep (experimentId, sequence, start, end, status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart, pTarget, pValue, pUnit, notes) 
-            VALUES (${experimentId}, ${step.sequence}, `,
+            VALUES (${experimentId}, ${sequence}, `,
             startTime, endTime,
             ` ${step.status}, ${step.resultQuality}, ${step.resultLog}, ${step.processorName}, ${step.processorVersion}, ${step.processorLocation}, ${step.parameters}, ${step.parametersContentType}, ${step.progressStart}, ${step.progressTarget}, ${step.progressValue}, ${step.progressUnit}, ${step.notes});`)
     );
@@ -929,8 +930,10 @@ public isolated transactional function importTimelineStep(int experimentId, Time
         }
 
         // import substeps
+        int substepNr = 1;
         foreach TimelineSubstepExport substep in step.timelineSubsteps {
-            _ = check importTimelineSubstep(experimentId, stepId, substep, dataIdMapping);
+            _ = check importTimelineSubstep(experimentId, stepId, substep, substepNr, dataIdMapping);
+            substepNr += 1;
         }
     }
 }
@@ -940,13 +943,14 @@ public isolated transactional function importTimelineStep(int experimentId, Time
 # + experimentId - Experiment id 
 # + stepId - Step id of associated timeline step  
 # + substep - Substep with substep data list
+# + substepNr - Substep sequence number
 # + dataIdMapping - mapping of external dataId to newly created internal dataId
 # + return - error or ()
-public isolated transactional function importTimelineSubstep(int experimentId, int stepId, TimelineSubstepExport substep, map<int> dataIdMapping) returns error? {
+public isolated transactional function importTimelineSubstep(int experimentId, int stepId, TimelineSubstepExport substep, int substepNr, map<int> dataIdMapping) returns error? {
     // import substep
     _ = check experimentDB->execute(
         `INSERT INTO TimelineSubstep (stepId, substepNr, substepId, href, hrefUi, cleared, parameters, parametersContentType) 
-         VALUES (${stepId}, ${substep.substepNr}, ${substep.substepId}, ${substep.href}, ${substep.hrefUi}, ${substep.cleared}, ${substep.parameters}, ${substep.parametersContentType});`
+         VALUES (${stepId}, ${substepNr}, ${substep.substepId}, ${substep.href}, ${substep.hrefUi}, ${substep.cleared}, ${substep.parameters}, ${substep.parametersContentType});`
     );
 
     // import substep data db entry

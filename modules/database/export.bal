@@ -68,9 +68,13 @@ public type TimelineSubstepExportBase record {|
 
 # Record for exporting/importing timeline substeps
 #
+# + parameters - the parameters which were input for this substep
+# + parametersContentType - the content type of these parameters
 # + substepDataList - list of substep data
 public type TimelineSubstepExport record {|
-    *TimelineSubstepExportBase;
+    *TimelineSubstep;
+    string? parameters;
+    string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
     SubstepDataExport[] substepDataList;
 |};
 
@@ -104,11 +108,9 @@ public type TimelineStepBaseExport record {|
 
 # Record for exporting/importing timeline steps with step data and substeps
 #
-# + sequence - the sequence number of the step in the experiment
 # + stepDataList - list of step data  
 # + timelineSubsteps - list of associated timeline substeps 
 public type TimelineStepExport record {|
-    int sequence; // TODO: not sure what this is used for
     *TimelineStepBaseExport; // TODO: not sure if this will work due to time:Utc for start and end
     StepDataExport[] stepDataList;
     TimelineSubstepExport[] timelineSubsteps;
@@ -132,7 +134,6 @@ public type ExperimentCompleteExport record {|
 public isolated transactional function castToTimelineStepExport(TimelineStepFull step) returns TimelineStepExport|error {
     var end = step.end;
     return {
-        sequence: step.sequence,
         'start: time:utcToString(step.'start),
         end: end == () ? () : time:utcToString(end),
         status: step.status,
@@ -235,7 +236,6 @@ public isolated transactional function getTimelineSubstepsExport(int stepId) ret
     foreach var substep in substepsBase {
         SubstepDataExport[] substepDataList = check getTimelineSubstepDataList(stepId, substep.substepNr);
         TimelineSubstepExport substepExport = {
-            substepNr: substep.substepNr,
             substepId: substep.substepId,
             href: substep.href,
             hrefUi: substep.hrefUi,

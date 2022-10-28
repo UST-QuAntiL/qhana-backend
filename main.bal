@@ -16,10 +16,7 @@ import ballerina/http;
 import ballerina/regex;
 import ballerina/os;
 import ballerina/log;
-import ballerina/uuid;
 import qhana_backend.database;
-import ballerina/file;
-import ballerina/io;
 
 // start configuration values
 # User configurable os of the host.
@@ -1088,44 +1085,27 @@ service / on new http:Listener(serverPort) {
     @http:ResourceConfig {
         consumes: ["application/zip"]
     }
-    resource function post experiments/'import(http:Request request) returns ImportResponse|http:InternalServerError {
+    resource function post experiments/'import(http:Request request, http:Caller caller) returns error? {
         http:Response resp = new;
         int importId;
         transaction {
-            stream<byte[], io:Error?> streamer = check request.getByteStream();
-            // create/renew tmp dir
-            string zipLocation = check file:joinPath("tmp", "import-" + uuid:createType1AsString());
-            var exists = file:test(zipLocation, file:EXISTS);
-            if exists !is error && exists {
-                if configuredOS == "windows" {
-                    os:Process r = check os:exec({value: "powershell", arguments: ["Remove-Item", zipLocation, "-recurse", "-force"]});
-                    _ = check r.waitForExit();
-                } else {
-                    check file:remove(zipLocation, file:RECURSIVE);
-                }
-            }
-            var x = file:createDir(zipLocation);
-            if x is error {
-                log:printDebug("Creating dir unsuccessful. Continue anyways...");
-            }
-            // write zip file to file system
-            var zipPath = check file:joinPath(zipLocation, "import.zip");
-            check io:fileWriteBlocksFromStream(zipPath, streamer);
-            check streamer.close();
             // start long running import task
-            importId = check database:createImportJob(zipPath, storageLocation, zipLocation, configuredOS);
+            importId = check database:createImportJob(storageLocation, configuredOS, request);
             check commit;
         } on fail error err {
             log:printError("Importing experiment unsuccessful.", 'error = err, stackTrace = err.stackTrace());
-            return <http:InternalServerError>{body: "Something went wrong. Please try again later."};
+            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+            resp.setPayload("Something went wrong. Please try again later.");
+            check caller->respond(resp);
         }
 
         resp.statusCode = http:STATUS_ACCEPTED;
         resp.addHeader("Location", string `/experiments/import/${importId}`);
-        return {
+        resp.setPayload({
             '\@self: string `${serverHost}/experiments/import`,
             importId: importId
-        };
+        });
+        check caller->respond(resp);
     }
 
     # Get the result of an experiment import.
