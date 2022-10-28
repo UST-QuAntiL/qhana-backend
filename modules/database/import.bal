@@ -107,7 +107,7 @@ public isolated transactional function createImportJob(string zipPath, string st
     // TODO: maybe generate a secure importId instead of using autoincremented ints
 
     // start long-running import task 
-    _ = check task:scheduleOneTimeJob(new importJob(intImportId, zipPath, storageLocation, zipLocation, configuredOS), time:utcToCivil(time:utcNow()));
+    _ = check task:scheduleOneTimeJob(new importJob(intImportId, zipPath, storageLocation, zipLocation, configuredOS), time:utcToCivil(time:utcAddSeconds(time:utcNow(), 1)));
 
     return intImportId;
 }

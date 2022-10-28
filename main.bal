@@ -988,9 +988,6 @@ service / on new http:Listener(serverPort) {
     # + experimentId - the id of the experiment to be cloned
     # + exportConfig - configuration of export // TODO
     # + return - export result resource
-    @http:ResourceConfig { // TODO: test
-        linkedTo: [{name: "Export", relation: "location"}]
-    }
     resource function get experiments/[int experimentId]/export(string? exportConfig, http:Caller caller) returns error? {
         http:Response resp = new;
         int exportId;
@@ -1020,9 +1017,6 @@ service / on new http:Listener(serverPort) {
     # + experimentId - experiment Id
     # + exportId - export Id
     # + return - json with export status
-    @http:ResourceConfig { // TODO: test
-        name: "Export"
-    }
     resource function get experiments/[int experimentId]/export/[int exportId](string? exportConfig, http:Caller caller) returns error? {
         http:Response resp = new;
 
@@ -1092,8 +1086,7 @@ service / on new http:Listener(serverPort) {
     #
     # + return - import result resource
     @http:ResourceConfig {
-        consumes: ["application/zip"],
-        linkedTo: [{name: "Import", relation: "location"}]
+        consumes: ["application/zip"]
     }
     resource function post experiments/'import(http:Request request) returns ImportResponse|http:InternalServerError {
         http:Response resp = new;
@@ -1138,10 +1131,7 @@ service / on new http:Listener(serverPort) {
     # Get the result of an experiment import.
     #
     # + return - json with export status (includes experiment details once successful)
-    @http:ResourceConfig { // TODO test
-        name: "Import"
-    }
-    resource function post experiments/'import/[int importId](http:Request request, http:Caller caller) returns error? {
+    resource function get experiments/'import/[int importId](http:Request request, http:Caller caller) returns error? {
         http:Response resp = new;
         boolean failure = false;
 
@@ -1190,8 +1180,10 @@ service / on new http:Listener(serverPort) {
             });
         }
 
-        resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
-        resp.setPayload("Something went wrong. Please try again later.");
+        if failure {
+            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+            resp.setPayload("Something went wrong. Please try again later.");
+        }
         check caller->respond(resp);
     }
 }

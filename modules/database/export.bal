@@ -407,7 +407,7 @@ public isolated transactional function createExportJob(int experimentId, string?
     if configuredDBType != "sqlite" {
         currentTime = ` DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%S') `;
     }
-    var insertResult = check experimentDB->execute(sql:queryConcat(`INSERT INTO ExperimentExport (experimentId, name, location, creationTime) VALUES (${experimentId}, "", "", `, currentTime, `)`));
+    var insertResult = check experimentDB->execute(sql:queryConcat(`INSERT INTO ExperimentExport (experimentId, name, location, creationDate) VALUES (${experimentId}, "", "", `, currentTime, `)`));
 
     var exportId = insertResult.lastInsertId;
     if exportId == () || exportId is string {
@@ -417,9 +417,10 @@ public isolated transactional function createExportJob(int experimentId, string?
     // TODO: maybe generate a secure importId instead of using autoincremented ints
 
     // start long-running export task 
-    _ = check task:scheduleOneTimeJob(new exportJob(intExportId, experimentId, config, os), time:utcToCivil(time:utcNow()));
+    _ = check task:scheduleOneTimeJob(new exportJob(intExportId, experimentId, config, os), time:utcToCivil(time:utcAddSeconds(time:utcNow(), 1)));
 
     return intExportId;
+    // TODO: garbage cleaning for import/export experiments
 }
 
 # Retrieve result for export job.
