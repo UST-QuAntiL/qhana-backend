@@ -892,9 +892,9 @@ public isolated transactional function createTimelineStep(
 # + return - error or ()
 public isolated transactional function importTimelineStep(int experimentId, TimelineStepExport step, int sequence, map<int> dataIdMapping) returns error? {
     // import step
-    sql:ParameterizedQuery startTime = ` strftime('%Y-%m-%dT%H:%M:%S', ${step.'start}), `;
+    sql:ParameterizedQuery startTime = ` strftime('%Y-%m-%dT%H:%M:%S', ${step.'start}, `;
     if configuredDBType != "sqlite" {
-        startTime = ` DATE_FORMAT(${step.'start}, '%Y-%m-%dT%H:%i:%S'), `;
+        startTime = ` DATE_FORMAT(trim(trailing 'Z' from ${step.'start}), '%Y-%m-%dT%H:%i:%S'), `;
     }
     sql:ParameterizedQuery endTime;
     if step.end == "" || step.end == () {
@@ -905,7 +905,7 @@ public isolated transactional function importTimelineStep(int experimentId, Time
     } else {
         endTime = ` strftime('%Y-%m-%dT%H:%M:%S', ${step.end}), `;
         if configuredDBType != "sqlite" {
-            endTime = ` DATE_FORMAT(${step.end}, '%Y-%m-%dT%H:%i:%S'), `;
+            endTime = ` DATE_FORMAT(trim(trailing 'Z' from ${step.end}), '%Y-%m-%dT%H:%i:%S'), `;
         }
     }
 
@@ -1534,9 +1534,13 @@ public isolated function timelineStepListFilter(int experimentId, string? plugin
 # + storageLocation - location of the storage
 # + return - the folder to store experiment data in
 public isolated function prepareStorageLocation(int experimentId, string storageLocation) returns string|error {
-    var relPath = check file:joinPath(storageLocation, string `${experimentId}`);
-    var normalizedPath = check file:normalizePath(relPath, file:CLEAN);
-    var abspath = check file:getAbsolutePath(normalizedPath);
-    check file:createDir(abspath, file:RECURSIVE);
+    // TODO: check, joinPath messes up paths in docker
+    // var relPath = check file:joinPath(storageLocation, string `${experimentId}`);
+    // var normalizedPath = check file:normalizePath(relPath, file:CLEAN);
+    // var abspath = check file:getAbsolutePath(normalizedPath);
+    var abspath = check file:getAbsolutePath(storageLocation + "/" + string `${experimentId}`);
+    if !(check file:test(abspath, file:EXISTS)) {
+        check file:createDir(abspath, file:RECURSIVE);
+    }
     return abspath;
 }

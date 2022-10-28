@@ -45,7 +45,7 @@ public isolated transactional function importExperiment(string zipPath, string s
 
     // read experiment.json
     string jsonFile = "experiment.json";
-    var jsonPath = check file:joinPath(zipLocation, jsonFile);
+    var jsonPath = check file:getAbsolutePath(zipLocation + "/" + jsonFile);
     json experimentCompleteJson = check io:fileReadJson(jsonPath);
     ExperimentCompleteExport experimentComplete = check experimentCompleteJson.cloneWithType(ExperimentCompleteExport);
 
@@ -58,20 +58,11 @@ public isolated transactional function importExperiment(string zipPath, string s
     foreach ExperimentDataExport experimentData in experimentComplete.experimentDataList {
         // create folder for experimentData and copy data files there
         string fileId = experimentData.location;
-        string filePath = check file:joinPath(zipLocation, fileId);
-        if os == "linux" {
-            result = check os:exec({value: "cp", arguments: [filePath, dataStorage]});
-        } else if os == "windows" {
-            result = check os:exec({value: "powershell", arguments: ["cp", filePath, dataStorage]});
-        } else {
-            return error("Unsupported operating system! At the moment, we support 'linux' and 'windows' for importing/exporting experiments. Please make sure to properly specify the os env var or config entry.");
-        }
-        _ = check result.waitForExit();
-        var normalizedPath = check file:normalizePath(filePath, file:CLEAN);
+        var filePath = check file:getAbsolutePath(zipLocation + "/" + fileId);
+        check file:copy(filePath, dataStorage, file:REPLACE_EXISTING);
 
         // replace data location with new absolute location
-        var abspath = check file:getAbsolutePath(normalizedPath);
-        experimentData.location = abspath;
+        experimentData.location = filePath;
 
         // create db entries
         int newDataId = check importExperimentData(importedExperiment.experimentId, experimentData);
@@ -98,9 +89,8 @@ public isolated transactional function createImportJob(string storageLocation, s
 
     stream<byte[], io:Error?> streamer = check request.getByteStream();
     // create/renew tmp dir
-    string zipLocation = check file:joinPath("tmp", "import-" + uuid:createType1AsString());
-    var exists = file:test(zipLocation, file:EXISTS);
-    if exists !is error && exists {
+    var zipLocation = check file:getAbsolutePath("tmp/import-" + uuid:createType1AsString());
+    if check file:test(zipLocation, file:EXISTS) {
         if configuredOS == "windows" {
             os:Process r = check os:exec({value: "powershell", arguments: ["Remove-Item", zipLocation, "-recurse", "-force"]});
             _ = check r.waitForExit();
@@ -113,7 +103,8 @@ public isolated transactional function createImportJob(string storageLocation, s
         log:printDebug("Creating dir unsuccessful. Continue anyways...");
     }
     // write zip file to file system
-    var zipPath = check file:joinPath(zipLocation, "import.zip");
+    // var zipPath = check file:joinPath(zipLocation, "import.zip"); // TODO: check, joinPath messes up paths in docker
+    string zipPath = zipLocation + "/import.zip";
     check io:fileWriteBlocksFromStream(zipPath, streamer);
     check streamer.close();
 

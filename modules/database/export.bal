@@ -339,33 +339,29 @@ public isolated transactional function exportExperiment(int experimentId, string
             return error("Unable to determine relative file location.");
         } else {
             experimentData.location = location.substring(index + 1, location.length()); // only file name
-            dataFileLocations.push(check file:joinPath(
-                "experimentData",
-                experimentId.toString(),
-                experimentData.location
-            ));
+            var abspath = check file:getAbsolutePath("experimentData/" + experimentId.toString() + "/" + experimentData.location);
+            log:printInfo("Add file " + abspath + "..."); // TODO: remove
+            dataFileLocations.push(abspath);
         }
     }
 
     // string tmpDir = check file:createTempDir();
-    var exists = file:test("tmp", file:EXISTS);
-    if exists !is error && !exists {
-        check file:createDir("tmp");
+    if !(check file:test("tmp", file:EXISTS)) {
+        check file:createDir("tmp", file:RECURSIVE);
     }
     json experimentCompleteJson = experimentComplete;
-    string jsonFile = "experiment.json";
-    var jsonPath = check file:joinPath("tmp", jsonFile);
-    exists = file:test(jsonPath, file:EXISTS);
-    if exists !is error && exists {
+    string jsonFile = "tmp/experiment.json";
+    var jsonPath = check file:getAbsolutePath(jsonFile);
+    if check file:test(jsonPath, file:EXISTS) {
         check file:remove(jsonPath);
     }
-    log:printDebug("Write " + jsonPath + " ...");
+    log:printInfo("Write " + jsonPath + " ...");
     check io:fileWriteJson(jsonPath, experimentCompleteJson);
 
     // create zip-  add all files (experiment file(s) + data files) to ZIP
     string zipFileName = regex:replaceAll(experimentComplete.experiment.name, "\\s+", "-") + ".zip";
-    var zipPath = check file:joinPath("tmp", zipFileName);
-    log:printDebug("Create zip " + zipPath + " ...");
+    var zipPath = check file:getAbsolutePath("tmp/" + zipFileName);
+    log:printInfo("Create zip " + zipPath + " ...");
 
     // add experiment.json
     os:Process result;
