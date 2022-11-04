@@ -28,15 +28,7 @@ configurable string os = "linux";
 #
 # + return - the configured os
 function getOS() returns string {
-    string p = os:getEnv("OS");
-    if (regex:matches(p, "\\p{L}")) {
-        do {
-            return p;
-        } on fail {
-            // error should never happen if regex is correct...
-        }
-    }
-    return os;
+    return os:getEnv("OS");
 }
 
 # The final configured os.
@@ -604,6 +596,7 @@ service / on new http:Listener(serverPort) {
             resp.setPayload("Something went wrong. Please try again later.");
 
             check caller->respond(resp);
+            return;
         }
 
         resp.statusCode = http:STATUS_OK;
@@ -824,6 +817,7 @@ service / on new http:Listener(serverPort) {
             resp.setPayload("Something went wrong. Please try again later.");
 
             check caller->respond(resp);
+            return;
         }
 
         resp.statusCode = http:STATUS_OK;
@@ -949,6 +943,7 @@ service / on new http:Listener(serverPort) {
             resp.setPayload("Something went wrong. Please try again later.");
 
             check caller->respond(resp);
+            return;
         }
 
         resp.statusCode = http:STATUS_OK;
@@ -985,7 +980,10 @@ service / on new http:Listener(serverPort) {
     # + experimentId - the id of the experiment to be cloned
     # + exportConfig - configuration of export // TODO
     # + return - export result resource
-    resource function get experiments/[int experimentId]/export(string? exportConfig, http:Caller caller) returns error? {
+    @http:ResourceConfig {
+        consumes: ["application/json"]
+    }
+    resource function post experiments/[int experimentId]/export(@http:Payload database:ExperimentExportConfig exportConfig, http:Caller caller) returns error? {
         http:Response resp = new;
         int exportId;
         transaction {
@@ -998,6 +996,7 @@ service / on new http:Listener(serverPort) {
             resp.setPayload("Something went wrong. Please try again later.");
 
             check caller->respond(resp);
+            return;
         }
 
         resp.statusCode = http:STATUS_ACCEPTED;
@@ -1027,6 +1026,7 @@ service / on new http:Listener(serverPort) {
             resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
             resp.setPayload("Something went wrong. Please try again later.");
             check caller->respond(resp);
+            return;
         }
 
         if exportResult.status == "SUCCESS" {
@@ -1053,7 +1053,6 @@ service / on new http:Listener(serverPort) {
     # + return - export experiment zip
     resource function get experiments/[int experimentId]/export/[int exportId]/result(string? exportConfig, http:Caller caller) returns error? {
         http:Response resp = new;
-        boolean failure = false;
 
         database:ExperimentExportResult exportResult;
         transaction {
@@ -1061,12 +1060,12 @@ service / on new http:Listener(serverPort) {
             check commit;
         } on fail error err {
             log:printError("Could not read export result from db.", 'error = err, stackTrace = err.stackTrace());
-            failure = true;
+            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+            resp.setPayload("Something went wrong. Please try again later.");
+            check caller->respond(resp);
+            return;
         }
         if exportResult.status != "SUCCESS" {
-            failure = true;
-        }
-        if failure {
             resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
             resp.setPayload("Something went wrong. Please try again later.");
             check caller->respond(resp);
@@ -1097,6 +1096,7 @@ service / on new http:Listener(serverPort) {
             resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
             resp.setPayload("Something went wrong. Please try again later.");
             check caller->respond(resp);
+            return;
         }
 
         resp.statusCode = http:STATUS_ACCEPTED;
@@ -1113,44 +1113,48 @@ service / on new http:Listener(serverPort) {
     # + return - json with export status (includes experiment details once successful)
     resource function get experiments/'import/[int importId](http:Request request, http:Caller caller) returns error? {
         http:Response resp = new;
-        boolean failure = false;
-
         database:ExperimentImportResult importResult;
         transaction {
             importResult = check database:getImportResult(importId);
             check commit;
         } on fail error err {
             log:printError("Could not read import result from db.", 'error = err, stackTrace = err.stackTrace());
-            failure = true;
+            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+            resp.setPayload("Something went wrong. Please try again later.");
+            check caller->respond(resp);
+            return;
         }
 
-        if !failure && importResult.status == "SUCCESS" {
+        if importResult.status == "SUCCESS" {
             database:ExperimentFull experimentFull;
             int? experimentId = importResult.experimentId;
             if experimentId == () {
                 log:printError("Experiment import unsuccessful. Status is 'SUCCESS' but could not retrieve experiment id from db.");
-                failure = true;
+                resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+                resp.setPayload("Something went wrong. Please try again later.");
+                check caller->respond(resp);
             } else {
                 transaction {
                     experimentFull = check database:getExperiment(experimentId);
                     check commit;
                 } on fail error err {
                     log:printError("Could not read import result from db.", 'error = err, stackTrace = err.stackTrace());
-                    failure = true;
+                    resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+                    resp.setPayload("Something went wrong. Please try again later.");
+                    check caller->respond(resp);
+                    return;
                 }
-                if !failure {
-                    resp.statusCode = http:STATUS_OK;
-                    resp.setHeader("Content-Type", "application/json");
-                    resp.setPayload({
-                        '\@self: string `${serverHost}/experiments/import/${importId}`,
-                        experimentId: experimentFull.experimentId,
-                        name: experimentFull.name,
-                        description: experimentFull.description,
-                        status: importResult.status
-                    });
-                }
+                resp.statusCode = http:STATUS_OK;
+                resp.setHeader("Content-Type", "application/json");
+                resp.setPayload({
+                    '\@self: string `${serverHost}/experiments/import/${importId}`,
+                    experimentId: experimentFull.experimentId,
+                    name: experimentFull.name,
+                    description: experimentFull.description,
+                    status: importResult.status
+                });
             }
-        } else if !failure {
+        } else {
             resp.statusCode = http:STATUS_OK;
             resp.setHeader("Content-Type", "application/json");
             resp.setPayload({
@@ -1158,11 +1162,6 @@ service / on new http:Listener(serverPort) {
                 importId: importId,
                 status: importResult.status
             });
-        }
-
-        if failure {
-            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
-            resp.setPayload("Something went wrong. Please try again later.");
         }
         check caller->respond(resp);
     }

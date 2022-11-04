@@ -23,7 +23,7 @@ FROM eclipse-temurin:11-jre
 LABEL org.opencontainers.image.source="https://github.com/UST-QuAntiL/qhana-backend"
 
 RUN apt-get -y update && apt-get install -y sqlite3
-RUN apt-get -y update && apt-get install unzip && apt-get install zip
+RUN apt-get -y update && apt-get install unzip zip
 
 # create unpriviledged user
 RUN useradd ballerina

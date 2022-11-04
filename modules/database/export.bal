@@ -26,12 +26,39 @@ import ballerina/mime;
 // Types ///////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
+# Record for configuring experiment export 
+#
+# TODO
+public type ExperimentExportConfig record {|
+    string test; // TODO
+|};
+
 # Record for exporting/importing experiment data
 #
 # + dataId - The database id of the data item (used for reference, changer on import)
 public type ExperimentDataExport record {|
     int dataId;
     *ExperimentData;
+|};
+
+# Experiment export record for exporting experiments as a zip.
+#
+# + name - the (file-)name of the experiment zip
+# + location - the path where the data is stored
+public type ExperimentExportZip record {|
+    string name;
+    string location;
+|};
+
+# Experiment export result record for exporting experiments as a zip.
+#
+# + status - status of export
+# + name - the (file-)name of the experiment zip
+# + location - the path where the data is stored
+public type ExperimentExportResult record {|
+    string status;
+    string name;
+    string location;
 |};
 
 # Record for exporting/importing step data
@@ -154,41 +181,6 @@ public isolated transactional function castToTimelineStepExport(TimelineStepFull
     };
 }
 
-# Get the list of (complete) timeline steps from the database for export.
-#
-# + experimentId - The experiment id
-# + return - The list of timpline steps or the encountered error
-public isolated transactional function getTimelineStepListExport(int experimentId) returns TimelineStepFull[]|error {
-    sql:ParameterizedQuery startEndString = ` cast(start as TEXT) AS start, cast(end as TEXT) AS end, `;
-    if configuredDBType != "sqlite" {
-        startEndString = `DATE_FORMAT(start, '%Y-%m-%dT%H:%i:%S') AS start, DATE_FORMAT(end, '%Y-%m-%dT%H:%i:%S') AS end,  `;
-    }
-    stream<TimelineStepSQL, sql:Error?> timelineSteps;
-    timelineSteps = experimentDB->query(sql:queryConcat(
-        `SELECT stepId, experimentId, sequence, `, startEndString, ` status, resultQuality, resultLog, processorName, processorVersion, processorLocation, parameters, parametersContentType, pStart AS progressStart, pTarget AS progressTarget, pValue AS progressValue, pUnit AS progressUnit
-                     FROM TimelineStep WHERE experimentId=${experimentId};`
-    ));
-
-    (TimelineStepSQL|TimelineStepFull)[]|error|() tempList = from var step in timelineSteps
-        select step;
-
-    check timelineSteps.close();
-
-    TimelineStepFull[] stepList = [];
-    if tempList is error {
-        return tempList;
-    } else if tempList is () {
-        return [];
-    } else {
-        // convert timestamps to correct utc type if timestamps come from sqlite
-        foreach var step in tempList {
-            TimelineStepFull stepFull = check castToTimelineStepFull(step);
-            stepList.push(stepFull);
-        }
-    }
-    return stepList;
-}
-
 public isolated transactional function getTimelineStepDataList(int stepId) returns StepDataExport[]|error {
     stream<StepDataExport, sql:Error?> stepDataResult = experimentDB->query(`SELECT dataId, relationType FROM StepData WHERE stepId = ${stepId};`);
     StepDataExport[]|error|() stepDataList = from var stepData in stepDataResult
@@ -273,7 +265,7 @@ public isolated transactional function getExperimentDBExport(int experimentId) r
     int[] dataIdList = [];
 
     // iterate over timeline steps
-    TimelineStepFull[] timelineStepListDb = check getTimelineStepListExport(experimentId);
+    TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experimentId, (), (), (), (), allAttributes = true, noLimit = true);
     foreach TimelineStepFull timelineStepDb in timelineStepListDb {
         TimelineStepExport timelineStepExport = check castToTimelineStepExport(timelineStepDb);
         // retrieve associated step data
@@ -319,7 +311,7 @@ public isolated transactional function getExperimentDBExport(int experimentId) r
 # + config - export configuration // TODO
 # + os - os type to determine appropriate exec command
 # + return - record with details about created zip files or error
-public isolated transactional function exportExperiment(int experimentId, string? config, string os) returns ExperimentExportZip|error {
+public isolated transactional function exportExperiment(int experimentId, ExperimentExportConfig config, string os) returns ExperimentExportZip|error {
 
     // TODO: config
 
@@ -365,9 +357,9 @@ public isolated transactional function exportExperiment(int experimentId, string
 
     // add experiment.json
     os:Process result;
-    if os == "linux" {
+    if os.toLowerAscii().includes("linux") {
         result = check os:exec({value: "zip", arguments: ["-j", zipPath, jsonPath]});
-    } else if os == "windows" {
+    } else if os.toLowerAscii().includes("windows") {
         result = check os:exec({value: "powershell", arguments: ["Compress-Archive", "-Update", jsonPath, zipPath]});
     } else {
         return error("Unsupported operating system! At the moment, we support 'linux' and 'windows' for importing/exporting experiments. Please make sure to properly specify the os env var or config entry.");
@@ -377,9 +369,9 @@ public isolated transactional function exportExperiment(int experimentId, string
     // add experiment data files
     foreach string dataFile in dataFileLocations {
         log:printDebug("Add file to zip... " + dataFile);
-        if os == "linux" {
+        if os.toLowerAscii().includes("linux") {
             result = check os:exec({value: "zip", arguments: ["-j", zipPath, dataFile]});
-        } else if os == "windows" {
+        } else if os.toLowerAscii().includes("windows") {
             result = check os:exec({value: "powershell", arguments: ["Compress-Archive", "-Update", dataFile, zipPath]});
         } else {
             return error("Unsupported operating system! At the moment, we support 'linux' and 'windows' for importing/exporting experiments. Please make sure to properly specify the os env var or config entry.");
@@ -397,7 +389,7 @@ public isolated transactional function exportExperiment(int experimentId, string
 # + config - export configuration // TODO
 # + os - os type to determine appropriate exec command
 # + return - id of export job db entry
-public isolated transactional function createExportJob(int experimentId, string? config, string os) returns int|error {
+public isolated transactional function createExportJob(int experimentId, ExperimentExportConfig config, string os) returns int|error {
     // create experiment export db entry
     sql:ParameterizedQuery currentTime = ` strftime('%Y-%m-%dT%H:%M:%S', 'now') `;
     if configuredDBType != "sqlite" {
@@ -447,7 +439,7 @@ public class exportJob {
     *task:Job;
     int exportId;
     int experimentId;
-    string? exportConfig;
+    ExperimentExportConfig exportConfig;
     string configuredOS;
 
     public isolated function execute() {
@@ -475,7 +467,7 @@ public class exportJob {
         }
     }
 
-    isolated function init(int exportId, int experimentId, string? exportConfig, string configuredOS) {
+    isolated function init(int exportId, int experimentId, ExperimentExportConfig exportConfig, string configuredOS) {
         self.exportId = exportId;
         self.experimentId = experimentId;
         self.exportConfig = exportConfig;
