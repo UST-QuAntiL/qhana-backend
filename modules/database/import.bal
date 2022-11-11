@@ -291,10 +291,10 @@ public class importJob {
                     SET status="FAILURE"
                 WHERE importId = ${self.importId};`
             );
-            if res is error {
-                log:printError("Importing experiment unsuccessful. Updating ExperimentImport unsuccessful! Failure will not be seen from the outside.", 'error = err, stackTrace = err.stackTrace());
-            }
             log:printError("Importing experiment unsuccessful.", 'error = err, stackTrace = err.stackTrace());
+            if res is error {
+                log:printError("While processing an error during the experiment import another error occurred: updating ExperimentImport unsuccessful! Failure will not be seen from the outside.", 'error = res, stackTrace = res.stackTrace());
+            }
         }
     }
 

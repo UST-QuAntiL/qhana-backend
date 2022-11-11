@@ -16,6 +16,21 @@ import ballerina/file;
 import ballerina/os;
 import ballerina/log;
 
+# Prepare dir and make sure that the folder exists.
+#
+# + path - directory path
+# + return - the folder to store experiment data in
+public isolated function ensureDirExists(string path) returns string|error {
+    // TODO: check, joinPath messes up paths in docker
+    // var normalizedPath = check file:normalizePath(path, file:CLEAN);
+    // var abspath = check file:getAbsolutePath(normalizedPath);
+    var abspath = check file:getAbsolutePath(path);
+    if !(check file:test(abspath, file:EXISTS)) {
+        check file:createDir(abspath, file:RECURSIVE);
+    }
+    return abspath;
+}
+
 # Prepare the storage location and make sure that the folder exists.
 #
 # + experimentId - the id of the experiment to create a folder for
@@ -27,10 +42,7 @@ public isolated function prepareStorageLocation(int experimentId, string storage
     // var normalizedPath = check file:normalizePath(relPath, file:CLEAN);
     // var abspath = check file:getAbsolutePath(normalizedPath);
     var abspath = check file:getAbsolutePath(storageLocation + "/" + string `${experimentId}`);
-    if !(check file:test(abspath, file:EXISTS)) {
-        check file:createDir(abspath, file:RECURSIVE);
-    }
-    return abspath;
+    return ensureDirExists(abspath);
 }
 
 # Unzip file
@@ -64,5 +76,21 @@ public isolated function wipeDir(string path) returns error? {
     var x = file:createDir(path);
     if x is error {
         log:printDebug("Creating dir unsuccessful. Continue anyways...");
+    }
+}
+
+# Extract filename from path (last segment of path)
+#
+# + path - path to file
+# + return - filename or error
+public isolated function extractFilename(string path) returns string|error {
+    int? index = path.lastIndexOf("/");
+    if index is () {
+        index = path.lastIndexOf("\\");
+    }
+    if index is () {
+        return path; // assume that path is filename
+    } else {
+        return path.substring(index + 1, path.length());
     }
 }

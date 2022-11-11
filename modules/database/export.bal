@@ -308,10 +308,11 @@ public isolated transactional function getExperimentDBExport(int experimentId) r
 # Prepare zip file for export of an experiment.
 #
 # + experimentId - experiment id of the new (cloned) experiment
+# + exportId - export id
 # + config - export configuration // TODO
 # + os - os type to determine appropriate exec command
 # + return - record with details about created zip files or error
-public isolated transactional function exportExperiment(int experimentId, ExperimentExportConfig config, string os) returns ExperimentExportZip|error {
+public isolated transactional function exportExperiment(int experimentId, int exportId, ExperimentExportConfig config, string os) returns ExperimentExportZip|error {
 
     // TODO: config
 
@@ -321,28 +322,16 @@ public isolated transactional function exportExperiment(int experimentId, Experi
     ExperimentDataExport[] experimentDataList = experimentComplete.experimentDataList;
     foreach var experimentData in experimentDataList {
         string location = experimentData.location;
-
-        // remove path from file location
-        int? index = location.lastIndexOf("/");
-        if index is () {
-            index = location.lastIndexOf("\\");
-        }
-        if index is () {
-            return error("Unable to determine relative file location.");
-        } else {
-            experimentData.location = location.substring(index + 1, location.length()); // only file name
-            var abspath = check file:getAbsolutePath("experimentData/" + experimentId.toString() + "/" + experimentData.location);
-            log:printInfo("Add file " + abspath + "..."); // TODO: remove
-            dataFileLocations.push(abspath);
-        }
+        experimentData.location = check extractFilename(location); // only file name
+        var abspath = check file:getAbsolutePath("experimentData/" + experimentId.toString() + "/" + experimentData.location);
+        log:printInfo("Add file " + abspath + "..."); // TODO: move to debug
+        dataFileLocations.push(abspath);
     }
 
-    // string tmpDir = check file:createTempDir();
-    if !(check file:test("tmp", file:EXISTS)) {
-        check file:createDir("tmp", file:RECURSIVE);
-    }
+    // TODO: create real tmp dir
+    var tmpDir = check ensureDirExists("tmp") + "/" + exportId.toString();
     json experimentCompleteJson = experimentComplete;
-    string jsonFile = "tmp/experiment.json";
+    string jsonFile = tmpDir + "/experiment.json"; // TODO: change to joinPath
     var jsonPath = check file:getAbsolutePath(jsonFile);
     if check file:test(jsonPath, file:EXISTS) {
         check file:remove(jsonPath);
@@ -351,8 +340,8 @@ public isolated transactional function exportExperiment(int experimentId, Experi
     check io:fileWriteJson(jsonPath, experimentCompleteJson);
 
     // create zip-  add all files (experiment file(s) + data files) to ZIP
-    string zipFileName = regex:replaceAll(experimentComplete.experiment.name, "\\s+", "-") + ".zip";
-    var zipPath = check file:getAbsolutePath("tmp/" + zipFileName);
+    string zipFileName = regex:replaceAll(experimentComplete.experiment.name, "[\\s+\\\\/:<>\\|\\?\\*]", "-") + ".zip";
+    var zipPath = check file:getAbsolutePath(tmpDir + "/" + zipFileName); // TODO: change to joinPath
     log:printInfo("Create zip " + zipPath + " ...");
 
     // add experiment.json
@@ -402,7 +391,6 @@ public isolated transactional function createExportJob(int experimentId, Experim
         fail error("Expected the expert Id back!");
     }
     int intExportId = check exportId.ensureType();
-    // TODO: maybe generate a secure importId instead of using autoincremented ints
 
     // start long-running export task 
     _ = check task:scheduleOneTimeJob(new exportJob(intExportId, experimentId, config, os), time:utcToCivil(time:utcAddSeconds(time:utcNow(), 1)));
@@ -445,7 +433,7 @@ public class exportJob {
     public isolated function execute() {
         transaction {
             ExperimentExportZip experimentZip;
-            experimentZip = check exportExperiment(self.experimentId, self.exportConfig, self.configuredOS);
+            experimentZip = check exportExperiment(self.experimentId, self.exportId, self.exportConfig, self.configuredOS);
 
             _ = check experimentDB->execute(
                 `UPDATE ExperimentExport 
