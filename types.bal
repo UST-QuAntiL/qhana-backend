@@ -255,9 +255,9 @@ public type TimelineStepMinResponse record {|
 public type TimelineStepResponse record {|
     *TimelineStepMinResponse;
     string resultLog;
-    database:ExperimentDataReference[] inputData;
+    (database:TypedExperimentDataReference|database:ExperimentDataReference)[] inputData;
     string[] inputDataLinks;
-    database:ExperimentDataReference[] outputData;
+    database:TypedExperimentDataReference[] outputData;
     string[] outputDataLinks;
     TimelineSubstepResponseWithoutParams[]? substeps = ();
 |};
@@ -400,8 +400,8 @@ public isolated function mapToTimelineStepMinResponse(database:TimelineStepFull 
 public isolated function mapToTimelineStepResponse(
         database:TimelineStepWithParams step,
         database:TimelineSubstepSQL[]? substeps,
-        database:ExperimentDataReference[] inputData = [],
-        database:ExperimentDataReference[] outputData = []
+        (database:TypedExperimentDataReference|database:ExperimentDataReference)[] inputData = [],
+        database:TypedExperimentDataReference[] outputData = []
 ) returns TimelineStepResponse {
     var end = step.end;
     var log = step.resultLog;

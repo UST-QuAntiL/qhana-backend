@@ -618,8 +618,8 @@ service / on new http:Listener(serverPort) {
             return <http:BadRequest>{body: "Cannot retrieve a negative page number!"};
         }
 
-        if (item\-count < 5 || item\-count > 500) {
-            return <http:BadRequest>{body: "Item count must be between 5 and 500 (both inclusive)!"};
+        if (item\-count < 1 || item\-count > 500) {
+            return <http:BadRequest>{body: "Item count must be between 1 and 500 (both inclusive)!"};
         }
 
         int intSort = (sort is ()) ? 1 : sort;
@@ -664,8 +664,8 @@ service / on new http:Listener(serverPort) {
         database:ExperimentDataReference[] inputData;
 
         transaction {
-            inputData = check trap from var inputUrl in stepData.inputData
-                select checkpanic mapFileUrlToDataRef(experimentId, inputUrl); // FIXME move back to check if https://github.com/ballerina-platform/ballerina-lang/issues/34894 is resolved
+            inputData = from var inputUrl in stepData.inputData
+                select check mapFileUrlToDataRef(experimentId, inputUrl);
             createdStep = check database:createTimelineStep(
                 experimentId = experimentId,
                 parameters = stepData.parameters,
@@ -702,8 +702,8 @@ service / on new http:Listener(serverPort) {
     # + return - the requested timeline step resource
     resource function get experiments/[int experimentId]/timeline/[int timelineStepSequence]() returns TimelineStepResponse|http:InternalServerError {
         database:TimelineStepWithParams step;
-        database:ExperimentDataReference[] inputData;
-        database:ExperimentDataReference[] outputData;
+        database:TypedExperimentDataReference[] inputData;
+        database:TypedExperimentDataReference[] outputData;
         database:TimelineSubstepSQL[] substeps;
         transaction {
             step = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStepSequence);
