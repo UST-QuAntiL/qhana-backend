@@ -94,3 +94,25 @@ public isolated function extractFilename(string path) returns string|error {
         return path.substring(index + 1, path.length());
     }
 }
+
+# Get temporary dir 
+#
+# + os - configured os
+# + return - tmp dir
+public isolated function getTmpDir(string os) returns string {
+    if os.toLowerAscii().includes("linux") {
+        return "/tmp";
+    } else if os.toLowerAscii().includes("windows") {
+        var tmpBase = os:getEnv("LocalAppData");
+        var tmpDir = file:getAbsolutePath(tmpBase + "/" + "Temp");
+        if tmpDir is error {
+            log:printError("Could not access windows tmp directory... create local tmp dir instead.");
+            return "tmp";
+        } else {
+            return tmpDir;
+        }
+    } else {
+        log:printError("Unsupported operating system! At the moment, we support 'linux' and 'windows' for importing/exporting experiments. Please make sure to properly specify the os env var or config entry. Will just create local tmp dir.");
+        return "tmp";
+    }
+}

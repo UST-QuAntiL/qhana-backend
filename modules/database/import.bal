@@ -234,7 +234,8 @@ public isolated transactional function createImportJob(string storageLocation, s
 
     stream<byte[], io:Error?> streamer = check request.getByteStream();
     // create/renew tmp dir
-    var zipLocation = check file:getAbsolutePath("tmp/import-" + intImportId.toString());
+    var tmpDir = getTmpDir(configuredOS);
+    var zipLocation = check file:getAbsolutePath(tmpDir + "/import-" + intImportId.toString());
     check wipeDir(zipLocation);
 
     // write zip file to file system

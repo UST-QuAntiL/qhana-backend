@@ -28,7 +28,7 @@ import ballerina/mime;
 
 # Record for configuring experiment export 
 #
-# TODO
+# + test - some config field
 public type ExperimentExportConfig record {|
     string test; // TODO
 |};
@@ -323,25 +323,25 @@ public isolated transactional function exportExperiment(int experimentId, int ex
         string location = experimentData.location;
         experimentData.location = check extractFilename(location); // only file name
         var abspath = check file:getAbsolutePath("experimentData/" + experimentId.toString() + "/" + experimentData.location);
-        log:printInfo("Add file " + abspath + "..."); // TODO: move to debug
+        log:printDebug("Add file " + abspath + "..."); // TODO: move to debug
         dataFileLocations.push(abspath);
     }
 
-    // TODO: create real tmp dir
-    var tmpDir = check ensureDirExists("tmp/export" + "-" + exportId.toString());
+    var tmpDirBase = getTmpDir(os);
+    var tmpDir = check ensureDirExists(tmpDirBase + "/export" + "-" + exportId.toString());
     json experimentCompleteJson = experimentComplete;
     string jsonFile = tmpDir + "/experiment.json"; // TODO: change to joinPath
     var jsonPath = check file:getAbsolutePath(jsonFile);
     if check file:test(jsonPath, file:EXISTS) {
         check file:remove(jsonPath);
     }
-    log:printInfo("Write " + jsonPath + " ...");
+    log:printDebug("Write " + jsonPath + " ...");
     check io:fileWriteJson(jsonPath, experimentCompleteJson);
 
     // create zip-  add all files (experiment file(s) + data files) to ZIP
     string zipFileName = regex:replaceAll(experimentComplete.experiment.name, "[\\s+\\\\/:<>\\|\\?\\*]", "-") + ".zip";
     var zipPath = check file:getAbsolutePath(tmpDir + "/" + zipFileName); // TODO: change to joinPath
-    log:printInfo("Create zip " + zipPath + " ...");
+    log:printDebug("Create zip " + zipPath + " ...");
 
     check zipExperiment(zipPath, jsonPath, dataFileLocations, os);
 
