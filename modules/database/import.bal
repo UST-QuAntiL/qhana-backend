@@ -158,7 +158,9 @@ public isolated transactional function importExperimentData(ExperimentFull exper
         // create folder for experimentData and copy data files there
         string fileId = experimentData.location;
         var filePath = check file:getAbsolutePath(zipLocation + "/" + fileId);
-        check file:copy(filePath, dataStorage, file:REPLACE_EXISTING);
+        var targetFile = check file:getAbsolutePath(dataStorage + "/" + fileId); // TODO replace with joinPath
+        log:printDebug("Copy " + filePath + " to " + targetFile + "...");
+        check file:copy(filePath, targetFile, file:REPLACE_EXISTING);
 
         // replace data location with new absolute location
         experimentData.location = filePath;

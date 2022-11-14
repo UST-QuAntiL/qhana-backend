@@ -315,7 +315,6 @@ public isolated transactional function getExperimentDBExport(int experimentId) r
 public isolated transactional function exportExperiment(int experimentId, int exportId, ExperimentExportConfig config, string os) returns ExperimentExportZip|error {
 
     // TODO: config
-
     ExperimentCompleteExport experimentComplete = check getExperimentDBExport(experimentId);
     // data files
     string[] dataFileLocations = [];
@@ -329,7 +328,7 @@ public isolated transactional function exportExperiment(int experimentId, int ex
     }
 
     // TODO: create real tmp dir
-    var tmpDir = check ensureDirExists("tmp") + "/" + exportId.toString();
+    var tmpDir = check ensureDirExists("tmp/export" + "-" + exportId.toString());
     json experimentCompleteJson = experimentComplete;
     string jsonFile = tmpDir + "/experiment.json"; // TODO: change to joinPath
     var jsonPath = check file:getAbsolutePath(jsonFile);
@@ -344,6 +343,20 @@ public isolated transactional function exportExperiment(int experimentId, int ex
     var zipPath = check file:getAbsolutePath(tmpDir + "/" + zipFileName); // TODO: change to joinPath
     log:printInfo("Create zip " + zipPath + " ...");
 
+    check zipExperiment(zipPath, jsonPath, dataFileLocations, os);
+
+    ExperimentExportZip exportResult = {name: zipFileName, location: zipPath};
+    return exportResult;
+}
+
+# Zip all created export files into one zip file
+#
+# + zipPath - path of zip
+# + jsonPath - path of experiment json
+# + dataFileLocations - paths for data files 
+# + os - os type to determine appropriate exec command
+# + return - error
+public isolated transactional function zipExperiment(string zipPath, string jsonPath, string[] dataFileLocations, string os) returns error? {
     // add experiment.json
     os:Process result;
     if os.toLowerAscii().includes("linux") {
@@ -367,9 +380,6 @@ public isolated transactional function exportExperiment(int experimentId, int ex
         }
         _ = check result.waitForExit();
     }
-
-    ExperimentExportZip exportResult = {name: zipFileName, location: zipPath};
-    return exportResult;
 }
 
 # Create and start a long running background task for experiment export and a corresponding db entry.

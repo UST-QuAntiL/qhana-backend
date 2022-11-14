@@ -75,7 +75,7 @@ public isolated function wipeDir(string path) returns error? {
     }
     var x = file:createDir(path);
     if x is error {
-        log:printDebug("Creating dir unsuccessful. Continue anyways...");
+        log:printDebug("Creating dir " + path + "unsuccessful. Continue anyways...");
     }
 }
 
