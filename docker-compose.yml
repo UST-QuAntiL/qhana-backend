@@ -20,7 +20,7 @@ services:
       QHANA_PLUGIN_RUNNERS: '["http://localhost:5005/"]'
       QHANA_PLUGINS: '[]'
       WAIT_HOSTS: 'db:3306'
-      OS: 'linux'
+      OS_TYPE: 'linux'
     ports:
       - 9090:9090
     depends_on:

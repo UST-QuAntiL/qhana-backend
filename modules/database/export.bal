@@ -311,8 +311,9 @@ public isolated transactional function getExperimentDBExport(int experimentId) r
 # + exportId - export id
 # + config - export configuration // TODO
 # + os - os type to determine appropriate exec command
+# + storageLocation - storage location
 # + return - record with details about created zip files or error
-public isolated transactional function exportExperiment(int experimentId, int exportId, ExperimentExportConfig config, string os) returns ExperimentExportZip|error {
+public isolated transactional function exportExperiment(int experimentId, int exportId, ExperimentExportConfig config, string os, string storageLocation) returns ExperimentExportZip|error {
 
     // TODO: config
     ExperimentCompleteExport experimentComplete = check getExperimentDBExport(experimentId);
@@ -322,30 +323,33 @@ public isolated transactional function exportExperiment(int experimentId, int ex
     foreach var experimentData in experimentDataList {
         string location = experimentData.location;
         experimentData.location = check extractFilename(location); // only file name
-        var abspath = check file:getAbsolutePath("experimentData/" + experimentId.toString() + "/" + experimentData.location);
+        var path = check file:joinPath(storageLocation, experimentId.toString(), experimentData.location);
+        var abspath = check file:getAbsolutePath(path);
         log:printDebug("Add file " + abspath + "..."); // TODO: move to debug
         dataFileLocations.push(abspath);
     }
 
     var tmpDirBase = getTmpDir(os);
-    var tmpDir = check ensureDirExists(tmpDirBase + "/export" + "-" + exportId.toString());
+    var tmpDir = check file:joinPath(tmpDirBase, "export-" + exportId.toString());
+    tmpDir = check ensureDirExists(tmpDir);
     json experimentCompleteJson = experimentComplete;
-    string jsonFile = tmpDir + "/experiment.json"; // TODO: change to joinPath
+    string jsonFile = check file:joinPath(tmpDir, "experiment.json");
     var jsonPath = check file:getAbsolutePath(jsonFile);
     if check file:test(jsonPath, file:EXISTS) {
         check file:remove(jsonPath);
     }
-    log:printDebug("Write " + jsonPath + " ...");
+    log:printInfo("Write " + jsonPath + " ..."); // TODO: change to debug
     check io:fileWriteJson(jsonPath, experimentCompleteJson);
 
     // create zip-  add all files (experiment file(s) + data files) to ZIP
     string zipFileName = regex:replaceAll(experimentComplete.experiment.name, "[\\s+\\\\/:<>\\|\\?\\*]", "-") + ".zip";
-    var zipPath = check file:getAbsolutePath(tmpDir + "/" + zipFileName); // TODO: change to joinPath
-    log:printDebug("Create zip " + zipPath + " ...");
+    var zipPath = check file:joinPath(tmpDir, zipFileName);
+    var zipPathAbs = check file:getAbsolutePath(zipPath);
+    log:printInfo("Create zip " + zipPathAbs + " ..."); // TODO: change to debug
 
-    check zipExperiment(zipPath, jsonPath, dataFileLocations, os);
+    check zipExperiment(zipPathAbs, jsonPath, dataFileLocations, os);
 
-    ExperimentExportZip exportResult = {name: zipFileName, location: zipPath};
+    ExperimentExportZip exportResult = {name: zipFileName, location: zipPathAbs};
     return exportResult;
 }
 
@@ -359,24 +363,26 @@ public isolated transactional function exportExperiment(int experimentId, int ex
 public isolated transactional function zipExperiment(string zipPath, string jsonPath, string[] dataFileLocations, string os) returns error? {
     // add experiment.json
     os:Process result;
-    if os.toLowerAscii().includes("linux") {
-        result = check os:exec({value: "zip", arguments: ["-j", zipPath, jsonPath]});
-    } else if os.toLowerAscii().includes("windows") {
+    if os.toLowerAscii().includes("windows") {
         result = check os:exec({value: "powershell", arguments: ["Compress-Archive", "-Update", jsonPath, zipPath]});
     } else {
-        return error("Unsupported operating system! At the moment, we support 'linux' and 'windows' for importing/exporting experiments. Please make sure to properly specify the os env var or config entry.");
+        if !os.toLowerAscii().includes("linux") {
+            log:printError("Unsupported os type (" + os + ") for file system manipulation (zipExperiment). Attempt to use linux syntax...");
+        }
+        result = check os:exec({value: "zip", arguments: ["-j", zipPath, jsonPath]});
     }
     _ = check result.waitForExit();
 
     // add experiment data files
     foreach string dataFile in dataFileLocations {
         log:printDebug("Add file to zip... " + dataFile);
-        if os.toLowerAscii().includes("linux") {
-            result = check os:exec({value: "zip", arguments: ["-j", zipPath, dataFile]});
-        } else if os.toLowerAscii().includes("windows") {
+        if os.toLowerAscii().includes("windows") {
             result = check os:exec({value: "powershell", arguments: ["Compress-Archive", "-Update", dataFile, zipPath]});
         } else {
-            return error("Unsupported operating system! At the moment, we support 'linux' and 'windows' for importing/exporting experiments. Please make sure to properly specify the os env var or config entry.");
+            if !os.toLowerAscii().includes("linux") {
+                log:printError("Unsupported os type (" + os + ") for file system manipulation (zipExperiment). Attempt to use linux syntax...");
+            }
+            result = check os:exec({value: "zip", arguments: ["-j", zipPath, dataFile]});
         }
         _ = check result.waitForExit();
     }
@@ -387,8 +393,9 @@ public isolated transactional function zipExperiment(string zipPath, string json
 # + experimentId - experiment id
 # + config - export configuration // TODO
 # + os - os type to determine appropriate exec command
+# + storageLocation - storage location
 # + return - id of export job db entry
-public isolated transactional function createExportJob(int experimentId, ExperimentExportConfig config, string os) returns int|error {
+public isolated transactional function createExportJob(int experimentId, ExperimentExportConfig config, string os, string storageLocation) returns int|error {
     // create experiment export db entry
     sql:ParameterizedQuery currentTime = ` strftime('%Y-%m-%dT%H:%M:%S', 'now') `;
     if configuredDBType != "sqlite" {
@@ -403,7 +410,7 @@ public isolated transactional function createExportJob(int experimentId, Experim
     int intExportId = check exportId.ensureType();
 
     // start long-running export task 
-    _ = check task:scheduleOneTimeJob(new exportJob(intExportId, experimentId, config, os), time:utcToCivil(time:utcAddSeconds(time:utcNow(), 1)));
+    _ = check task:scheduleOneTimeJob(new exportJob(intExportId, experimentId, config, os, storageLocation), time:utcToCivil(time:utcAddSeconds(time:utcNow(), 1)));
 
     return intExportId;
     // TODO: garbage cleaning for import/export experiments
@@ -439,11 +446,12 @@ public class exportJob {
     int experimentId;
     ExperimentExportConfig exportConfig;
     string configuredOS;
+    string storageLocation;
 
     public isolated function execute() {
         transaction {
             ExperimentExportZip experimentZip;
-            experimentZip = check exportExperiment(self.experimentId, self.exportId, self.exportConfig, self.configuredOS);
+            experimentZip = check exportExperiment(self.experimentId, self.exportId, self.exportConfig, self.configuredOS, self.storageLocation);
 
             _ = check experimentDB->execute(
                 `UPDATE ExperimentExport 
@@ -465,11 +473,12 @@ public class exportJob {
         }
     }
 
-    isolated function init(int exportId, int experimentId, ExperimentExportConfig exportConfig, string configuredOS) {
+    isolated function init(int exportId, int experimentId, ExperimentExportConfig exportConfig, string configuredOS, string storageLocation) {
         self.exportId = exportId;
         self.experimentId = experimentId;
         self.exportConfig = exportConfig;
         self.configuredOS = configuredOS;
+        self.storageLocation = storageLocation;
     }
 }
 

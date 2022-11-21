@@ -21,10 +21,8 @@ import ballerina/log;
 # + path - directory path
 # + return - the folder to store experiment data in
 public isolated function ensureDirExists(string path) returns string|error {
-    // TODO: check, joinPath messes up paths in docker
-    // var normalizedPath = check file:normalizePath(path, file:CLEAN);
-    // var abspath = check file:getAbsolutePath(normalizedPath);
-    var abspath = check file:getAbsolutePath(path);
+    var normalizedPath = check file:normalizePath(path, file:CLEAN);
+    var abspath = check file:getAbsolutePath(normalizedPath);
     if !(check file:test(abspath, file:EXISTS)) {
         check file:createDir(abspath, file:RECURSIVE);
     }
@@ -37,11 +35,9 @@ public isolated function ensureDirExists(string path) returns string|error {
 # + storageLocation - location of the storage
 # + return - the folder to store experiment data in
 public isolated function prepareStorageLocation(int experimentId, string storageLocation) returns string|error {
-    // TODO: check, joinPath messes up paths in docker
-    // var relPath = check file:joinPath(storageLocation, string `${experimentId}`);
-    // var normalizedPath = check file:normalizePath(relPath, file:CLEAN);
-    // var abspath = check file:getAbsolutePath(normalizedPath);
-    var abspath = check file:getAbsolutePath(storageLocation + "/" + string `${experimentId}`);
+    var relPath = check file:joinPath(storageLocation, string `${experimentId}`);
+    var normalizedPath = check file:normalizePath(relPath, file:CLEAN);
+    var abspath = check file:getAbsolutePath(normalizedPath);
     return ensureDirExists(abspath);
 }
 
@@ -55,12 +51,13 @@ public isolated function prepareStorageLocation(int experimentId, string storage
 # + return - error 
 public isolated function unzipFile(string zipPath, string targetDir, string os) returns error? {
     os:Process result;
-    if os.toLowerAscii().includes("linux") {
-        result = check os:exec({value: "unzip", arguments: [zipPath, "-d", targetDir]});
-    } else if os.toLowerAscii().includes("windows") {
+    if os.toLowerAscii().includes("windows") {
         result = check os:exec({value: "powershell", arguments: ["Expand-Archive", "-DestinationPath", targetDir, zipPath]});
     } else {
-        return error("Unsupported operating system! At the moment, we support 'linux' and 'windows' for importing/exporting experiments. Please make sure to properly specify the os env var or config entry.");
+        if !os.toLowerAscii().includes("linux") {
+            log:printError("Unsupported os type (" + os + ") for file system manipulation (unzipFile). Attempt to use linux syntax...");
+        }
+        result = check os:exec({value: "unzip", arguments: [zipPath, "-d", targetDir]});
     }
     _ = check result.waitForExit();
 }
@@ -100,11 +97,9 @@ public isolated function extractFilename(string path) returns string|error {
 # + os - configured os
 # + return - tmp dir
 public isolated function getTmpDir(string os) returns string {
-    if os.toLowerAscii().includes("linux") {
-        return "/tmp";
-    } else if os.toLowerAscii().includes("windows") {
+    if os.toLowerAscii().includes("windows") {
         var tmpBase = os:getEnv("LocalAppData");
-        var tmpDir = file:getAbsolutePath(tmpBase + "/" + "Temp");
+        var tmpDir = file:joinPath(tmpBase, "Temp");
         if tmpDir is error {
             log:printError("Could not access windows tmp directory... create local tmp dir instead.");
             return "tmp";
@@ -112,7 +107,9 @@ public isolated function getTmpDir(string os) returns string {
             return tmpDir;
         }
     } else {
-        log:printError("Unsupported operating system! At the moment, we support 'linux' and 'windows' for importing/exporting experiments. Please make sure to properly specify the os env var or config entry. Will just create local tmp dir.");
-        return "tmp";
+        if !os.toLowerAscii().includes("linux") {
+            log:printError("Unsupported os type (" + os + ") for file system manipulation (getTmpDir). Attempt to use linux syntax...");
+        }
+        return "/tmp";
     }
 }

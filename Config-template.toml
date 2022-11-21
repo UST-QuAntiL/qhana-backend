@@ -10,7 +10,7 @@ port = 9090
 corsDomains = ["http://localhost:4200", "*"]
 
 # the host os 
-os = "linux"
+os_type = "linux"
 
 [qhana.qhana_backend.database]
 # make sure to include all config keys! (the headlines in [])

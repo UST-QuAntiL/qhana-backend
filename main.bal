@@ -20,15 +20,19 @@ import qhana_backend.database;
 
 // start configuration values
 # User configurable os of the host.
-# Can also be configured by setting the `OS` environment variable.
-configurable string os = "linux";
+# Can also be configured by setting the `OS_TYPE` environment variable.
+configurable string os_type = "linux";
 
-# Get the os from the `OS` environment variable.
-# If not present use the configurable variable `os` as fallback.
+# Get the os from the `OS_TYPE` environment variable.
+# If not present use the configurable variable `os_type` as fallback.
 #
 # + return - the configured os
 function getOS() returns string {
-    return os:getEnv("OS");
+    string os = os:getEnv("OS_TYPE");
+    if os == "" {
+        return os_type;
+    }
+    return os;
 }
 
 # The final configured os.
@@ -987,7 +991,7 @@ service / on new http:Listener(serverPort) {
         http:Response resp = new;
         int exportId;
         transaction {
-            exportId = check database:createExportJob(experimentId, exportConfig, configuredOS);
+            exportId = check database:createExportJob(experimentId, exportConfig, configuredOS, storageLocation);
             check commit;
         } on fail error err {
             log:printError("Exporting experiment unsuccessful.", 'error = err, stackTrace = err.stackTrace());

@@ -157,10 +157,12 @@ public isolated transactional function importExperimentData(ExperimentFull exper
     foreach ExperimentDataExport experimentData in experimentComplete.experimentDataList {
         // create folder for experimentData and copy data files there
         string fileId = experimentData.location;
-        var filePath = check file:getAbsolutePath(zipLocation + "/" + fileId);
-        var targetFile = check file:getAbsolutePath(dataStorage + "/" + fileId); // TODO replace with joinPath
-        log:printDebug("Copy " + filePath + " to " + targetFile + "...");
-        check file:copy(filePath, targetFile, file:REPLACE_EXISTING);
+        var filePath = check file:joinPath(zipLocation, fileId);
+        var filePathAbs = check file:getAbsolutePath(filePath);
+        var targetFilePath = check file:joinPath(dataStorage, fileId);
+        var targetFile = check file:getAbsolutePath(targetFilePath);
+        log:printDebug("Copy " + filePathAbs + " to " + targetFile + "...");
+        check file:copy(filePathAbs, targetFile, file:REPLACE_EXISTING);
 
         // replace data location with new absolute location
         experimentData.location = filePath;
@@ -199,8 +201,9 @@ public isolated transactional function importExperiment(string zipPath, string s
 
     // read experiment.json
     string jsonFile = "experiment.json";
-    var jsonPath = check file:getAbsolutePath(zipLocation + "/" + jsonFile);
-    json experimentCompleteJson = check io:fileReadJson(jsonPath);
+    var jsonPath = check file:joinPath(zipLocation, jsonFile);
+    var jsonPathAbs = check file:getAbsolutePath(jsonPath);
+    json experimentCompleteJson = check io:fileReadJson(jsonPathAbs);
     ExperimentCompleteExport experimentComplete = check experimentCompleteJson.cloneWithType(ExperimentCompleteExport);
 
     ExperimentFull experiment = check createExperiment(experimentComplete.experiment);
@@ -235,12 +238,12 @@ public isolated transactional function createImportJob(string storageLocation, s
     stream<byte[], io:Error?> streamer = check request.getByteStream();
     // create/renew tmp dir
     var tmpDir = getTmpDir(configuredOS);
-    var zipLocation = check file:getAbsolutePath(tmpDir + "/import-" + intImportId.toString());
+    var zipLocation = check file:joinPath(tmpDir, "import-" + intImportId.toString());
+    zipLocation = check file:getAbsolutePath(zipLocation);
     check wipeDir(zipLocation);
 
     // write zip file to file system
-    // var zipPath = check file:joinPath(zipLocation, "import.zip"); // TODO: check, joinPath messes up paths in docker
-    string zipPath = zipLocation + "/import.zip";
+    var zipPath = check file:joinPath(zipLocation, "import.zip");
     check io:fileWriteBlocksFromStream(zipPath, streamer);
     check streamer.close();
 

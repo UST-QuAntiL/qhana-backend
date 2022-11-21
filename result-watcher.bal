@@ -295,12 +295,10 @@ isolated class ResultProcessor {
                     http:Response fileResponse = check c->get("");
                     var fileDir = check database:prepareStorageLocation(self.experimentId, storageLocation);
                     var fileId = uuid:createType4AsString();
-                    // var filePath = check file:joinPath(fileDir, fileId); // TODO: check, joinPath messes up paths in docker
-                    string filePath = fileDir + "/" + fileId;
+                    var filePath = check file:joinPath(fileDir, fileId);
                     while check file:test(filePath, file:EXISTS) {
                         fileId = uuid:createType4AsString();
-                        // filePath = check file:joinPath(fileDir, fileId); // TODO: check, joinPath messes up paths in docker
-                        filePath = fileDir + "/" + fileId;
+                        filePath = check file:joinPath(fileDir, fileId);
                     }
                     var filename = output?.name;
                     lock {
