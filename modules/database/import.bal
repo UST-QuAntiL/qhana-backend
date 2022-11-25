@@ -183,7 +183,7 @@ public isolated transactional function importExperimentData(ExperimentFull exper
 public isolated transactional function importTimelineSteps(ExperimentFull experiment, ExperimentCompleteExport experimentComplete, map<int> & readonly dataIdMapping) returns error? {
     int stepSequence = 1;
     foreach TimelineStepExport timelineStep in experimentComplete.timelineSteps {
-        check importTimelineStep(experiment.experimentId, timelineStep, stepSequence, dataIdMapping.cloneReadOnly());
+        check importTimelineStep(experiment.experimentId, timelineStep, stepSequence, dataIdMapping);
         stepSequence += 1;
     }
 }

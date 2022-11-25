@@ -35,10 +35,8 @@ public isolated function ensureDirExists(string path) returns string|error {
 # + storageLocation - location of the storage
 # + return - the folder to store experiment data in
 public isolated function prepareStorageLocation(int experimentId, string storageLocation) returns string|error {
-    var relPath = check file:joinPath(storageLocation, string `${experimentId}`);
-    var normalizedPath = check file:normalizePath(relPath, file:CLEAN);
-    var abspath = check file:getAbsolutePath(normalizedPath);
-    return ensureDirExists(abspath);
+    var path = check file:joinPath(storageLocation, string `${experimentId}`);
+    return ensureDirExists(path);
 }
 
 # Unzip file
@@ -51,10 +49,10 @@ public isolated function prepareStorageLocation(int experimentId, string storage
 # + return - error 
 public isolated function unzipFile(string zipPath, string targetDir, string os) returns error? {
     os:Process result;
-    if os.toLowerAscii().includes("windows") {
+    if os.includes("windows") {
         result = check os:exec({value: "powershell", arguments: ["Expand-Archive", "-DestinationPath", targetDir, zipPath]});
     } else {
-        if !os.toLowerAscii().includes("linux") {
+        if !os.includes("linux") {
             log:printError("Unsupported os type (" + os + ") for file system manipulation (unzipFile). Attempt to use linux syntax...");
         }
         result = check os:exec({value: "unzip", arguments: [zipPath, "-d", targetDir]});
@@ -97,7 +95,7 @@ public isolated function extractFilename(string path) returns string|error {
 # + os - configured os
 # + return - tmp dir
 public isolated function getTmpDir(string os) returns string {
-    if os.toLowerAscii().includes("windows") {
+    if os.includes("windows") {
         var tmpBase = os:getEnv("LocalAppData");
         var tmpDir = file:joinPath(tmpBase, "Temp");
         if tmpDir is error {
@@ -107,7 +105,7 @@ public isolated function getTmpDir(string os) returns string {
             return tmpDir;
         }
     } else {
-        if !os.toLowerAscii().includes("linux") {
+        if !os.includes("linux") {
             log:printError("Unsupported os type (" + os + ") for file system manipulation (getTmpDir). Attempt to use linux syntax...");
         }
         return "/tmp";

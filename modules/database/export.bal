@@ -30,7 +30,7 @@ import ballerina/mime;
 #
 # + test - some config field
 public type ExperimentExportConfig record {|
-    string test; // TODO
+    string test;
 |};
 
 # Record for exporting/importing experiment data
@@ -76,7 +76,7 @@ public type StepDataExport record {|
 # + dataId - The database id of the data item (used for reference, changer on import)n  
 # + relationType - the type of the relation (e.g. input/output) 
 public type SubstepDataExport record {|
-    string substepNr; // TODO not really necessary - maybe remove later when import is done 
+    string substepNr;
     int dataId;
     string relationType;
 |};
@@ -138,7 +138,7 @@ public type TimelineStepBaseExport record {|
 # + stepDataList - list of step data  
 # + timelineSubsteps - list of associated timeline substeps 
 public type TimelineStepExport record {|
-    *TimelineStepBaseExport; // TODO: not sure if this will work due to time:Utc for start and end
+    *TimelineStepBaseExport;
     StepDataExport[] stepDataList;
     TimelineSubstepExport[] timelineSubsteps;
 |};
@@ -169,9 +169,9 @@ public isolated transactional function castToTimelineStepExport(TimelineStepFull
         processorName: step.processorName,
         processorVersion: step.processorVersion,
         processorLocation: step.processorLocation,
-        parameters: step?.parameters, // TODO: on import don't set when nill
+        parameters: step?.parameters,
         parametersContentType: step.parametersContentType,
-        notes: step?.notes, // TODO: on import don't set when nill
+        notes: step?.notes,
         progressStart: step.progressStart,
         progressTarget: step.progressTarget,
         progressValue: step.progressValue,
@@ -265,7 +265,7 @@ public isolated transactional function getExperimentDBExport(int experimentId) r
     int[] dataIdList = [];
 
     // iterate over timeline steps
-    TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experimentId, (), (), (), (), allAttributes = true, noLimit = true);
+    TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experimentId, (), (), (), (), allAttributes = true, 'limit = 10000, noLimit = true);
     foreach TimelineStepFull timelineStepDb in timelineStepListDb {
         TimelineStepExport timelineStepExport = check castToTimelineStepExport(timelineStepDb);
         // retrieve associated step data
@@ -325,7 +325,7 @@ public isolated transactional function exportExperiment(int experimentId, int ex
         experimentData.location = check extractFilename(location); // only file name
         var path = check file:joinPath(storageLocation, experimentId.toString(), experimentData.location);
         var abspath = check file:getAbsolutePath(path);
-        log:printDebug("Add file " + abspath + "..."); // TODO: move to debug
+        log:printDebug("Add file " + abspath + "...");
         dataFileLocations.push(abspath);
     }
 
@@ -338,14 +338,14 @@ public isolated transactional function exportExperiment(int experimentId, int ex
     if check file:test(jsonPath, file:EXISTS) {
         check file:remove(jsonPath);
     }
-    log:printInfo("Write " + jsonPath + " ..."); // TODO: change to debug
+    log:printDebug("Write " + jsonPath + " ...");
     check io:fileWriteJson(jsonPath, experimentCompleteJson);
 
     // create zip-  add all files (experiment file(s) + data files) to ZIP
     string zipFileName = regex:replaceAll(experimentComplete.experiment.name, "[\\s+\\\\/:<>\\|\\?\\*]", "-") + ".zip";
     var zipPath = check file:joinPath(tmpDir, zipFileName);
     var zipPathAbs = check file:getAbsolutePath(zipPath);
-    log:printInfo("Create zip " + zipPathAbs + " ..."); // TODO: change to debug
+    log:printDebug("Create zip " + zipPathAbs + " ...");
 
     check zipExperiment(zipPathAbs, jsonPath, dataFileLocations, os);
 
@@ -363,10 +363,10 @@ public isolated transactional function exportExperiment(int experimentId, int ex
 public isolated transactional function zipExperiment(string zipPath, string jsonPath, string[] dataFileLocations, string os) returns error? {
     // add experiment.json
     os:Process result;
-    if os.toLowerAscii().includes("windows") {
+    if os.includes("windows") {
         result = check os:exec({value: "powershell", arguments: ["Compress-Archive", "-Update", jsonPath, zipPath]});
     } else {
-        if !os.toLowerAscii().includes("linux") {
+        if !os.includes("linux") {
             log:printError("Unsupported os type (" + os + ") for file system manipulation (zipExperiment). Attempt to use linux syntax...");
         }
         result = check os:exec({value: "zip", arguments: ["-j", zipPath, jsonPath]});
@@ -376,10 +376,10 @@ public isolated transactional function zipExperiment(string zipPath, string json
     // add experiment data files
     foreach string dataFile in dataFileLocations {
         log:printDebug("Add file to zip... " + dataFile);
-        if os.toLowerAscii().includes("windows") {
+        if os.includes("windows") {
             result = check os:exec({value: "powershell", arguments: ["Compress-Archive", "-Update", dataFile, zipPath]});
         } else {
-            if !os.toLowerAscii().includes("linux") {
+            if !os.includes("linux") {
                 log:printError("Unsupported os type (" + os + ") for file system manipulation (zipExperiment). Attempt to use linux syntax...");
             }
             result = check os:exec({value: "zip", arguments: ["-j", zipPath, dataFile]});

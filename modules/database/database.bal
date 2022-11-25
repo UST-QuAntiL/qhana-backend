@@ -784,17 +784,18 @@ public isolated transactional function getTimelineStepList(int experimentId, str
     baseQuery = sql:queryConcat(baseQuery, ` FROM TimelineStep `);
 
     sql:ParameterizedQuery sortOrder = sort >= 0 ? ` ASC ` : ` DESC `;
-    sql:ParameterizedQuery limitFilter = ` LIMIT ${'limit} OFFSET ${offset};`;
+    sql:ParameterizedQuery limitFilter = ` LIMIT ${'limit} OFFSET ${offset}`;
     if noLimit {
         // check if < 10000 steps
         int count = check experimentDB->queryRow(sql:queryConcat(
             `SELECT count(*) FROM TimelineStep `,
             timelineStepListFilter(experimentId, pluginName, 'version, status, uncleared\-substep), `;`
         ));
-        if count < 10000 {
-            limitFilter = ` LIMIT ${count};`;
+        if count < 'limit {
+            limitFilter = ` LIMIT ${count}`;
         } else {
-            limitFilter = ``;
+            limitFilter = ` LIMIT ${'limit}`;
+            log:printError(string `Exceeded limit for TimelineStep list query. Limit is set to ${'limit}. Rows matching query: ${count}.` );
         }
     }
     stream<TimelineStepSQL, sql:Error?> timelineSteps;
