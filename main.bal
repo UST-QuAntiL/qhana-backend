@@ -30,7 +30,7 @@ configurable string os_type = "linux";
 function getOS() returns string {
     string os = os:getEnv("OS_TYPE").toLowerAscii();
     if os == "" {
-        return os_type;
+        return os_type.toLowerAscii();
     }
     return os;
 }

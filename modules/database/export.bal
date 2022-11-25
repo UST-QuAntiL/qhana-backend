@@ -258,6 +258,20 @@ public isolated transactional function getExperimentDataExport(int experimentId,
     }
 }
 
+public isolated transactional function getTimelineStepLimit(int experimentId) returns int|error {
+    // check if < 10000 steps
+    int count = check experimentDB->queryRow(sql:queryConcat(
+        `SELECT count(*) FROM TimelineStep `,
+        timelineStepListFilter(experimentId, (), (), (), ()), `;`
+    ));
+    if count > 10000 {
+        log:printError(string `Exceeded limit for TimelineSteps. Limit is set to 10000. Found ${count} steps. Only return 10000 steps.`);
+        count = 10000;
+    }
+    return count;
+
+}
+
 public isolated transactional function getExperimentDBExport(int experimentId) returns ExperimentCompleteExport|error {
     TimelineStepExport[] timelineSteps = [];
     ExperimentDataExport[] experimentDataList = [];
@@ -265,7 +279,8 @@ public isolated transactional function getExperimentDBExport(int experimentId) r
     int[] dataIdList = [];
 
     // iterate over timeline steps
-    TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experimentId, (), (), (), (), allAttributes = true, 'limit = 10000, noLimit = true);
+
+    TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experimentId, (), (), (), (), allAttributes = true, 'limit = check getTimelineStepLimit(experimentId));
     foreach TimelineStepFull timelineStepDb in timelineStepListDb {
         TimelineStepExport timelineStepExport = check castToTimelineStepExport(timelineStepDb);
         // retrieve associated step data

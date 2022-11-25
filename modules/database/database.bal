@@ -767,7 +767,7 @@ public isolated transactional function castToTimelineStepFull(TimelineStepSQL st
 # + sort - 1 for asc sort, -1 for desc sort by step sequence
 # + noLimit - set to retrieve all steps that satisfy match criteria
 # + return - The list of timpline steps or the encountered error
-public isolated transactional function getTimelineStepList(int experimentId, string? pluginName, string? 'version, string? status, int? uncleared\-substep, boolean allAttributes = false, int 'limit = 100, int offset = 0, int sort = 1, boolean noLimit = false) returns TimelineStepFull[]|error {
+public isolated transactional function getTimelineStepList(int experimentId, string? pluginName, string? 'version, string? status, int? uncleared\-substep, boolean allAttributes = false, int 'limit = 100, int offset = 0, int sort = 1) returns TimelineStepFull[]|error {
 
     sql:ParameterizedQuery baseQuery = `SELECT TimelineStep.stepId, experimentId, sequence, `;
     if configuredDBType == "sqlite" {
@@ -784,20 +784,13 @@ public isolated transactional function getTimelineStepList(int experimentId, str
     baseQuery = sql:queryConcat(baseQuery, ` FROM TimelineStep `);
 
     sql:ParameterizedQuery sortOrder = sort >= 0 ? ` ASC ` : ` DESC `;
-    sql:ParameterizedQuery limitFilter = ` LIMIT ${'limit} OFFSET ${offset}`;
-    if noLimit {
-        // check if < 10000 steps
-        int count = check experimentDB->queryRow(sql:queryConcat(
-            `SELECT count(*) FROM TimelineStep `,
-            timelineStepListFilter(experimentId, pluginName, 'version, status, uncleared\-substep), `;`
-        ));
-        if count < 'limit {
-            limitFilter = ` LIMIT ${count}`;
-        } else {
-            limitFilter = ` LIMIT ${'limit}`;
-            log:printError(string `Exceeded limit for TimelineStep list query. Limit is set to ${'limit}. Rows matching query: ${count}.` );
-        }
+    int lim = 'limit;
+    if 'limit > 10000 {
+        log:printError(string `Specified input limit of ${'limit} for TimelineStep list query is too large. Automatically set to 10000.`);
+        lim = 10000;
     }
+    sql:ParameterizedQuery limitFilter = ` LIMIT ${lim} OFFSET ${offset}`;
+
     stream<TimelineStepSQL, sql:Error?> timelineSteps;
     timelineSteps = experimentDB->query(sql:queryConcat(
         baseQuery,
