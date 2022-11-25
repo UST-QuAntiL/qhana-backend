@@ -166,6 +166,18 @@ public type ExperimentDataReference record {|
     int 'version;
 |};
 
+# Database record of references to experiment data.
+#
+# + name - the (file-)name of the experiment data
+# + 'version - the version of the data
+# + 'type - the data type of the data
+# + contentType - the content type of the data
+public type TypedExperimentDataReference record {|
+    *ExperimentDataReference;
+    string 'type;
+    string contentType;
+|};
+
 # Record specifying data and content type tags.
 #
 # + dataType - the data type (what kind of data)
@@ -930,16 +942,16 @@ public isolated transactional function updateTimelineTaskLog(int|TimelineStepFul
             WHERE stepId = ${stepId};`);
 }
 
-public isolated transactional function getStepInputData(int|TimelineStepFull step) returns ExperimentDataReference[]|error {
-    stream<ExperimentDataReference, sql:Error?> inputData;
+public isolated transactional function getStepInputData(int|TimelineStepFull step) returns TypedExperimentDataReference[]|error {
+    stream<TypedExperimentDataReference, sql:Error?> inputData;
 
     var stepId = step is int ? step : step.stepId;
     inputData = experimentDB->query(
-        `SELECT name, version FROM StepData JOIN ExperimentData ON StepData.dataId = ExperimentData.dataId 
+        `SELECT name, version, type, contentType FROM StepData JOIN ExperimentData ON StepData.dataId = ExperimentData.dataId 
          WHERE relationType = "input" and stepId = ${stepId};`
     );
 
-    ExperimentDataReference[]|error? inputDataList = from var row in inputData
+    TypedExperimentDataReference[]|error? inputDataList = from var row in inputData
         select row;
     check inputData.close();
 
@@ -959,16 +971,16 @@ public isolated transactional function saveTimelineStepInputData(int stepId, int
     }
 }
 
-public isolated transactional function getStepOutputData(int|TimelineStepFull step) returns ExperimentDataReference[]|error {
-    stream<ExperimentDataReference, sql:Error?> outputData;
+public isolated transactional function getStepOutputData(int|TimelineStepFull step) returns TypedExperimentDataReference[]|error {
+    stream<TypedExperimentDataReference, sql:Error?> outputData;
 
     var stepId = step is int ? step : step.stepId;
     outputData = experimentDB->query(
-        `SELECT name, version FROM StepData JOIN ExperimentData ON StepData.dataId = ExperimentData.dataId 
+        `SELECT name, version, type, contentType FROM StepData JOIN ExperimentData ON StepData.dataId = ExperimentData.dataId 
          WHERE relationType = "output" and stepId = ${stepId};`
     );
 
-    ExperimentDataReference[]|error? outputDataList = from var row in outputData
+    TypedExperimentDataReference[]|error? outputDataList = from var row in outputData
         select row;
     check outputData.close();
 
