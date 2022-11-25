@@ -447,4 +447,62 @@
 			</delete>
 		</rollback>
 	</changeSet>
+
+	<changeSet id="experiment-export" author="nicolaikrebs">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<tableExists tableName="ExperimentExport" />
+			</not>
+		</preConditions>
+		<createTable tableName="ExperimentExport">
+			<column name="exportId" type="int" autoIncrement="true">
+				<constraints primaryKey="true" nullable="false" />
+			</column>
+			<column name="experimentId" type="int">
+				<constraints nullable="false" />
+			</column>
+			<column name="status" type="varchar(50)" defaultValue="PENDING"></column>
+			<column name="name" type="varchar(500) COLLATION">
+				<constraints nullable="false" />
+			</column>
+			<column name="location" type="text">
+				<constraints nullable="false" />
+			</column>
+			<column name="creationDate" type="datetime">
+				<constraints nullable="false" />
+			</column>
+		</createTable>
+		<rollback>
+			<dropTable tableName="ExperimentExport" />
+		</rollback>
+		<modifySql dbms="sqlite">
+			<replace replace="COLLATION" with="collate nocase" />
+		</modifySql>
+		<modifySql dbms="mariadb">
+			<replace replace="COLLATION" with="collate utf8_unicode_ci" />
+		</modifySql>
+	</changeSet>
+
+	<changeSet id="experiment-import" author="nicolaikrebs">
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<tableExists tableName="ExperimentImport" />
+			</not>
+		</preConditions>
+		<createTable tableName="ExperimentImport">
+			<column name="importId" type="int" autoIncrement="true">
+				<constraints primaryKey="true" nullable="false" />
+			</column>
+			<column name="status" type="varchar(50)" defaultValue="PENDING"></column>
+			<column name="experimentId" type="int">
+				<constraints nullable="true" />
+			</column>
+			<column name="creationTime" type="datetime">
+				<constraints nullable="false" />
+			</column>
+		</createTable>
+		<rollback>
+			<dropTable tableName="ExperimentImport" />
+		</rollback>
+	</changeSet>
 </databaseChangeLog>

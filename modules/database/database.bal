@@ -788,18 +788,25 @@ public isolated transactional function getTimelineStepList(int experimentId, str
     }
     baseQuery = sql:queryConcat(baseQuery, ` status, processorName, processorVersion, processorLocation `);
     if allAttributes {
-        baseQuery = sql:queryConcat(baseQuery, `, resultQuality, resultLog, TimelineSubstep.parameters, TimelineSubstep.parametersContentType, notes `);
+        baseQuery = sql:queryConcat(baseQuery, `, resultQuality, resultLog, TimelineStep.parameters, TimelineStep.parametersContentType, COALESCE(notes, '') as notes `);
     } else {
         baseQuery = sql:queryConcat(baseQuery, `, resultQuality, NULL AS resultLog `);
     }
     baseQuery = sql:queryConcat(baseQuery, ` FROM TimelineStep `);
 
     sql:ParameterizedQuery sortOrder = sort >= 0 ? ` ASC ` : ` DESC `;
+    int lim = 'limit;
+    if 'limit > 10000 {
+        log:printError(string `Specified input limit of ${'limit} for TimelineStep list query is too large. Automatically set to 10000.`);
+        lim = 10000;
+    }
+    sql:ParameterizedQuery limitFilter = ` LIMIT ${lim} OFFSET ${offset}`;
+
     stream<TimelineStepSQL, sql:Error?> timelineSteps;
     timelineSteps = experimentDB->query(sql:queryConcat(
         baseQuery,
         timelineStepListFilter(experimentId, pluginName, 'version, status, uncleared\-substep),
-        ` ORDER BY sequence `, sortOrder, ` LIMIT ${'limit} OFFSET ${offset};`
+        ` ORDER BY sequence `, sortOrder, limitFilter, `;`
     ));
 
     (TimelineStepSQL|TimelineStepFull)[]|error|() tempList = from var step in timelineSteps
@@ -819,7 +826,6 @@ public isolated transactional function getTimelineStepList(int experimentId, str
             stepList.push(stepFull);
         }
     }
-
     return stepList;
 }
 

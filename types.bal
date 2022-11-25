@@ -126,6 +126,22 @@ public isolated function mapToExperimentResponse(database:ExperimentFull experim
     };
 }
 
+# Api response for an experiment export.
+#
+# + exportId - The database id of the import entry
+public type ExportResponse record {|
+    *ApiResponse;
+    int exportId;
+|};
+
+# Api response for an experiment import.
+#
+# + importId - The database id of the import entry
+public type ImportResponse record {|
+    *ApiResponse;
+    int importId;
+|};
+
 ////////////////////////////////////////////////////////////////////////////////
 // Data ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
