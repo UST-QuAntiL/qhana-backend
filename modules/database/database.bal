@@ -155,6 +155,13 @@ public type ExperimentFull record {|
     *Experiment;
 |};
 
+# Record containing the template id of an experiment
+#
+# + templateId - template id
+public type Template record {|
+    string? templateId = ();
+|};
+
 // Data ////////////////////////////////////////////////////////////////////////
 
 # Database record of references to experiment data.
@@ -557,6 +564,36 @@ public isolated transactional function updateExperiment(int experimentId, *Exper
         `UPDATE Experiment SET name=${experiment.name}, description=${experiment.description} WHERE experimentId = ${experimentId};`
     );
     return {experimentId, name: experiment.name, description: experiment.description};
+}
+
+# Update template id of an existing experiment in place in the database.
+#
+# + experimentId - The database id of the experiment to update
+# + template - The updated template info for the existing experiment
+# + return - The encountered error
+public isolated transactional function updateExperimentTemplate(int experimentId, Template template) returns error? {
+    _ = check experimentDB->execute(
+        `UPDATE Experiment SET templateId=${template.templateId} WHERE experimentId = ${experimentId};`
+    );
+}
+
+# Get template id of an existing experiment in place in the database.
+#
+# + experimentId - The database id of the experiment to update
+# + return - The encountered error
+public isolated transactional function getExperimentTemplate(int experimentId) returns Template|error {
+    stream<Template, sql:Error?> experiments = experimentDB->query(
+        `SELECT templateId FROM Experiment WHERE experimentId = ${experimentId} LIMIT 1;`
+    );
+
+    var experiment = experiments.next();
+    check experiments.close();
+
+    if !(experiment is sql:Error) && (experiment != ()) {
+        return experiment.value;
+    }
+
+    return error(string `Experiment ${experimentId} was not found!`);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
