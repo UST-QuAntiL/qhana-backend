@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
 	<changeSet id="create-experiment" author="fabianbuehler">
 		<preConditions onFail="MARK_RAN">
@@ -43,7 +45,9 @@
 				<constraints primaryKey="true" nullable="false" />
 			</column>
 			<column name="experimentId" type="int">
-				<constraints foreignKeyName="fk_experiment_data_to_experiment" references="Experiment(experimentId) PLACEHOLDER" nullable="false" uniqueConstraintName="ux_name_and_version" />
+				<constraints foreignKeyName="fk_experiment_data_to_experiment"
+					references="Experiment(experimentId) PLACEHOLDER" nullable="false"
+					uniqueConstraintName="ux_name_and_version" />
 			</column>
 			<column name="name" type="varchar(500) COLLATION">
 				<constraints nullable="false" />
@@ -65,11 +69,13 @@
 			<dropTable tableName="ExperimentData" />
 		</rollback>
 		<modifySql applyToRollback="false" dbms="mariadb">
-			<replace replace="PLACEHOLDER" with=", CONSTRAINT `ux_name_and_version` UNIQUE(`experimentId`,`name`,`version`)" />
+			<replace replace="PLACEHOLDER"
+				with=", CONSTRAINT `ux_name_and_version` UNIQUE(`experimentId`,`name`,`version`)" />
 			<replace replace="COLLATION" with="collate utf8_unicode_ci" />
 		</modifySql>
 		<modifySql applyToRollback="false" dbms="!mariadb">
-			<replace replace="PLACEHOLDER" with=', CONSTRAINT "ux_name_and_version" UNIQUE("experimentId","name","version")' />
+			<replace replace="PLACEHOLDER"
+				with=', CONSTRAINT "ux_name_and_version" UNIQUE("experimentId","name","version")' />
 			<replace replace="COLLATION" with="collate nocase" />
 		</modifySql>
 	</changeSet>
@@ -146,7 +152,8 @@
 				<constraints primaryKey="true" nullable="false" />
 			</column>
 			<column name="experimentId" type="int">
-				<constraints foreignKeyName="fk_timeline_step_to_experiment" references="Experiment(experimentId) PLACEHOLDER" nullable="false" />
+				<constraints foreignKeyName="fk_timeline_step_to_experiment"
+					references="Experiment(experimentId) PLACEHOLDER" nullable="false" />
 			</column>
 			<column name="sequence" type="int">
 				<constraints nullable="false" />
@@ -168,7 +175,8 @@
 			<column name="parameters" type="text">
 				<constraints nullable="false" />
 			</column>
-			<column name="parametersContentType" type="varchar(500)" defaultValue="application/x-www-form-urlencoded">
+			<column name="parametersContentType" type="varchar(500)"
+				defaultValue="application/x-www-form-urlencoded">
 				<constraints nullable="false" />
 			</column>
 			<column name="pStart" type="real" />
@@ -181,10 +189,12 @@
 			<dropTable tableName="TimelineStep" />
 		</rollback>
 		<modifySql applyToRollback="false" dbms="mariadb">
-			<replace replace="PLACEHOLDER" with=", CONSTRAINT `ux_experiment_step` UNIQUE(`experimentId`,`sequence`)" />
+			<replace replace="PLACEHOLDER"
+				with=", CONSTRAINT `ux_experiment_step` UNIQUE(`experimentId`,`sequence`)" />
 		</modifySql>
 		<modifySql applyToRollback="false" dbms="!mariadb">
-			<replace replace="PLACEHOLDER" with=', CONSTRAINT "ux_experiment_step" UNIQUE("experimentId","sequence")' />
+			<replace replace="PLACEHOLDER"
+				with=', CONSTRAINT "ux_experiment_step" UNIQUE("experimentId","sequence")' />
 		</modifySql>
 	</changeSet>
 
@@ -240,10 +250,12 @@
 				<constraints primaryKey="true" nullable="false" />
 			</column>
 			<column name="stepId" type="int">
-				<constraints foreignKeyName="fk_step_data_to_timeline_step" references="TimelineStep(stepId)" nullable="false" />
+				<constraints foreignKeyName="fk_step_data_to_timeline_step"
+					references="TimelineStep(stepId)" nullable="false" />
 			</column>
 			<column name="dataId" type="int">
-				<constraints foreignKeyName="fk_step_data_to_experiment_data" references="ExperimentData(dataId)" nullable="false" />
+				<constraints foreignKeyName="fk_step_data_to_experiment_data"
+					references="ExperimentData(dataId)" nullable="false" />
 			</column>
 			<column name="relationType" type="varchar(50) COLLATION">
 				<constraints nullable="false" />
@@ -280,7 +292,8 @@
 		</preConditions>
 		<createTable tableName="TimelineSubstep">
 			<column name="stepId" type="int">
-				<constraints foreignKeyName="fk_timeline_substep_to_timeline_step" references="TimelineStep(stepId)" nullable="false" primaryKey="true" />
+				<constraints foreignKeyName="fk_timeline_substep_to_timeline_step"
+					references="TimelineStep(stepId)" nullable="false" primaryKey="true" />
 			</column>
 			<column name="substepNr" type="int">
 				<constraints nullable="false" primaryKey="true" />
@@ -296,7 +309,8 @@
 				<constraints checkConstraint="CHECK(cleared=0 or cleared=1)" />
 			</column>
 			<column name="parameters" type="text" />
-			<column name="parametersContentType" type="varchar(500)" defaultValue="application/x-www-form-urlencoded">
+			<column name="parametersContentType" type="varchar(500)"
+				defaultValue="application/x-www-form-urlencoded">
 				<constraints nullable="false" />
 			</column>
 		</createTable>
@@ -331,7 +345,8 @@
 				<constraints nullable="false" />
 			</column>
 			<column name="dataId" type="int">
-				<constraints foreignKeyName="fk_substep_data_to_experiment_data" references="ExperimentData(dataId) PLACEHOLDER" nullable="false" />
+				<constraints foreignKeyName="fk_substep_data_to_experiment_data"
+					references="ExperimentData(dataId) PLACEHOLDER" nullable="false" />
 			</column>
 			<column name="relationType" type="varchar(50) COLLATION">
 				<constraints nullable="false" />
@@ -341,11 +356,13 @@
 			<dropTable tableName="SubstepData" />
 		</rollback>
 		<modifySql applyToRollback="false" dbms="mariadb">
-			<replace replace="PLACEHOLDER" with=", FOREIGN KEY(`stepId`, `substepNr`) REFERENCES `TimelineSubstep`(`stepId`, `substepNr`)" />
+			<replace replace="PLACEHOLDER"
+				with=", FOREIGN KEY(`stepId`, `substepNr`) REFERENCES `TimelineSubstep`(`stepId`, `substepNr`)" />
 			<replace replace="COLLATION" with="collate utf8_unicode_ci" />
 		</modifySql>
 		<modifySql applyToRollback="false" dbms="!mariadb">
-			<replace replace="PLACEHOLDER" with=', FOREIGN KEY("stepId", "substepNr") REFERENCES "TimelineSubstep"("stepId", "substepNr")' />
+			<replace replace="PLACEHOLDER"
+				with=', FOREIGN KEY("stepId", "substepNr") REFERENCES "TimelineSubstep"("stepId", "substepNr")' />
 			<replace replace="COLLATION" with="collate nocase" />
 		</modifySql>
 	</changeSet>
@@ -402,7 +419,9 @@
 		</preConditions>
 		<createTable tableName="ResultWatchers">
 			<column name="stepId" type="int">
-				<constraints primaryKey="true" nullable="false" foreignKeyName="fk_result_watchers_to_timeline_step" references="TimelineStep(stepId)" />
+				<constraints primaryKey="true" nullable="false"
+					foreignKeyName="fk_result_watchers_to_timeline_step"
+					references="TimelineStep(stepId)" />
 			</column>
 			<column name="resultEndpoint" type="text">
 				<constraints nullable="false" />
@@ -510,7 +529,7 @@
 			<tableExists tableName="Experiment" />
 		</preConditions>
 		<addColumn tableName="Experiment">
-			<column name="templateId" type="varchar(500)">
+			<column name="templateId" type="varchar(50)">
 				<constraints nullable="true" />
 			</column>
 		</addColumn>

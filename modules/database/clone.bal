@@ -30,9 +30,12 @@ public isolated transactional function cloneExperiment(int oldExperimentId) retu
     ExperimentFull experimentInfo = check getExperiment(oldExperimentId);
     experimentInfo.name = experimentInfo.name + " (copy)";
 
-    var experimentInsertResult = check experimentDB->execute(
-        `INSERT INTO Experiment (name, description) VALUES (${experimentInfo.name}, ${experimentInfo.description});`
-    );
+    sql:ParameterizedQuery baseQuery = `UPDATE Experiment SET name=${experimentInfo.name}, description=${experimentInfo.description} `;
+    string? templateId = experimentInfo?.templateId;
+    if templateId != () {
+        baseQuery = sql:queryConcat(baseQuery, `, templateId=${templateId} `);
+    }
+    var experimentInsertResult = check experimentDB->execute(sql:queryConcat(baseQuery, `;`));
 
     // extract experiment id and build full experiment data
     var newExperimentId = experimentInsertResult.lastInsertId;

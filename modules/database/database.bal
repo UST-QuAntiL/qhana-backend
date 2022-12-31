@@ -138,6 +138,13 @@ public type PluginEndpointFull record {|
 
 // Experiments /////////////////////////////////////////////////////////////////
 
+# Record containing the template id of an experiment
+#
+# + templateId - template id
+public type Template record {|
+    string? templateId?;
+|};
+
 # Record containing the pure data of an Experiment.
 #
 # + name - The experiment name
@@ -145,6 +152,7 @@ public type PluginEndpointFull record {|
 public type Experiment record {|
     string name;
     string description = "";
+    *Template;
 |};
 
 # Record containing the experiment data and the database ID of the Experiment
@@ -153,13 +161,6 @@ public type Experiment record {|
 public type ExperimentFull record {|
     readonly int experimentId;
     *Experiment;
-|};
-
-# Record containing the template id of an experiment
-#
-# + templateId - template id
-public type Template record {|
-    string? templateId = ();
 |};
 
 // Data ////////////////////////////////////////////////////////////////////////
@@ -491,7 +492,7 @@ public isolated transactional function getExperiments(string? search, int 'limit
     stream<ExperimentFull, sql:Error?> experiments;
     sql:ParameterizedQuery sortOrder = sort >= 0 ? ` ASC ` : ` DESC `;
     experiments = experimentDB->query(sql:queryConcat(
-        `SELECT experimentId, name, description FROM Experiment `, experimentListFilter(search), ` ORDER BY name `, sortOrder, ` LIMIT ${'limit} OFFSET ${offset};`)
+        `SELECT experimentId, name, description, templateId FROM Experiment `, experimentListFilter(search), ` ORDER BY name `, sortOrder, ` LIMIT ${'limit} OFFSET ${offset};`)
     );
 
     ExperimentFull[]? experimentList = check from var experiment in experiments
@@ -512,7 +513,7 @@ public isolated transactional function getExperiments(string? search, int 'limit
 # + return - The experiment or the encountered error
 public isolated transactional function getExperiment(int experimentId) returns ExperimentFull|error {
     stream<ExperimentFull, sql:Error?> experiments = experimentDB->query(
-        `SELECT experimentId, name, description FROM Experiment WHERE experimentId = ${experimentId} LIMIT 1;`
+        `SELECT experimentId, name, description, templateId FROM Experiment WHERE experimentId = ${experimentId} LIMIT 1;`
     );
 
     var experiment = experiments.next();
@@ -531,10 +532,12 @@ public isolated transactional function getExperiment(int experimentId) returns E
 # + return - The experiment data including the database id or the encountered error
 public isolated transactional function createExperiment(*Experiment experiment) returns ExperimentFull|error {
     ExperimentFull? result = ();
+    string? templateId = experiment?.templateId;
+    if templateId == () {
+        templateId = "NULL";
+    }
 
-    var insertResult = check experimentDB->execute(
-        `INSERT INTO Experiment (name, description) VALUES (${experiment.name}, ${experiment.description});`
-    );
+    var insertResult = check experimentDB->execute(`INSERT INTO Experiment (name, description, templateId) VALUES (${experiment.name}, ${experiment.description}, ${templateId});`);
 
     // extract experiment id and build full experiment data
     var experimentId = insertResult.lastInsertId;
@@ -560,10 +563,20 @@ public isolated transactional function createExperiment(*Experiment experiment) 
 # + experiment - The updated data for the existing experiment
 # + return - The updated experiment data including the database id or the encountered error
 public isolated transactional function updateExperiment(int experimentId, *Experiment experiment) returns ExperimentFull|error {
-    _ = check experimentDB->execute(
-        `UPDATE Experiment SET name=${experiment.name}, description=${experiment.description} WHERE experimentId = ${experimentId};`
-    );
-    return {experimentId, name: experiment.name, description: experiment.description};
+    sql:ParameterizedQuery baseQuery = `UPDATE Experiment SET name=${experiment.name}, description=${experiment.description} `;
+    string? templateId = experiment?.templateId;
+    if templateId != () {
+        baseQuery = sql:queryConcat(baseQuery, `, templateId=${experiment?.templateId} `);
+    }
+    _ = check experimentDB->execute(sql:queryConcat(
+        baseQuery,
+        `  WHERE experimentId = ${experimentId};`
+    ));
+    if templateId != () {
+        return {experimentId, name: experiment.name, description: experiment.description, templateId: templateId};
+    } else {
+        return {experimentId, name: experiment.name, description: experiment.description};
+    }
 }
 
 # Update template id of an existing experiment in place in the database.
@@ -573,7 +586,7 @@ public isolated transactional function updateExperiment(int experimentId, *Exper
 # + return - The encountered error
 public isolated transactional function updateExperimentTemplate(int experimentId, Template template) returns error? {
     _ = check experimentDB->execute(
-        `UPDATE Experiment SET templateId=${template.templateId} WHERE experimentId = ${experimentId};`
+        `UPDATE Experiment SET templateId=${template?.templateId} WHERE experimentId = ${experimentId};`
     );
 }
 
