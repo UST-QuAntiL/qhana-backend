@@ -595,18 +595,10 @@ public isolated transactional function updateExperimentTemplate(int experimentId
 # + experimentId - The database id of the experiment to update
 # + return - The encountered error
 public isolated transactional function getExperimentTemplate(int experimentId) returns Template|error {
-    stream<Template, sql:Error?> experiments = experimentDB->query(
+    string? templateId = check experimentDB->queryRow(
         `SELECT templateId FROM Experiment WHERE experimentId = ${experimentId} LIMIT 1;`
     );
-
-    var experiment = experiments.next();
-    check experiments.close();
-
-    if !(experiment is sql:Error) && (experiment != ()) {
-        return experiment.value;
-    }
-
-    return error(string `Experiment ${experimentId} was not found!`);
+    return {templateId: templateId};
 }
 
 ////////////////////////////////////////////////////////////////////////////////
