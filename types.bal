@@ -118,13 +118,23 @@ public type ExperimentListResponse record {|
 # + experiment - The full experiment data from the database
 # + return - The api response
 public isolated function mapToExperimentResponse(database:ExperimentFull experiment) returns ExperimentResponse {
-    return {
-        '\@self: string `${serverHost}/experiments/${experiment.experimentId}`,
-        experimentId: experiment.experimentId,
-        name: experiment.name,
-        description: experiment.description,
-        templateId: experiment?.templateId
-    };
+    if experiment?.templateId != () {
+        return {
+            '\@self: string `${serverHost}/experiments/${experiment.experimentId}`,
+            experimentId: experiment.experimentId,
+            name: experiment.name,
+            description: experiment.description,
+            templateId: experiment?.templateId
+        };
+    } else {
+        return {
+            '\@self: string `${serverHost}/experiments/${experiment.experimentId}`,
+            experimentId: experiment.experimentId,
+            name: experiment.name,
+            description: experiment.description
+        };
+    }
+
 }
 
 # Api response for an experiment export.
