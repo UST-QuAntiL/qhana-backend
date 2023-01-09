@@ -1017,7 +1017,7 @@ service / on new http:Listener(serverPort) {
     # + experimentId - experiment Id
     # + exportId - export Id
     # + return - json with export status
-    resource function get experiments/[int experimentId]/export/[int exportId](string? exportConfig, http:Caller caller) returns error? {
+    resource function get experiments/[int experimentId]/export/[int exportId](http:Caller caller) returns error? {
         http:Response resp = new;
 
         database:ExperimentExportResult exportResult;
@@ -1171,7 +1171,7 @@ service / on new http:Listener(serverPort) {
         check caller->respond(resp);
     }
 
-    # Get template id of an experiment.erinalan
+    # Get template id of an experiment.
     #
     # + return - an empty response with a 2xx http status code on success
     resource function get experiments/[int experimentId]/template() returns database:Template|http:InternalServerError {
