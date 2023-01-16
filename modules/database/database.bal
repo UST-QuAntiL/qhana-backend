@@ -138,6 +138,13 @@ public type PluginEndpointFull record {|
 
 // Experiments /////////////////////////////////////////////////////////////////
 
+# Record containing the template id of an experiment
+#
+# + templateId - template id
+public type Template record {|
+    string? templateId?;
+|};
+
 # Record containing the pure data of an Experiment.
 #
 # + name - The experiment name
@@ -145,6 +152,7 @@ public type PluginEndpointFull record {|
 public type Experiment record {|
     string name;
     string description = "";
+    *Template;
 |};
 
 # Record containing the experiment data and the database ID of the Experiment
@@ -484,7 +492,7 @@ public isolated transactional function getExperiments(string? search, int 'limit
     stream<ExperimentFull, sql:Error?> experiments;
     sql:ParameterizedQuery sortOrder = sort >= 0 ? ` ASC ` : ` DESC `;
     experiments = experimentDB->query(sql:queryConcat(
-        `SELECT experimentId, name, description FROM Experiment `, experimentListFilter(search), ` ORDER BY name `, sortOrder, ` LIMIT ${'limit} OFFSET ${offset};`)
+        `SELECT experimentId, name, description, templateId FROM Experiment `, experimentListFilter(search), ` ORDER BY name `, sortOrder, ` LIMIT ${'limit} OFFSET ${offset};`)
     );
 
     ExperimentFull[]? experimentList = check from var experiment in experiments
@@ -504,18 +512,7 @@ public isolated transactional function getExperiments(string? search, int 'limit
 # + experimentId - The database id of the experiment to fetch
 # + return - The experiment or the encountered error
 public isolated transactional function getExperiment(int experimentId) returns ExperimentFull|error {
-    stream<ExperimentFull, sql:Error?> experiments = experimentDB->query(
-        `SELECT experimentId, name, description FROM Experiment WHERE experimentId = ${experimentId} LIMIT 1;`
-    );
-
-    var experiment = experiments.next();
-    check experiments.close();
-
-    if !(experiment is sql:Error) && (experiment != ()) {
-        return experiment.value;
-    }
-
-    return error(string `Experiment ${experimentId} was not found!`);
+    return check experimentDB->queryRow(`SELECT experimentId, name, description, templateId FROM Experiment WHERE experimentId = ${experimentId} LIMIT 1;`);
 }
 
 # Create a new experiment in the database.
@@ -525,9 +522,7 @@ public isolated transactional function getExperiment(int experimentId) returns E
 public isolated transactional function createExperiment(*Experiment experiment) returns ExperimentFull|error {
     ExperimentFull? result = ();
 
-    var insertResult = check experimentDB->execute(
-        `INSERT INTO Experiment (name, description) VALUES (${experiment.name}, ${experiment.description});`
-    );
+    var insertResult = check experimentDB->execute(`INSERT INTO Experiment (name, description) VALUES (${experiment.name}, ${experiment.description});`);
 
     // extract experiment id and build full experiment data
     var experimentId = insertResult.lastInsertId;
@@ -553,10 +548,33 @@ public isolated transactional function createExperiment(*Experiment experiment) 
 # + experiment - The updated data for the existing experiment
 # + return - The updated experiment data including the database id or the encountered error
 public isolated transactional function updateExperiment(int experimentId, *Experiment experiment) returns ExperimentFull|error {
-    _ = check experimentDB->execute(
-        `UPDATE Experiment SET name=${experiment.name}, description=${experiment.description} WHERE experimentId = ${experimentId};`
+    _ = check experimentDB->execute(`
+        UPDATE Experiment SET name=${experiment.name}, description=${experiment.description}
+        WHERE experimentId = ${experimentId};`
     );
     return {experimentId, name: experiment.name, description: experiment.description};
+}
+
+# Update template id of an existing experiment in place in the database.
+#
+# + experimentId - The database id of the experiment to update
+# + template - The updated template info for the existing experiment
+# + return - The encountered error
+public isolated transactional function updateExperimentTemplate(int experimentId, Template template) returns error? {
+    _ = check experimentDB->execute(
+        `UPDATE Experiment SET templateId=${template?.templateId} WHERE experimentId = ${experimentId};`
+    );
+}
+
+# Get template id of an existing experiment in place in the database.
+#
+# + experimentId - The database id of the experiment to update
+# + return - The encountered error
+public isolated transactional function getExperimentTemplate(int experimentId) returns Template|error {
+    string? templateId = check experimentDB->queryRow(
+        `SELECT templateId FROM Experiment WHERE experimentId = ${experimentId} LIMIT 1;`
+    );
+    return {templateId: templateId};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

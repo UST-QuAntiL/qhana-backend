@@ -118,12 +118,17 @@ public type ExperimentListResponse record {|
 # + experiment - The full experiment data from the database
 # + return - The api response
 public isolated function mapToExperimentResponse(database:ExperimentFull experiment) returns ExperimentResponse {
-    return {
+    ExperimentResponse response = {
         '\@self: string `${serverHost}/experiments/${experiment.experimentId}`,
         experimentId: experiment.experimentId,
         name: experiment.name,
         description: experiment.description
     };
+    if experiment?.templateId != () {
+        response.templateId = experiment?.templateId;
+    }
+    return response;
+
 }
 
 # Api response for an experiment export.
@@ -541,4 +546,28 @@ public isolated function mapFileUrlToDataRef(int experimentId, string url) retur
             'version: check int:fromString(versionNumber)
         };
     }
+}
+
+# Api response for template post.
+#
+# + experimentId - experiment id
+# + templateId - template id
+public type TemplatePostResponse record {|
+    *ApiResponse;
+    int experimentId;
+    string? templateId;
+|};
+
+# Convenience function to map experiment template updates to responses.
+#
+# + experimentId - The experiment id
+# + template - The full experiment data from the database
+# + return - The api response
+public isolated function mapToTemplatePostResponse(int experimentId, database:Template template) returns TemplatePostResponse {
+    string? templateId = template?.templateId;
+    return {
+        '\@self: string `${serverHost}/experiments/${experimentId}/template`,
+        experimentId: experimentId,
+        templateId: templateId != () ? templateId : ""
+    };
 }
