@@ -19,6 +19,7 @@ import ballerina/time;
 import ballerina/file;
 import ballerina/io;
 import ballerina/http;
+import ballerina/mime;
 
 // import ballerina/uuid;
 
@@ -235,7 +236,26 @@ public isolated transactional function createImportJob(string storageLocation, s
     }
     int intImportId = check importId.ensureType();
 
-    stream<byte[], io:Error?> streamer = check request.getByteStream();
+    string contentType = request.getContentType();
+    stream<byte[], io:Error?> streamer;
+    if contentType == "application/zip" {
+        streamer = check request.getByteStream();
+    } else if contentType.startsWith("multipart/form-data") {
+        mime:Entity[] files = check request.getBodyParts();
+        mime:Entity file = files.pop();
+        contentType = file.getContentType();
+        if contentType != "application/zip" && contentType != "application/x-zip-compressed" {
+            string msg = "Unsupported mime type for experiment import: " + contentType;
+            log:printError(msg);
+            return error(msg);
+        }
+        streamer = check file.getByteStream();
+    } else {
+        string msg = "Unsupported mime type for experiment import: " + contentType;
+        log:printError(msg);
+        return error(msg);
+    }
+
     // create/renew tmp dir
     var tmpDir = getTmpDir(configuredOS);
     var zipLocation = check file:joinPath(tmpDir, "import-" + intImportId.toString());
@@ -244,6 +264,7 @@ public isolated transactional function createImportJob(string storageLocation, s
 
     // write zip file to file system
     var zipPath = check file:joinPath(zipLocation, "import.zip");
+    log:printDebug("Write zip file to " + zipPath + "...");
     check io:fileWriteBlocksFromStream(zipPath, streamer);
     check streamer.close();
 

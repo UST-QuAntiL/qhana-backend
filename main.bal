@@ -249,7 +249,7 @@ isolated function mapToInternalUrl(string url) returns string {
     cors: {
         allowOrigins: configuredCorsDomains,
         allowMethods: ["OPTIONS", "GET", "PUT", "POST", "DELETE"],
-        allowHeaders: ["Content-Type", "Depth", "User-Agent", "range", "X-File-Size", "X-Requested-With", "If-Modified-Since", "X-File-Name", "Cache-ControlAccess-Control-Allow-Origin"],
+        allowHeaders: ["Content-Type", "Depth", "User-Agent", "range", "X-File-Size", "X-Requested-With", "If-Modified-Since", "X-File-Name", "Cache-Control", "Access-Control-Allow-Origin", "Accept"],
         allowCredentials: true,
         maxAge: 84900
     }
@@ -1036,6 +1036,11 @@ service / on new http:Listener(serverPort) {
         if exportResult.status == "SUCCESS" {
             resp.statusCode = http:STATUS_SEE_OTHER;
             resp.setHeader("Location", string `/experiments/${experimentId}/export/${exportId}/result`);
+            resp.setPayload({
+                '\@self: string `${serverHost}/experiments/${experimentId}/export/${exportId}`,
+                exportId: exportId,
+                status: exportResult.status
+            });
         } else {
             resp.statusCode = http:STATUS_OK;
             resp.setHeader("Content-Type", "application/json");
@@ -1086,7 +1091,7 @@ service / on new http:Listener(serverPort) {
     #
     # + return - import result resource
     @http:ResourceConfig {
-        consumes: ["application/zip"]
+        consumes: ["multipart/form-data", "application/zip"]
     }
     resource function post experiments/'import(http:Request request, http:Caller caller) returns error? {
         http:Response resp = new;

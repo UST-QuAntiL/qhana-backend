@@ -48,16 +48,20 @@ public isolated function prepareStorageLocation(int experimentId, string storage
 # + os - os type to determine appropriate exec command
 # + return - error 
 public isolated function unzipFile(string zipPath, string targetDir, string os) returns error? {
-    os:Process result;
+    os:Process|os:Error result;
+    string syntax = "windows";
     if os.includes("windows") {
         result = check os:exec({value: "powershell", arguments: ["Expand-Archive", "-DestinationPath", targetDir, zipPath]});
     } else {
-        if !os.includes("linux") {
-            log:printError("Unsupported os type (" + os + ") for file system manipulation (unzipFile). Attempt to use linux syntax...");
-        }
+        syntax = "linux";
         result = check os:exec({value: "unzip", arguments: [zipPath, "-d", targetDir]});
     }
-    _ = check result.waitForExit();
+    if result is os:Error {
+            log:printError("Unsupported os type (" + os + ") for file system manipulation (zipExperiment). Using " + syntax + " syntax was unsuccessful...");
+            return result;
+    } else {
+        _ = check result.waitForExit();
+    }
 }
 
 # Wipe and recreate directory if exists

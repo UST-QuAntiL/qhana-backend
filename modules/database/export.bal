@@ -377,29 +377,38 @@ public isolated transactional function exportExperiment(int experimentId, int ex
 # + return - error
 public isolated transactional function zipExperiment(string zipPath, string jsonPath, string[] dataFileLocations, string os) returns error? {
     // add experiment.json
-    os:Process result;
+    os:Process|os:Error result;
+    string syntax = "windows";
     if os.includes("windows") {
         result = check os:exec({value: "powershell", arguments: ["Compress-Archive", "-Update", jsonPath, zipPath]});
     } else {
-        if !os.includes("linux") {
-            log:printError("Unsupported os type (" + os + ") for file system manipulation (zipExperiment). Attempt to use linux syntax...");
-        }
-        result = check os:exec({value: "zip", arguments: ["-j", zipPath, jsonPath]});
+        result = os:exec({value: "zip", arguments: ["-j", zipPath, jsonPath]});
+        syntax = "linux";
     }
-    _ = check result.waitForExit();
+    if result is os:Error {
+            log:printError("Unsupported os type (" + os + ") for file system manipulation (zipExperiment). Using " + syntax + " syntax was unsuccessful...");
+            return result;
+    } else {
+        _ = check result.waitForExit();
+    }
+    
 
     // add experiment data files
     foreach string dataFile in dataFileLocations {
         log:printDebug("Add file to zip... " + dataFile);
         if os.includes("windows") {
+            syntax = "windows";
             result = check os:exec({value: "powershell", arguments: ["Compress-Archive", "-Update", dataFile, zipPath]});
         } else {
-            if !os.includes("linux") {
-                log:printError("Unsupported os type (" + os + ") for file system manipulation (zipExperiment). Attempt to use linux syntax...");
-            }
             result = check os:exec({value: "zip", arguments: ["-j", zipPath, dataFile]});
+            syntax = "linux";
         }
-        _ = check result.waitForExit();
+        if result is os:Error {
+                log:printError("Unsupported os type (" + os + ") for file system manipulation (zipExperiment). Using " + syntax + " syntax was unsuccessful...");
+                return result;
+        } else {
+            _ = check result.waitForExit();
+        }
     }
 }
 
