@@ -1017,7 +1017,7 @@ service / on new http:Listener(serverPort) {
     # + experimentId - experiment Id
     # + exportId - export Id
     # + return - json with export status
-    resource function get experiments/[int experimentId]/export/[int exportId](string? exportConfig, http:Caller caller) returns error? {
+    resource function get experiments/[int experimentId]/export/[int exportId](http:Caller caller) returns error? {
         http:Response resp = new;
 
         database:ExperimentExportResult exportResult;
@@ -1160,6 +1160,7 @@ service / on new http:Listener(serverPort) {
                     experimentId: experimentFull.experimentId,
                     name: experimentFull.name,
                     description: experimentFull.description,
+                    templateId: experimentFull?.templateId,
                     status: importResult.status
                 });
             }
@@ -1173,6 +1174,40 @@ service / on new http:Listener(serverPort) {
             });
         }
         check caller->respond(resp);
+    }
+
+    # Get template id of an experiment.
+    #
+    # + return - an empty response with a 2xx http status code on success
+    resource function get experiments/[int experimentId]/template() returns database:Template|http:InternalServerError {
+        database:Template template;
+        transaction {
+            template = check database:getExperimentTemplate(experimentId);
+            check commit;
+        } on fail error err {
+            log:printError("Could not get template id.", 'error = err, stackTrace = err.stackTrace());
+            http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
+            return resultErr;
+        }
+        return template;
+    }
+
+    # Update template id of an experiment.
+    #
+    # + return - an empty response with a 2xx http status code on success
+    @http:ResourceConfig {
+        consumes: ["application/json"]
+    }
+    resource function post experiments/[int experimentId]/template(@http:Payload database:Template template) returns TemplatePostResponse|http:InternalServerError {
+        transaction {
+            check database:updateExperimentTemplate(experimentId, template);
+            check commit;
+        } on fail error err {
+            log:printError("Could not update template id.", 'error = err, stackTrace = err.stackTrace());
+            http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
+            return resultErr;
+        }
+        return mapToTemplatePostResponse(experimentId, template);
     }
 }
 

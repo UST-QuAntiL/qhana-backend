@@ -310,7 +310,7 @@ public isolated transactional function getExperimentDBExport(int experimentId) r
     }
 
     return {
-        experiment: {name: experiment.name, description: experiment.description},
+        experiment: {name: experiment.name, description: experiment.description, templateId: experiment?.templateId},
         timelineSteps: timelineSteps,
         experimentDataList: experimentDataList
     };
