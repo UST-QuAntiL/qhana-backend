@@ -511,8 +511,8 @@ service / on new http:Listener(serverPort) {
     # + sort - 1 for asc sort, -1 for desc sort by name and version
     # + search - search keyword in name, data type and content type (insensitive)
     # + return - the paginated list of data resources
-    resource function get experiments/[int experimentId]/data(boolean? allVersions, string? search, int page = 0, int item\-count = 10, int? sort = 1) returns ExperimentDataListResponse|http:NotFound|http:InternalServerError|http:BadRequest {
-        boolean includeAllVersions = allVersions == true || allVersions == ();
+    resource function get experiments/[int experimentId]/data(boolean? all\-versions, string? search, int page = 0, int item\-count = 10, int? sort = 1) returns ExperimentDataListResponse|http:NotFound|http:InternalServerError|http:BadRequest {
+        boolean includeAllVersions = all\-versions == true || all\-versions == ();
         int intSort = (sort is ()) ? 1 : sort;
         string searchString = (search is ()) ? "" : search;
 
