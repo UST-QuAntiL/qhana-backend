@@ -627,7 +627,7 @@ service / on new http:Listener(serverPort) {
     # + plugin\-name - filter by plugin name
     # + 'version - filter by version (name + version for exact match)
     # + status - filter by status (pending/finished)
-    # + uncleared\-substep - filter by step status (whether there is an uncleared substep that requires user inputs) - 1 for true, 0 for false 
+    # + uncleared\-substep - filter by step status (whether there is an uncleared substep that requires user inputs) - If set to 1 (or any postivie number), steps must have at least one uncleared substeps. Else, must be set to -1 (or any negative number).
     # + page - the requested page (starting with page 0)
     # + 'item\-count - the number of items per page (5 <= item-count <= 500)
     # + sort - 1 for asc sort, -1 for desc sort by step sequence
