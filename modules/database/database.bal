@@ -733,7 +733,7 @@ public isolated transactional function getStepsUsingData(int|ExperimentDataFull 
 # + pluginName - The plugin name
 # + 'version - The plugin version  
 # + status - Filter for the current status of the timeline step result
-# + uncleared\-substep - Filter for (un)cleared substeps. If set to 1 (or any postivie number), steps must have at least one uncleared substeps. Else, must be set to -1 (or any negative number).
+# + uncleared\-substep - Filter for (un)cleared substeps. If set to 1 (or any postivie number), steps must have at least one uncleared substeps. Else, must be set to -1 (or any negative number). Set to 0 if not specified.
 # + return - Return timeline step count
 public isolated transactional function getTimelineStepCount(int experimentId, string? pluginName, string? 'version, string? status, int? uncleared\-substep) returns int|error {
     sql:ParameterizedQuery query = `SELECT count(*) AS rowCount FROM TimelineStep `;
@@ -790,7 +790,7 @@ public isolated transactional function castToTimelineStepFull(TimelineStepSQL st
 # + pluginName - The plugin name
 # + 'version - The plugin version  
 # + status - Filter for the current status of the timeline step result
-# + uncleared\-substep - Filter for (un)cleared substeps. If set to 1 (or any postivie number), steps must have at least one uncleared substeps. Else, must be set to -1 (or any negative number).
+# + uncleared\-substep - Filter for (un)cleared substeps. If set to 1 (or any postivie number), steps must have at least one uncleared substeps. Else, must be set to -1 (or any negative number). Set to 0 if not specified.
 # + allAttributes - Include all attributes in result
 # + 'limit - The maximum number of timline steps fetched in one call (default: `100`)
 # + offset - The offset applied to the sql query (default: `0`)
@@ -1409,22 +1409,25 @@ public isolated function experimentListFilter(string? search) returns sql:Parame
 # + pluginName - Plugin name filter  
 # + 'version - Plugin version filter
 # + status - Plugin status filter
-# + uncleared\-substep - Filter for (un)cleared substeps. If set to 1 (or any postivie number), steps must have at least one uncleared substeps. Else, must be set to -1 (or any negative number).
+# + uncleared\-substep - Filter for (un)cleared substeps. If set to 1 (or any positive number), steps must have at least one uncleared substep. Else, set to -1 (or any negative number). Set to 0 if not specified.
 # + return - Return filter query fragment
 public isolated function timelineStepListFilter(int experimentId, string? pluginName, string? 'version, string? status, int? uncleared\-substep) returns sql:ParameterizedQuery {
     sql:ParameterizedQuery filter = ` WHERE experimentId = ${experimentId} `;
-    if pluginName != () {
-        filter = sql:queryConcat(filter, ` AND processorName = ${pluginName} `);
+    if pluginName != () && pluginName != "" {
+        string pluginNameString = "%" + pluginName + "%";
+        filter = sql:queryConcat(filter, ` AND processorName LIKE ${pluginNameString} `);
     }
-    if 'version != () {
-        filter = sql:queryConcat(filter, ` AND processorVersion = ${'version} `);
+    if 'version != () && 'version != "" {
+        string versionString = "%" + 'version + "%";
+        filter = sql:queryConcat(filter, ` AND processorVersion LIKE ${versionString} `);
     }
-    if status != () {
-        filter = sql:queryConcat(filter, ` AND status = ${status} `);
+    if status != () && status != "" {
+        string statusString = "%" + status + "%";
+        filter = sql:queryConcat(filter, ` AND status LIKE ${statusString} `);
     }
-    if uncleared\-substep != () {
+    if uncleared\-substep != () && uncleared\-substep != 0 {
         filter = sql:queryConcat(filter, ` AND EXISTS (SELECT * FROM TimelineSubstep WHERE TimelineSubstep.stepId = TimelineStep.stepId AND `);
-        if uncleared\-substep >= 0 {
+        if uncleared\-substep > 0 {
             filter = sql:queryConcat(filter, ` TimelineSubstep.cleared = 0) `);
         } else {
             filter = sql:queryConcat(filter, ` TimelineSubstep.cleared = 1) `);
