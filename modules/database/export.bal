@@ -28,9 +28,13 @@ import ballerina/mime;
 
 # Record for configuring experiment export 
 #
-# + test - some config field
+# + restriction - config type, can have values "ALL" for all data (default), "LOGS" for only steps/substeps with params, "DATA" for only data files, "STEPS" for specific steps with associated data files
+# + allDataVersions - all versions if value >= 0, else only newest version (only for restriction "DATA")
+# + stepList - list of step sequence numbers, only needed for restriction "STEPS"
 public type ExperimentExportConfig record {|
-    string test;
+    string restriction = "ALL";
+    int allDataVersions = 1;
+    int[] stepList = [];
 |};
 
 # Record for exporting/importing experiment data
@@ -222,11 +226,14 @@ public isolated transactional function getTimelineSubstepsBaseExport(int stepId)
     }
 }
 
-public isolated transactional function getTimelineSubstepsExport(int stepId) returns TimelineSubstepExport[]|error {
+public isolated transactional function getTimelineSubstepsExport(int stepId, ExperimentExportConfig config) returns TimelineSubstepExport[]|error {
     TimelineSubstepExport[] substepsExport = [];
     TimelineSubstepExportBase[] substepsBase = check getTimelineSubstepsBaseExport(stepId);
     foreach var substep in substepsBase {
-        SubstepDataExport[] substepDataList = check getTimelineSubstepDataList(stepId, substep.substepNr);
+        SubstepDataExport[] substepDataList = [];
+        if config.restriction != "LOGS" {
+            substepDataList = check getTimelineSubstepDataList(stepId, substep.substepNr);
+        } // else don't need data
         TimelineSubstepExport substepExport = {
             substepId: substep.substepId,
             href: substep.href,
@@ -272,40 +279,89 @@ public isolated transactional function getTimelineStepLimit(int experimentId) re
 
 }
 
-public isolated transactional function getExperimentDBExport(int experimentId) returns ExperimentCompleteExport|error {
+public isolated transactional function getExperimentDBExport(int experimentId, ExperimentExportConfig config) returns ExperimentCompleteExport|error {
     TimelineStepExport[] timelineSteps = [];
     ExperimentDataExport[] experimentDataList = [];
     ExperimentFull experiment = check getExperiment(experimentId);
     int[] dataIdList = [];
 
     // iterate over timeline steps
-
     TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experimentId, (), (), (), (), allAttributes = true, 'limit = check getTimelineStepLimit(experimentId));
+
+    int[] stepList = [];
+    if config.restriction == "STEPS" {
+        // TODO: check that timelineStepListDb is sorted
+        stepList = config.stepList.sort();
+    }
+    int counter = 0;
+    boolean add;
     foreach TimelineStepFull timelineStepDb in timelineStepListDb {
-        TimelineStepExport timelineStepExport = check castToTimelineStepExport(timelineStepDb);
-        // retrieve associated step data
-        timelineStepExport.stepDataList = check getTimelineStepDataList(timelineStepDb.stepId);
-        foreach var stepData in timelineStepExport.stepDataList {
-            dataIdList.push(stepData.dataId);
-        }
-        // retrieve associated substeps with their substep data
-        timelineStepExport.timelineSubsteps = check getTimelineSubstepsExport(timelineStepDb.stepId);
-        timelineSteps.push(timelineStepExport);
-        foreach var substep in timelineStepExport.timelineSubsteps {
-            foreach var substepData in substep.substepDataList {
-                dataIdList.push(substepData.dataId);
+        add = true;
+        if config.restriction == "STEPS" && timelineStepDb.sequence == stepList[counter] {
+            // filter steps with stepList 
+            if timelineStepDb.sequence == stepList[counter] {
+                counter += 1;
+            } else {
+                add = false;
             }
+        }
+        if add {
+            TimelineStepExport timelineStepExport = check castToTimelineStepExport(timelineStepDb);
+            if config.restriction != "LOGS" {
+                // retrieve associated step data
+                timelineStepExport.stepDataList = check getTimelineStepDataList(timelineStepDb.stepId);
+                foreach var stepData in timelineStepExport.stepDataList {
+                    dataIdList.push(stepData.dataId);
+                }
+            } else {
+                // don't need data for restriction "LOGS"
+                timelineStepExport.stepDataList = [];
+            }
+            // retrieve associated substeps with their substep data
+            timelineStepExport.timelineSubsteps = check getTimelineSubstepsExport(timelineStepDb.stepId, config);
+            timelineSteps.push(timelineStepExport);
+            if config.restriction != "LOGS" {
+                // retrieve associated substep data
+                foreach var substep in timelineStepExport.timelineSubsteps {
+                    foreach var substepData in substep.substepDataList {
+                        dataIdList.push(substepData.dataId);
+                    }
+                }
+            } // else don't need data
         }
     }
 
-    // ignore duplicates in dataIdList and create experiment data list
-    int[] sortedDataIdList = dataIdList.sort();
-    int tmp = -1;
-    foreach int dataId in sortedDataIdList {
-        if dataId != tmp {
-            tmp = dataId;
-            ExperimentDataExport experimentData = check getExperimentDataExport(experimentId, dataId);
-            experimentDataList.push(experimentData);
+    if config.restriction != "LOGS" {
+        // ignore duplicates in dataIdList and create experiment data list
+        int[] sortedDataIdList = dataIdList.sort();
+        int tmp = -1;
+        foreach int dataId in sortedDataIdList {
+            if dataId != tmp {
+                tmp = dataId;
+                ExperimentDataExport experimentData = check getExperimentDataExport(experimentId, dataId);
+                experimentDataList.push(experimentData);
+            }
+        }
+    } // else don't need data
+
+    if config.restriction == "DATA" {
+        // don't need timeline steps with substeps
+        timelineSteps = [];
+        if config.allDataVersions < 0 {
+            // sort data by name and version
+            ExperimentDataExport[] sortedData = from ExperimentDataExport data in experimentDataList
+                order by data.name ascending, data.'version descending
+                select data;
+            string tmpName = "";
+            ExperimentDataExport[] filteredData = [];
+            // only take newest version
+            foreach ExperimentDataExport data in sortedData {
+                if tmpName != data.name {
+                    filteredData.push(data);
+                    tmpName = data.name;
+                }
+            }
+            experimentDataList = filteredData;
         }
     }
 
@@ -324,14 +380,18 @@ public isolated transactional function getExperimentDBExport(int experimentId) r
 #
 # + experimentId - experiment id of the new (cloned) experiment
 # + exportId - export id
-# + config - export configuration // TODO
+# + config - export configuration
 # + os - os type to determine appropriate exec command
 # + storageLocation - storage location
 # + return - record with details about created zip files or error
 public isolated transactional function exportExperiment(int experimentId, int exportId, ExperimentExportConfig config, string os, string storageLocation) returns ExperimentExportZip|error {
 
     // TODO: config
-    ExperimentCompleteExport experimentComplete = check getExperimentDBExport(experimentId);
+    // TODO: include config in backend
+    // TODO: include config in frontend
+    // TODO: check if interoperable with import (e.g. for only data), if not change import
+
+    ExperimentCompleteExport experimentComplete = check getExperimentDBExport(experimentId, config);
     // data files
     string[] dataFileLocations = [];
     ExperimentDataExport[] experimentDataList = experimentComplete.experimentDataList;
@@ -386,12 +446,11 @@ public isolated transactional function zipExperiment(string zipPath, string json
         syntax = "linux";
     }
     if result is os:Error {
-            log:printError("Unsupported os type (" + os + ") for file system manipulation (zipExperiment). Using " + syntax + " syntax was unsuccessful...");
-            return result;
+        log:printError("Unsupported os type (" + os + ") for file system manipulation (zipExperiment). Using " + syntax + " syntax was unsuccessful...");
+        return result;
     } else {
         _ = check result.waitForExit();
     }
-    
 
     // add experiment data files
     foreach string dataFile in dataFileLocations {
@@ -404,8 +463,8 @@ public isolated transactional function zipExperiment(string zipPath, string json
             syntax = "linux";
         }
         if result is os:Error {
-                log:printError("Unsupported os type (" + os + ") for file system manipulation (zipExperiment). Using " + syntax + " syntax was unsuccessful...");
-                return result;
+            log:printError("Unsupported os type (" + os + ") for file system manipulation (zipExperiment). Using " + syntax + " syntax was unsuccessful...");
+            return result;
         } else {
             _ = check result.waitForExit();
         }
