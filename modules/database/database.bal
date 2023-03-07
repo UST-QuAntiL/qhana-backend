@@ -637,12 +637,13 @@ public isolated transactional function getDataList(int experimentId, string? sea
         baseQuery = sql:queryConcat(baseQuery, `AND ((name LIKE ${searchString}) OR (type LIKE ${searchString}) OR (contentType LIKE ${searchString})) `);
     }
     if !all {
-        baseQuery = sql:queryConcat(baseQuery, `AND version=(SELECT MAX(t2.version)
+        baseQuery = sql:queryConcat(baseQuery, ` AND version=(SELECT MAX(t2.version)
                                 FROM ExperimentData AS t2 
-                                WHERE ExperimentData.name=t2.name AND t2.experimentId=${experimentId}) `);
+                                WHERE t2.name=ExperimentData.name AND t2.experimentId=${experimentId} 
+                                AND t2.type=ExperimentData.type) `);
     }
     sql:ParameterizedQuery sortOrder = sort >= 0 ? ` ASC ` : ` DESC `;
-    baseQuery = sql:queryConcat(baseQuery, `ORDER BY name `, sortOrder, `, version `, sortOrder, ` LIMIT ${'limit} OFFSET ${offset};`);
+    baseQuery = sql:queryConcat(baseQuery, ` ORDER BY name `, sortOrder, `, version `, sortOrder, ` LIMIT ${'limit} OFFSET ${offset};`);
 
     stream<ExperimentDataFull, sql:Error?> experimentData = experimentDB->query(baseQuery);
 

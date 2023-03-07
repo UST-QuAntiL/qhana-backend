@@ -279,43 +279,68 @@ public isolated transactional function getTimelineStepLimit(int experimentId) re
 
 }
 
+# Removes duplicates and creates experiment data list for list of data ids. 
+#
+# + dataIdList - List of data ids 
+# + experimentId - Experiment id
+# + return - Return list of experiment data export 
+public isolated transactional function getExperimentDataList(int[] dataIdList, int experimentId) returns ExperimentDataExport[]|error {
+    ExperimentDataExport[] experimentDataList = [];
+    if dataIdList.length() > 0 {
+        // ignore duplicates in dataIdList and create experiment data list
+        int[] sortedDataIdList = dataIdList.sort();
+        int tmp = -1;
+        foreach int dataId in sortedDataIdList {
+            if dataId != tmp {
+                tmp = dataId;
+                ExperimentDataExport experimentData = check getExperimentDataExport(experimentId, dataId);
+                experimentDataList.push(experimentData);
+            }
+        }
+    }
+    return experimentDataList;
+}
+
 public isolated transactional function getExperimentDBExport(int experimentId, ExperimentExportConfig config) returns ExperimentCompleteExport|error {
     TimelineStepExport[] timelineSteps = [];
     ExperimentDataExport[] experimentDataList = [];
     ExperimentFull experiment = check getExperiment(experimentId);
     int[] dataIdList = [];
 
-    // iterate over timeline steps
-    TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experimentId, (), (), (), (), allAttributes = true, 'limit = check getTimelineStepLimit(experimentId));
+    if config.restriction == "DATA" {
+        boolean allVersions = config.allDataVersions < 0 ? false : true;
+        ExperimentDataFull[] dataList = check getDataList(experimentId, (), all = allVersions);
+        experimentDataList = from var {dataId, name, 'version, location, 'type, contentType} in dataList
+            select {dataId, name, 'version, location, 'type, contentType};
+    } else {
+        // iterate over timeline steps
+        TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experimentId, (), (), (), (), allAttributes = true, 'limit = check getTimelineStepLimit(experimentId));
 
-    int[] stepList = [];
-    if config.restriction == "STEPS" {
-        // TODO: check that timelineStepListDb is sorted
-        stepList = config.stepList.sort();
-    }
-    int counter = 0;
-    boolean add;
-    foreach TimelineStepFull timelineStepDb in timelineStepListDb {
-        add = true;
-        if config.restriction == "STEPS" && timelineStepDb.sequence == stepList[counter] {
-            // filter steps with stepList 
-            if timelineStepDb.sequence == stepList[counter] {
-                counter += 1;
-            } else {
-                add = false;
-            }
+        int[] stepList = [];
+        if config.restriction == "STEPS" {
+            stepList = config.stepList.sort();
         }
-        if add {
+        int counter = 0;
+        foreach TimelineStepFull timelineStepDb in timelineStepListDb {
+            if config.restriction == "STEPS" {
+                // filter steps with stepList 
+                if timelineStepDb.sequence == stepList[counter] {
+                    counter += 1;
+                } else {
+                    continue;
+                }
+            }
+
             TimelineStepExport timelineStepExport = check castToTimelineStepExport(timelineStepDb);
-            if config.restriction != "LOGS" {
+            if config.restriction == "LOGS" {
+                // don't need data for restriction "LOGS"
+                timelineStepExport.stepDataList = [];
+            } else {
                 // retrieve associated step data
                 timelineStepExport.stepDataList = check getTimelineStepDataList(timelineStepDb.stepId);
                 foreach var stepData in timelineStepExport.stepDataList {
                     dataIdList.push(stepData.dataId);
                 }
-            } else {
-                // don't need data for restriction "LOGS"
-                timelineStepExport.stepDataList = [];
             }
             // retrieve associated substeps with their substep data
             timelineStepExport.timelineSubsteps = check getTimelineSubstepsExport(timelineStepDb.stepId, config);
@@ -329,40 +354,21 @@ public isolated transactional function getExperimentDBExport(int experimentId, E
                 }
             } // else don't need data
         }
-    }
 
-    if config.restriction != "LOGS" {
-        // ignore duplicates in dataIdList and create experiment data list
-        int[] sortedDataIdList = dataIdList.sort();
-        int tmp = -1;
-        foreach int dataId in sortedDataIdList {
-            if dataId != tmp {
-                tmp = dataId;
-                ExperimentDataExport experimentData = check getExperimentDataExport(experimentId, dataId);
-                experimentDataList.push(experimentData);
-            }
-        }
-    } // else don't need data
+        experimentDataList = check getExperimentDataList(dataIdList, experimentId);
 
-    if config.restriction == "DATA" {
-        // don't need timeline steps with substeps
-        timelineSteps = [];
-        if config.allDataVersions < 0 {
-            // sort data by name and version
-            ExperimentDataExport[] sortedData = from ExperimentDataExport data in experimentDataList
-                order by data.name ascending, data.'version descending
-                select data;
-            string tmpName = "";
-            ExperimentDataExport[] filteredData = [];
-            // only take newest version
-            foreach ExperimentDataExport data in sortedData {
-                if tmpName != data.name {
-                    filteredData.push(data);
-                    tmpName = data.name;
+        if dataIdList.length() > 0 {
+            // ignore duplicates in dataIdList and create experiment data list
+            int[] sortedDataIdList = dataIdList.sort();
+            int tmp = -1;
+            foreach int dataId in sortedDataIdList {
+                if dataId != tmp {
+                    tmp = dataId;
+                    ExperimentDataExport experimentData = check getExperimentDataExport(experimentId, dataId);
+                    experimentDataList.push(experimentData);
                 }
             }
-            experimentDataList = filteredData;
-        }
+        } // else don't need data
     }
 
     return {
@@ -385,11 +391,6 @@ public isolated transactional function getExperimentDBExport(int experimentId, E
 # + storageLocation - storage location
 # + return - record with details about created zip files or error
 public isolated transactional function exportExperiment(int experimentId, int exportId, ExperimentExportConfig config, string os, string storageLocation) returns ExperimentExportZip|error {
-
-    // TODO: config
-    // TODO: include config in backend
-    // TODO: include config in frontend
-    // TODO: check if interoperable with import (e.g. for only data), if not change import
 
     ExperimentCompleteExport experimentComplete = check getExperimentDBExport(experimentId, config);
     // data files
