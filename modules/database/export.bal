@@ -158,6 +158,19 @@ public type ExperimentCompleteExport record {|
     ExperimentDataExport[] experimentDataList;
 |};
 
+# Api response for an experiment export.
+#
+# + exportId - The database id of the export entry
+# + experimentId - The experiment id
+# + status - The export status
+# + name - The file name
+public type ExportStatus record {|
+    int exportId;
+    int experimentId;
+    string status;
+    string name;
+|};
+
 ////////////////////////////////////////////////////////////////////////////////
 // Helper functions  ///////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -524,6 +537,23 @@ public isolated transactional function getExportResult(int experimentId, int exp
     }
 
     return error(string `Experiment export entry with id ${exportId} was not found!`);
+}
+
+# Retrieve a list of recent exports.
+#
+# + item\-count - count
+# + return - id of export job db entry
+public isolated transactional function getExportList(int item\-count) returns ExportStatus[]|error {
+    stream<ExportStatus, sql:Error?> result = experimentDB->query(`SELECT exportId, experimentId, status, name FROM ExperimentExport ORDER BY exportId DESC LIMIT ${item\-count};`);
+    ExportStatus[]? experimentDataList = check from var data in result
+        select data;
+    check result.close();
+
+    if experimentDataList != () {
+        return experimentDataList;
+    } else {
+        return [];
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
