@@ -284,7 +284,7 @@ public isolated transactional function getTimelineStepLimit(int experimentId) re
 # + dataIdList - List of data ids 
 # + experimentId - Experiment id
 # + return - Return list of experiment data export 
-public isolated transactional function getExperimentDataList(int[] dataIdList, int experimentId) returns ExperimentDataExport[]|error {
+public isolated transactional function mapToExportDataList(int[] dataIdList, int experimentId) returns ExperimentDataExport[]|error {
     ExperimentDataExport[] experimentDataList = [];
     if dataIdList.length() > 0 {
         // ignore duplicates in dataIdList and create experiment data list
@@ -301,18 +301,39 @@ public isolated transactional function getExperimentDataList(int[] dataIdList, i
     return experimentDataList;
 }
 
+public isolated transactional function getExportDataList(int experimentId, ExperimentExportConfig config, int[] dataIdList) returns ExperimentDataExport[]|error {
+    ExperimentDataExport[] experimentDataList;
+    if config.restriction == "DATA" {
+        // only need data files
+        boolean allVersions = config.allDataVersions < 0 ? false : true;
+        ExperimentDataFull[] dataList = check getDataList(experimentId, (), all = allVersions);
+        experimentDataList = from var {dataId, name, 'version, location, 'type, contentType} in dataList
+            select {dataId, name, 'version, location, 'type, contentType};
+    } else {
+        experimentDataList = check mapToExportDataList(dataIdList, experimentId);
+        if dataIdList.length() > 0 {
+            // ignore duplicates in dataIdList and create experiment data list
+            int[] sortedDataIdList = dataIdList.sort();
+            int tmp = -1;
+            foreach int dataId in sortedDataIdList {
+                if dataId != tmp {
+                    tmp = dataId;
+                    ExperimentDataExport experimentData = check getExperimentDataExport(experimentId, dataId);
+                    experimentDataList.push(experimentData);
+                }
+            }
+        } // else don't need data
+    }
+    return experimentDataList;
+}
+
 public isolated transactional function getExperimentDBExport(int experimentId, ExperimentExportConfig config) returns ExperimentCompleteExport|error {
     TimelineStepExport[] timelineSteps = [];
     ExperimentDataExport[] experimentDataList = [];
     ExperimentFull experiment = check getExperiment(experimentId);
     int[] dataIdList = [];
 
-    if config.restriction == "DATA" {
-        boolean allVersions = config.allDataVersions < 0 ? false : true;
-        ExperimentDataFull[] dataList = check getDataList(experimentId, (), all = allVersions);
-        experimentDataList = from var {dataId, name, 'version, location, 'type, contentType} in dataList
-            select {dataId, name, 'version, location, 'type, contentType};
-    } else {
+    if config.restriction != "DATA" {
         // iterate over timeline steps
         TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experimentId, (), (), (), (), allAttributes = true, 'limit = check getTimelineStepLimit(experimentId));
 
@@ -354,22 +375,9 @@ public isolated transactional function getExperimentDBExport(int experimentId, E
                 }
             } // else don't need data
         }
-
-        experimentDataList = check getExperimentDataList(dataIdList, experimentId);
-
-        if dataIdList.length() > 0 {
-            // ignore duplicates in dataIdList and create experiment data list
-            int[] sortedDataIdList = dataIdList.sort();
-            int tmp = -1;
-            foreach int dataId in sortedDataIdList {
-                if dataId != tmp {
-                    tmp = dataId;
-                    ExperimentDataExport experimentData = check getExperimentDataExport(experimentId, dataId);
-                    experimentDataList.push(experimentData);
-                }
-            }
-        } // else don't need data
     }
+
+    experimentDataList = check getExportDataList(experimentId, config, dataIdList);
 
     return {
         experiment: {name: experiment.name, description: experiment.description, templateId: experiment?.templateId},
