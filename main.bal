@@ -1087,6 +1087,31 @@ service / on new http:Listener(serverPort) {
         check caller->respond(resp);
     }
 
+    # Get a list of recent experiment exports.
+    #
+    # + return - json with export status (includes experiment details once successful)
+    resource function get experiments/'export\-list(int? item\-count = 10) returns ExportListResponse|http:BadRequest|http:InternalServerError {
+
+        int itemCount = (item\-count is ()) ? 10 : item\-count;
+
+        if (itemCount < 1 || itemCount > 500) {
+            return <http:BadRequest>{body: "Item count must be between 1 and 500 (both inclusive)!"};
+        }
+
+        database:ExportStatus[] exportList = [];
+        transaction {
+            exportList = check database:getExportList(itemCount);
+            check commit;
+        } on fail error err {
+            log:printError("Could not get export list.", 'error = err, stackTrace = err.stackTrace());
+            // if with return does not correctly narrow type for rest of function... this does.
+            http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
+            return resultErr;
+        }
+
+        return {'\@self: string `${serverHost}/experiments/export-list`, items: exportList, itemCount: exportList.length()};
+    }
+
     # Import an experiment from a zip.
     #
     # + return - import result resource
