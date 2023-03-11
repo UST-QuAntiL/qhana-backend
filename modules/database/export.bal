@@ -340,15 +340,14 @@ public isolated transactional function getExportDataList(int experimentId, Exper
     return experimentDataList;
 }
 
-public isolated transactional function getExperimentDBExport(int experimentId, ExperimentExportConfig config) returns ExperimentCompleteExport|error {
+public isolated transactional function getExperimentDBExport(ExperimentFull experiment, ExperimentExportConfig config) returns ExperimentCompleteExport|error {
     TimelineStepExport[] timelineSteps = [];
     ExperimentDataExport[] experimentDataList = [];
-    ExperimentFull experiment = check getExperiment(experimentId);
     int[] dataIdList = [];
 
     if config.restriction != "DATA" {
         // iterate over timeline steps
-        TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experimentId, (), (), (), (), allAttributes = true, 'limit = check getTimelineStepLimit(experimentId));
+        TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experiment.experimentId, (), (), (), (), allAttributes = true, 'limit = check getTimelineStepLimit(experiment.experimentId));
 
         int[] stepList = [];
         if config.restriction == "STEPS" {
@@ -390,7 +389,7 @@ public isolated transactional function getExperimentDBExport(int experimentId, E
         }
     }
 
-    experimentDataList = check getExportDataList(experimentId, config, dataIdList);
+    experimentDataList = check getExportDataList(experiment.experimentId, config, dataIdList);
 
     return {
         experiment: {name: experiment.name, description: experiment.description, templateId: experiment?.templateId},
@@ -405,22 +404,22 @@ public isolated transactional function getExperimentDBExport(int experimentId, E
 
 # Prepare zip file for export of an experiment.
 #
-# + experimentId - experiment id of the new (cloned) experiment
+# + experiment - experiment
 # + exportId - export id
 # + config - export configuration
 # + os - os type to determine appropriate exec command
 # + storageLocation - storage location
 # + return - record with details about created zip files or error
-public isolated transactional function exportExperiment(int experimentId, int exportId, ExperimentExportConfig config, string os, string storageLocation) returns ExperimentExportZip|error {
+public isolated transactional function exportExperiment(ExperimentFull experiment, int exportId, ExperimentExportConfig config, string os, string storageLocation) returns ExperimentExportZip|error {
 
-    ExperimentCompleteExport experimentComplete = check getExperimentDBExport(experimentId, config);
+    ExperimentCompleteExport experimentComplete = check getExperimentDBExport(experiment, config);
     // data files
     string[] dataFileLocations = [];
     ExperimentDataExport[] experimentDataList = experimentComplete.experimentDataList;
     foreach var experimentData in experimentDataList {
         string location = experimentData.location;
         experimentData.location = check extractFilename(location); // only file name
-        var path = check file:joinPath(storageLocation, experimentId.toString(), experimentData.location);
+        var path = check file:joinPath(storageLocation, experiment.experimentId.toString(), experimentData.location);
         var abspath = check file:getAbsolutePath(path);
         log:printDebug("Add file " + abspath + "...");
         dataFileLocations.push(abspath);
@@ -506,7 +505,8 @@ public isolated transactional function createExportJob(int experimentId, Experim
     if configuredDBType != "sqlite" {
         currentTime = ` DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%S') `;
     }
-    var insertResult = check experimentDB->execute(sql:queryConcat(`INSERT INTO ExperimentExport (experimentId, name, location, creationDate) VALUES (${experimentId}, "", "", `, currentTime, `)`));
+    ExperimentFull experiment = check getExperiment(experimentId);
+    var insertResult = check experimentDB->execute(sql:queryConcat(`INSERT INTO ExperimentExport (experimentId, name, location, creationDate) VALUES (${experimentId}, ${experiment.name}, "", `, currentTime, `)`));
 
     var exportId = insertResult.lastInsertId;
     if exportId == () || exportId is string {
@@ -515,7 +515,7 @@ public isolated transactional function createExportJob(int experimentId, Experim
     int intExportId = check exportId.ensureType();
 
     // start long-running export task 
-    _ = check task:scheduleOneTimeJob(new exportJob(intExportId, experimentId, config, os, storageLocation), time:utcToCivil(time:utcAddSeconds(time:utcNow(), 1)));
+    _ = check task:scheduleOneTimeJob(new exportJob(intExportId, experiment, config, os, storageLocation), time:utcToCivil(time:utcAddSeconds(time:utcNow(), 1)));
 
     return intExportId;
     // TODO: garbage cleaning for import/export experiments
@@ -565,7 +565,7 @@ public class exportJob {
 
     *task:Job;
     int exportId;
-    int experimentId;
+    ExperimentFull experiment;
     ExperimentExportConfig exportConfig;
     string configuredOS;
     string storageLocation;
@@ -573,12 +573,12 @@ public class exportJob {
     public isolated function execute() {
         transaction {
             ExperimentExportZip experimentZip;
-            experimentZip = check exportExperiment(self.experimentId, self.exportId, self.exportConfig, self.configuredOS, self.storageLocation);
+            experimentZip = check exportExperiment(self.experiment, self.exportId, self.exportConfig, self.configuredOS, self.storageLocation);
 
             _ = check experimentDB->execute(
                 `UPDATE ExperimentExport 
                     SET status="SUCCESS", name=${experimentZip.name}, location=${experimentZip.location}
-                WHERE experimentId = ${self.experimentId} AND exportId = ${self.exportId};`
+                WHERE experimentId = ${self.experiment.experimentId} AND exportId = ${self.exportId};`
             );
 
             check commit;
@@ -586,7 +586,7 @@ public class exportJob {
             var res = experimentDB->execute(
                 `UPDATE ExperimentExport 
                     SET status="FAILURE"
-                WHERE experimentId = ${self.experimentId} AND exportId = ${self.exportId};`
+                WHERE experimentId = ${self.experiment.experimentId} AND exportId = ${self.exportId};`
             );
             if res is error {
                 log:printError("Exporting experiment unsuccessful. Updating ExperimentExport unsuccessful! Failure will not be seen from the outside.", 'error = err, stackTrace = err.stackTrace());
@@ -595,9 +595,9 @@ public class exportJob {
         }
     }
 
-    isolated function init(int exportId, int experimentId, ExperimentExportConfig exportConfig, string configuredOS, string storageLocation) {
+    isolated function init(int exportId, ExperimentFull experiment, ExperimentExportConfig exportConfig, string configuredOS, string storageLocation) {
         self.exportId = exportId;
-        self.experimentId = experimentId;
+        self.experiment = experiment;
         self.exportConfig = exportConfig;
         self.configuredOS = configuredOS;
         self.storageLocation = storageLocation;
