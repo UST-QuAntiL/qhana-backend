@@ -1090,7 +1090,7 @@ service / on new http:Listener(serverPort) {
     # Get a list of recent experiment exports.
     #
     # + return - json with export status (includes experiment details once successful)
-    resource function get experiments/'export\-list(int? item\-count = 10) returns ExportListResponse|http:BadRequest|http:InternalServerError {
+    resource function get experiments/export\-list(int? item\-count = 10) returns ExportListResponse|http:BadRequest|http:InternalServerError {
 
         int itemCount = (item\-count is ()) ? 10 : item\-count;
 
@@ -1110,6 +1110,26 @@ service / on new http:Listener(serverPort) {
         }
 
         return {'\@self: string `${serverHost}/experiments/export-list`, items: exportList, itemCount: exportList.length()};
+    }
+
+    # Delete an experiment export.
+    #
+    # + return - 204 no content or error
+    resource function delete experiments/[int experimentId]/export/[int exportId]/delete(http:Caller caller) returns error? {
+        http:Response resp = new;
+        transaction {
+            check database:deleteExport(experimentId, exportId);
+            check commit;
+        } on fail error err {
+            log:printError("Could not delete export", 'error = err, stackTrace = err.stackTrace());
+            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+            resp.setPayload("Something went wrong. Please try again later.");
+            check caller->respond(resp);
+            return;
+        }
+
+        resp.statusCode = http:STATUS_NO_CONTENT;
+        check caller->respond(resp);
     }
 
     # Import an experiment from a zip.

@@ -604,3 +604,19 @@ public class exportJob {
     }
 }
 
+# Delete export entry
+#
+# + experimentId - experiment id
+# + exportId - export db id
+# + return - error or empty
+public isolated transactional function deleteExport(int experimentId, int exportId) returns error? {
+    var result = experimentDB->execute(
+        `DELETE FROM ExperimentExport WHERE id=${exportId} AND experimentId=${experimentId};`
+    );
+
+    if result is error {
+        return result;
+    } else {
+        return;
+    }
+}
