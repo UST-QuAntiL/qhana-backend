@@ -324,18 +324,6 @@ public isolated transactional function getExportDataList(int experimentId, Exper
             select {dataId, name, 'version, location, 'type, contentType};
     } else {
         experimentDataList = check mapToExportDataList(dataIdList, experimentId);
-        if dataIdList.length() > 0 {
-            // ignore duplicates in dataIdList and create experiment data list
-            int[] sortedDataIdList = dataIdList.sort();
-            int tmp = -1;
-            foreach int dataId in sortedDataIdList {
-                if dataId != tmp {
-                    tmp = dataId;
-                    ExperimentDataExport experimentData = check getExperimentDataExport(experimentId, dataId);
-                    experimentDataList.push(experimentData);
-                }
-            }
-        } // else don't need data
     }
     return experimentDataList;
 }
@@ -356,7 +344,7 @@ public isolated transactional function getExperimentDBExport(ExperimentFull expe
         int counter = 0;
         foreach TimelineStepFull timelineStepDb in timelineStepListDb {
             if config.restriction == "STEPS" {
-                // filter steps with stepList 
+                // skip steps not in stepList 
                 if timelineStepDb.sequence == stepList[counter] {
                     counter += 1;
                 } else {
@@ -545,12 +533,12 @@ public isolated transactional function getExportResult(int experimentId, int exp
 # + return - id of export job db entry
 public isolated transactional function getExportList(int item\-count) returns ExportStatus[]|error {
     stream<ExportStatus, sql:Error?> result = experimentDB->query(`SELECT exportId, experimentId, status, name FROM ExperimentExport ORDER BY exportId DESC LIMIT ${item\-count};`);
-    ExportStatus[]? experimentDataList = check from var data in result
-        select data;
+    ExportStatus[]? exportList = check from var export in result
+        select export;
     check result.close();
 
-    if experimentDataList != () {
-        return experimentDataList;
+    if exportList != () {
+        return exportList;
     } else {
         return [];
     }
