@@ -29,7 +29,7 @@ import ballerina/mime;
 # Record for configuring experiment export 
 #
 # + restriction - config type, can have values "ALL" for all data (default), "LOGS" for only steps/substeps with params, "DATA" for only data files, "STEPS" for specific steps with associated data files
-# + allDataVersions - all versions if value >= 0, else only newest version (only for restriction "DATA")
+# + allDataVersions - all versions if value != 0, else only newest version (only for restriction "DATA")
 # + stepList - list of step sequence numbers, only needed for restriction "STEPS"
 public type ExperimentExportConfig record {|
     string restriction = "ALL";
@@ -297,7 +297,7 @@ public isolated transactional function getTimelineStepLimit(int experimentId) re
 # + dataIdList - List of data ids 
 # + experimentId - Experiment id
 # + return - Return list of experiment data export 
-public isolated transactional function mapToExportDataList(int[] dataIdList, int experimentId) returns ExperimentDataExport[]|error {
+isolated transactional function mapToExportDataList(int[] dataIdList, int experimentId) returns ExperimentDataExport[]|error {
     ExperimentDataExport[] experimentDataList = [];
     if dataIdList.length() > 0 {
         // ignore duplicates in dataIdList and create experiment data list
@@ -318,7 +318,7 @@ public isolated transactional function getExportDataList(int experimentId, Exper
     ExperimentDataExport[] experimentDataList;
     if config.restriction == "DATA" {
         // only need data files
-        boolean allVersions = config.allDataVersions < 0 ? false : true;
+        boolean allVersions = config.allDataVersions != 0;
         ExperimentDataFull[] dataList = check getDataList(experimentId, (), all = allVersions);
         experimentDataList = from var {dataId, name, 'version, location, 'type, contentType} in dataList
             select {dataId, name, 'version, location, 'type, contentType};
