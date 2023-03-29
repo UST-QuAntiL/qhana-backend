@@ -1109,7 +1109,7 @@ service / on new http:Listener(serverPort) {
             return resultErr;
         }
 
-        return {'\@self: string `${serverHost}/experiments/export-list`, items: exportList, itemCount: exportList.length()};
+        return {'\@self: string `${serverHost}/experiments/export-list`, items: exportList};
     }
 
     # Delete an experiment export.
@@ -1118,7 +1118,7 @@ service / on new http:Listener(serverPort) {
     resource function delete experiments/[int experimentId]/export/[int exportId]/delete(http:Caller caller) returns error? {
         http:Response resp = new;
         transaction {
-            check database:deleteExport(experimentId, exportId);
+            check database:deleteExport(experimentId, exportId, configuredOS);
             check commit;
         } on fail error err {
             log:printError("Could not delete export", 'error = err, stackTrace = err.stackTrace());

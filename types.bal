@@ -153,7 +153,6 @@ public type ImportResponse record {|
 public type ExportListResponse record {|
     *ApiResponse;
     database:ExportStatus[] items;
-    int itemCount;
 |};
 
 ////////////////////////////////////////////////////////////////////////////////

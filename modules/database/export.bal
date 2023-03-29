@@ -33,7 +33,7 @@ import ballerina/mime;
 # + stepList - list of step sequence numbers, only needed for restriction "STEPS"
 public type ExperimentExportConfig record {|
     string restriction = "ALL";
-    int allDataVersions = 1;
+    boolean allDataVersions = true;
     int[] stepList = [];
 |};
 
@@ -318,8 +318,7 @@ public isolated transactional function getExportDataList(int experimentId, Exper
     ExperimentDataExport[] experimentDataList;
     if config.restriction == "DATA" {
         // only need data files
-        boolean allVersions = config.allDataVersions != 0;
-        ExperimentDataFull[] dataList = check getDataList(experimentId, (), all = allVersions);
+        ExperimentDataFull[] dataList = check getDataList(experimentId, (), all = config.allDataVersions);
         experimentDataList = from var {dataId, name, 'version, location, 'type, contentType} in dataList
             select {dataId, name, 'version, location, 'type, contentType};
     } else {
@@ -596,15 +595,14 @@ public class exportJob {
 #
 # + experimentId - experiment id
 # + exportId - export db id
+# + os - configure OS
 # + return - error or empty
-public isolated transactional function deleteExport(int experimentId, int exportId) returns error? {
-    var result = experimentDB->execute(
+public isolated transactional function deleteExport(int experimentId, int exportId, string os) returns error? {
+    _ = check experimentDB->execute(
         `DELETE FROM ExperimentExport WHERE exportId=${exportId} AND experimentId=${experimentId};`
     );
-
-    if result is error {
-        return result;
-    } else {
-        return;
-    }
+    // remove export files
+    var tmpDirBase = getTmpDir(os);
+    var tmpDir = check file:joinPath(tmpDirBase, "export-" + exportId.toString());
+    check file:remove(tmpDir, file:RECURSIVE);
 }
