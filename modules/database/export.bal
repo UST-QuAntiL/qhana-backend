@@ -604,5 +604,8 @@ public isolated transactional function deleteExport(int experimentId, int export
     // remove export files
     var tmpDirBase = getTmpDir(os);
     var tmpDir = check file:joinPath(tmpDirBase, "export-" + exportId.toString());
-    check file:remove(tmpDir, file:RECURSIVE);
+
+    if check file:test(tmpDir, file:EXISTS) {
+        check file:remove(tmpDir, file:RECURSIVE);
+    }
 }
