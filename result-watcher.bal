@@ -139,13 +139,13 @@ isolated function timelineSubstepToDBTimelineSubstep(TimelineSubstep substep) re
 # Record describing the pending task result and status resource.
 #
 # + status - a string describing the current task status
-# + taskLog - a human readable log of the task progress
+# + log - a human readable log of the task progress
 # + outputs - a list of data outputs once the task is finished
 # + steps - a list of substeps of the current task
 # + progress - the current progress of the task
 type TaskStatusResponse record {
     string status;
-    string? taskLog?;
+    string? log?;
     TaskDataOutput[]? outputs?;
     TimelineSubstep[] steps?;
     Progress progress?;
@@ -196,7 +196,7 @@ isolated class ResultProcessor {
                 progressUnit: tmpProgress.unit
             };
         }
-        string? taskLog = self.result?.taskLog;
+        string? taskLog = self.result?.log;
         if progress != () {
             check database:updateTimelineProgress(self.stepId, progress);
         }
@@ -329,7 +329,7 @@ isolated class ResultProcessor {
 
             var r = self.result;
             var status = r.status;
-            var resultLog = r["resultLog"];
+            var resultLog = r["log"];
 
             _ = check database:updateTimelineStepStatus(self.stepId, status, resultLog);
             check database:deleteTimelineStepResultWatcher(self.stepId);
@@ -346,7 +346,7 @@ isolated class ResultProcessor {
             'transaction:onRollback(self.rescheduleResultWatcher);
             var r = self.result;
             var status = r.status;
-            var resultLog = r["resultLog"];
+            var resultLog = r["log"];
 
             _ = check database:updateTimelineStepStatus(self.stepId, status, resultLog);
             check database:deleteTimelineStepResultWatcher(self.stepId);
