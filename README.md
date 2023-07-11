@@ -2,7 +2,7 @@
 
 [![GitHub license](https://img.shields.io/github/license/UST-QuAntiL/qhana-backend)](https://github.com/UST-QuAntiL/qhana-backend/blob/main/LICENSE)
 
-The QHAna Backend API is implemented in [Ballerina](https://ballerina.io) (swan-lake Beta 3).
+The QHAna Backend API is implemented in [Ballerina](https://ballerina.io) (Swan Lake Update 7).
 
 Please use the following resources to make yourself familiar with Ballerina:
 

@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        BAL_VERSION: 2201.2.0-swan-lake
+        BAL_VERSION: 2201.7.0-swan-lake
     image: qhana-backend
     volumes:
       - ./experimentData:/app/data
