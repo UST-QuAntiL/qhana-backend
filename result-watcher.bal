@@ -376,7 +376,7 @@ isolated class ResultWatcherRescheduler {
     public isolated function execute() {
         log:printInfo(string `Reschedule watcher ${self.watcher.stepId} after new substep was found.`);
         // TODO: Probably needs to be changed in the future
-        (decimal|int)[] initialIntervals = configuredWatcherIntervalls;
+        (decimal|int)[] initialIntervals = configuredWatcherIntervals;
         error? err = self.watcher.schedule(...initialIntervals);
         if err != () {
             log:printError("Failed to reschedule watcher.", 'error = err, stackTrace = err.stackTrace());
@@ -479,7 +479,7 @@ public isolated class ResultWatcher {
         }
     }
 
-    # Unschedule the current repeating task and schedule self again with the new intervall.
+    # Unschedule the current repeating task and schedule self again with the new interval.
     #
     # + interval - the time in seconds
     # + maxCount - how often the task will be repeated max (-1 for infinite repeats)
@@ -509,17 +509,17 @@ public isolated class ResultWatcher {
     # Schedule this background job periodically with the given interval in seconds.
     #
     # If more than one number is given every second number starting from the first is
-    # interpreted as an interval. The number following the intervall is the number of
-    # times this background job is scheduled with that intervall. If no number follows
-    # an intervall, then the job will not unschedule itself.
+    # interpreted as an interval. The number following the interval is the number of
+    # times this background job is scheduled with that interval. If no number follows
+    # an interval, then the job will not unschedule itself.
     #
     # If the number of times is exceeded, then the job will reschedule itself
-    # with the next intervall in the list. If no intervall is left, then the job 
+    # with the next interval in the list. If no interval is left, then the job 
     # will unschedule itself.
     #
     # Unschedules the job first if it was already scheduled.
     #
-    # + intervals - usage: `[intervall1, backoffCounter1, intervall2, backoffCounter2, ..., [intervallLast]]`
+    # + intervals - usage: `[interval1, backoffCounter1, interval2, backoffCounter2, ..., [intervalast]]`
     # + return - The error encountered while (re)scheduling this job (or parsing the intervals)
     public isolated function schedule(decimal|int... intervals) returns error? {
         if intervals.length() <= 0 {
@@ -544,12 +544,12 @@ public isolated class ResultWatcher {
             self.scheduleIntervals = scheduleIntervals.clone().reverse();
             self.backoffCounters = backoffCounters.clone().reverse();
 
-            var startingIntervall = self.scheduleIntervals.pop(); // list always contains >1 entries at this point (see guard at top)
+            var startingInterval = self.scheduleIntervals.pop(); // list always contains >1 entries at this point (see guard at top)
             self.currentBackoffCounter = self.backoffCounters.length() > 0 ? self.backoffCounters.pop() : ();
 
             int? maxRuns = self.currentBackoffCounter;
 
-            check self.reschedule(startingIntervall, (maxRuns == ()) ? -1 : maxRuns + 1);
+            check self.reschedule(startingInterval, (maxRuns == ()) ? -1 : maxRuns + 1);
         }
     }
 
