@@ -14,8 +14,7 @@
 
 import ballerina/time;
 import ballerina/mime;
-import ballerina/regex;
-import ballerina/url;
+import ballerina/lang.regexp;
 import qhana_backend.database;
 
 # Generic error response for the api.
@@ -533,27 +532,28 @@ public isolated function mapToTimelineSubstepListResponse(
 # + url - the data input URL to parse
 # + return - the parsed parameters
 public isolated function mapFileUrlToDataRef(int experimentId, string url) returns database:ExperimentDataReference|error {
-    // TODO refactor once regex supports extrating group matches
-    var regex = string `^(https?:\/\/)?[^\/]*\/experiments\/${experimentId}\/data\/[^\/]+\/download\?version=(latest|[0-9]+)$`;
-    if !regex:matches(url, regex) {
-        return error("url does not match any file from the experiment." + url);
+    string:RegExp regex = re `^https?://?[^/]*/experiments/${experimentId}/data/([^/]+)/download\?version=(latest|[0-9]+)$`;
+    if !url.matches(regex) {
+        return error("url does not match any file from the experiment. " + url);
     }
-    // retrieve actual positions with index of looks because regex module is lacking 
-    // this is safe(ish) because the regex above guarantees the format
-    var dataStart = url.indexOf("/data/");
-    var filenameEnd = url.lastIndexOf("/download?");
-    var queryStart = url.lastIndexOf("?");
-    var versionStart = url.lastIndexOf("=");
-    if dataStart == () || filenameEnd == () || queryStart == () || versionStart == () {
-        return error("A malformed url slipped through the regex test.");
-    } else {
-        var filename = url.substring(dataStart + 6, filenameEnd);
-        var versionNumber = url.substring(versionStart + 1, url.length());
-        return {
-            name: check url:decode(filename, "UTF-8"),
-            'version: check int:fromString(versionNumber)
-        };
+    regexp:Groups? groups = regex.findGroups(url);
+    if groups == () {
+        return error("A malformed url slipped through the regex test. " + url);
     }
+    regexp:Span? filenameSpan = groups[1];
+    regexp:Span? versionSpan = groups[2];
+    if filenameSpan == () || versionSpan == () {
+        return error("A malformed url slipped through the regex test. Filename or version missing. " + url);
+    }
+    string version = versionSpan.substring();
+    if version == "latest" {
+        // TODO: handle string "latest" as version
+        return error("Version specifier 'latest' not supported. " + url);
+    }
+    return {
+        name: filenameSpan.substring(),
+        'version: check int:fromString(version)
+    };
 }
 
 # Api response for template post.
