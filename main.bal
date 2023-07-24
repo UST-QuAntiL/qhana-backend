@@ -99,12 +99,12 @@ function getHost() returns string {
 # The final configured server host.
 final string & readonly serverHost = getHost().cloneReadOnly();
 
-# User configurable watcher intervall configuration.
-# Can also be configured by setting the `QHANA_WATCHER_INTERVALLS` environment variable.
-# The numbers are interpreted as folowing: `[<intervall in seconds>, [<iterations until next intervall>]]*`
-# If the list ends with an intervall, i.e., the iterations count is missing, then the intervall 
+# User configurable watcher interval configuration.
+# Can also be configured by setting the `QHANA_WATCHER_INTERVALS` environment variable.
+# The numbers are interpreted as folowing: `[<interval in seconds>, [<iterations until next interval>]]*`
+# If the list ends with an interval, i.e., the iterations count is missing, then the interval 
 # will be repeated indefinitely.
-configurable (decimal|int)[] watcherIntervallConfig = [2, 10, 5, 10, 10, 60, 30, 20, 60, 10, 600];
+configurable (decimal|int)[] watcherIntervalConfig = [2, 10, 5, 10, 10, 60, 30, 20, 60, 10, 600];
 
 # Coerce the string input to a positive int or decimal.
 #
@@ -122,25 +122,25 @@ function coerceToPositiveNumber(string input) returns decimal|int|error {
     return error(string `Input "${input}" is not a positive number!`);
 }
 
-# Get the watcher intervalls from the `QHANA_WATCHER_INTERVALLS` environment variable.
-# If not present use the configurable variable `watcherIntervallConfig` as fallback.
+# Get the watcher intervals from the `QHANA_WATCHER_INTERVALS` environment variable.
+# If not present use the configurable variable `watcherIntervalConfig` as fallback.
 #
-# + return - the configured watcher intervalls
-function getWatcherIntervallConfig() returns (decimal|int)[] {
-    string intervalls = os:getEnv("QHANA_WATCHER_INTERVALLS");
-    if (intervalls.length() > 0) {
+# + return - the configured watcher intervals
+function getWatcherIntervalConfig() returns (decimal|int)[] {
+    string intervals = os:getEnv("QHANA_WATCHER_INTERVALS");
+    if (intervals.length() > 0) {
         do {
-            return from string i in regex:split(intervalls, "[\\s\\(\\),;]+")
+            return from string i in regex:split(intervals, "[\\s\\(\\),;]+")
                 select check coerceToPositiveNumber(i);
         } on fail error err {
-            log:printError("Failed to parse environment variable QHANA_WATCHER_INTERVALLS!\n", 'error = err, stackTrace = err.stackTrace());
+            log:printError("Failed to parse environment variable QHANA_WATCHER_INTERVALS!\n", 'error = err, stackTrace = err.stackTrace());
         }
     }
-    return watcherIntervallConfig;
+    return watcherIntervalConfig;
 }
 
-# The final configured watcher intervalls.
-final (decimal|int)[] & readonly configuredWatcherIntervalls = getWatcherIntervallConfig().cloneReadOnly();
+# The final configured watcher intervals.
+final (decimal|int)[] & readonly configuredWatcherIntervals = getWatcherIntervalConfig().cloneReadOnly();
 
 # User configurable URL map which is used by the backend to rewrite URLs used by the result watchers.
 # Can also be configured by setting the `QHANA_URL_MAPPING` environment variable.
@@ -153,7 +153,7 @@ configurable map<string> & readonly internalUrlMap = {};
 # Get the URL map from the `QHANA_URL_MAPPING` environment variable.
 # If not present use the configurable variable `internalUrlMap` as fallback.
 #
-# + return - the configured watcher intervalls
+# + return - the configured watcher intervals
 function getInternalUrlMap() returns map<string> {
     string mapping = os:getEnv("QHANA_URL_MAPPING");
     if (mapping.length() > 0) {
@@ -191,7 +191,7 @@ configurable string[] pluginRunners = [];
 # Get preset plugin runner from the `QHANA_PLUGIN_RUNNERS` environment variable.
 # If not present use the configurable variable `pluginRunners` as fallback.
 #
-# + return - the configured watcher intervalls
+# + return - the configured watcher intervals
 function getPluginRunnersConfig() returns string[] {
     string pRunners = os:getEnv("QHANA_PLUGIN_RUNNERS");
     if (pRunners.length() > 0) {
@@ -210,7 +210,7 @@ final string[] & readonly preconfiguredPluginRunners = getPluginRunnersConfig().
 # Get preset plugins from the `QHANA_PLUGINS` environment variable.
 # If not present use the configurable variable `plugins` as fallback.
 #
-# + return - the configured watcher intervalls
+# + return - the configured watcher intervals
 function getPluginsConfig() returns string[] {
     string pluginList = os:getEnv("QHANA_PLUGINS");
     if (pluginList.length() > 0) {
@@ -705,7 +705,7 @@ service / on new http:Listener(serverPort) {
         }
         do {
             ResultWatcher watcher = check new (createdStep.stepId);
-            check watcher.schedule(...configuredWatcherIntervalls);
+            check watcher.schedule(...configuredWatcherIntervals);
         } on fail error err {
             log:printError("Failed to start watcher.", 'error = err, stackTrace = err.stackTrace());
             // if with return does not correctly narrow type for rest of function... this does.
@@ -869,7 +869,7 @@ service / on new http:Listener(serverPort) {
             lock {
                 watcher = check getResultWatcherFromRegistry(step.stepId);
             }
-            check watcher.schedule(...configuredWatcherIntervalls);
+            check watcher.schedule(...configuredWatcherIntervals);
         } on fail error err {
             log:printError("Failed to restart watcher.", 'error = err, stackTrace = err.stackTrace());
             // if with return does not correctly narrow type for rest of function... this does.
@@ -1283,7 +1283,7 @@ public function main() {
         var stepsToWatch = check database:getTimelineStepsWithResultWatchers();
         foreach var stepId in stepsToWatch {
             ResultWatcher watcher = check new (stepId);
-            check watcher.schedule(...configuredWatcherIntervalls);
+            check watcher.schedule(...configuredWatcherIntervals);
         }
         check commit;
     } on fail error err {
