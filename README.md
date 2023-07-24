@@ -101,7 +101,7 @@ Environment variables to configure the backend with:
 | QHANA_HOST | `http://localhost:9090` | The host base url of the backend including protocol and port. |
 | QHANA_CORS_DOMAINS | `http://localhost:4200` | Domains for which cors requests are allowed. Entries are separated by any whitespace. |
 | QHANA_WATCHER_INTERVALLS | `1 10 10 5 60` | Configuration for the result watcher intervalls. Event entries are intervalls (in seconds) and odd entries specify after how many iterations the next intervall in the list is used. |
-| QHANA_URL_MAPPING | `{"(\\?<=^\|https?://)localhost": "host.docker.internal"}` | A map of rewrite rules for plugin result URLs. The map is a JSON object whose keys are regex patterns and whose values are the replacement strings for these patterns. All rules are applied to an URL without a guaranteed order. |
+| QHANA_URL_MAPPING | `{"(?<=^\|https?://)localhost(:[0-9]+)?": "host.docker.internal$1"}` | A map of rewrite rules for plugin result URLs. The map is a JSON object whose keys are regex patterns and whose values are the replacement strings for these patterns. All rules are applied to an URL without a guaranteed order. |
 | LOCALHOST_PROXY_PORTS | `:1234 :2345` | Alternative to QHANA_URL_MAPPING that can be used with the docker container. Forwards requests that go to the specified ports to the host machine.
 | QHANA_PLUGINS | `["http://localhost:5005/plugins/hello-world@v0-1-0/", "http://localhost:5005/plugins/entity-filter@v0-1-0/"]` | A list (JSON list/array) of plugin URLs. |
 | QHANA_PLUGIN_RUNNERS | `["http://localhost:5005"]` | The list (JSON list/array) of plugin runner URLs. |
