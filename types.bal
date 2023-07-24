@@ -547,8 +547,13 @@ public isolated function mapFileUrlToDataRef(int experimentId, string url) retur
     }
     string version = versionSpan.substring();
     if version == "latest" {
-        // TODO: handle string "latest" as version
-        return error("Version specifier 'latest' not supported. " + url);
+        transaction {
+            var data = check database:getData(experimentId, filenameSpan.substring(), "latest");
+            check commit;
+            version = data.version.toJsonString();
+        } on fail error err {
+            return error("Could not get latest version of data. " + err.message());
+        }
     }
     return {
         name: filenameSpan.substring(),
