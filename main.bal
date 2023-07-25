@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import ballerina/http;
-import ballerina/regex;
+import ballerina/lang.regexp;
 import ballerina/os;
 import ballerina/log;
 import qhana_backend.database;
@@ -49,7 +49,8 @@ configurable string[] corsDomains = ["*"];
 function getCorsDomains() returns string[] {
     string d = os:getEnv("QHANA_CORS_DOMAINS");
     if (d.length() > 0) {
-        return regex:split(d, "[\\s]+");
+        string:RegExp r = re `[\s]+`;
+        return r.split(d);
     }
     return corsDomains;
 }
@@ -67,7 +68,7 @@ configurable int port = 9090;
 # + return - the configured port number
 function getPort() returns int {
     string p = os:getEnv("QHANA_PORT");
-    if (regex:matches(p, "^[0-9]+$")) {
+    if (p.matches(re `^[0-9]+$`)) {
         do {
             return check int:fromString(p);
         } on fail {
@@ -90,7 +91,7 @@ configurable string host = "http://localhost:" + serverPort.toString();
 # + return - the configured host base path (including protocol and port)
 function getHost() returns string {
     string h = os:getEnv("QHANA_HOST");
-    if (regex:matches(h, "^https?:\\/\\/.*$")) {
+    if (h.matches(re `^https?://.*$`)) {
         return h;
     }
     return host;
@@ -111,11 +112,11 @@ configurable (decimal|int)[] watcherIntervallConfig = [2, 10, 5, 10, 10, 60, 30,
 # + input - the string input to coerce
 # + return - the coerced number or the error if coercion failed (or the number was negative)
 function coerceToPositiveNumber(string input) returns decimal|int|error {
-    boolean isDecimal = regex:matches(input, "^\\+?[0-9]+\\.[0-9]+$");
+    boolean isDecimal = input.matches(re `^\+?[0-9]+\.[0-9]+$`);
     if (isDecimal) {
         return decimal:fromString(input);
     }
-    boolean isInt = regex:matches(input, "^\\+?[0-9]+$");
+    boolean isInt = input.matches(re `^\+?[0-9]+$`);
     if (isInt) {
         return int:fromString(input);
     }
@@ -129,8 +130,13 @@ function coerceToPositiveNumber(string input) returns decimal|int|error {
 function getWatcherIntervallConfig() returns (decimal|int)[] {
     string intervalls = os:getEnv("QHANA_WATCHER_INTERVALLS");
     if (intervalls.length() > 0) {
+        if (intervalls.startsWith("(") && intervalls.endsWith(")")) {
+            // Remove enclosing brackets from start/end of string if present
+            intervalls = intervalls.substring(1, intervalls.length() - 1);
+        }
         do {
-            return from string i in regex:split(intervalls, "[\\s\\(\\),;]+")
+            string:RegExp r = re `[\s,;]+`;
+            return from string i in r.split(intervalls)
                 select check coerceToPositiveNumber(i);
         } on fail error err {
             log:printError("Failed to parse environment variable QHANA_WATCHER_INTERVALLS!\n", 'error = err, stackTrace = err.stackTrace());
@@ -239,7 +245,12 @@ isolated function mapToInternalUrl(string url) returns string {
     // apply all replacements specified in the url map, keys are interpreted as regex
     var replacedUrl = url;
     foreach var [pattern, replacement] in configuredUrlMap.entries() {
-        replacedUrl = regex:replace(replacedUrl, pattern, replacement);
+        do {
+            string:RegExp regex = check regexp:fromString(pattern);
+            replacedUrl = regex.replace(replacedUrl, replacement);
+        } on fail error err {
+            log:printError("Failed to parse regex pattern '" + pattern + "'!\n", 'error = err, stackTrace = err.stackTrace());
+        }
     }
     return replacedUrl;
 }
@@ -372,10 +383,10 @@ service / on new http:Listener(serverPort) {
     #
     # + search - filter by experiment name
     # + page - the requested page (starting with page 0)
-    # + 'item\-count - the number of items per page (5 <= item-count <= 500)
+    # + item\-count - the number of items per page (5 <= item-count <= 500)
     # + sort - 1 for asc sort, -1 for desc sort by experiment name
     # + return - the list resource containing the experiments
-    resource function get experiments(string? search, int? page = 0, int? 'item\-count = 10, int? sort = 1) returns ExperimentListResponse|http:InternalServerError|http:BadRequest|http:NotFound {
+    resource function get experiments(string? search, int? page = 0, int? item\-count = 10, int? sort = 1) returns ExperimentListResponse|http:InternalServerError|http:BadRequest|http:NotFound {
         int intPage = (page is ()) ? 0 : page;
         int itemCount = (item\-count is ()) ? 10 : item\-count;
         int intSort = (sort is ()) ? 1 : sort;

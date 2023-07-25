@@ -17,7 +17,6 @@ import ballerina/task;
 import ballerina/log;
 import ballerina/time;
 import ballerina/file;
-import ballerina/regex;
 import ballerina/io;
 import ballerina/os;
 import ballerina/mime;
@@ -424,8 +423,9 @@ public isolated transactional function exportExperiment(ExperimentFull experimen
     log:printDebug("Write " + jsonPath + " ...");
     check io:fileWriteJson(jsonPath, experimentCompleteJson);
 
-    // create zip-  add all files (experiment file(s) + data files) to ZIP
-    string zipFileName = regex:replaceAll(experimentComplete.experiment.name, "[\\s+\\\\/:<>\\|\\?\\*]", "-") + ".zip";
+    // create zip - add all files (experiment file(s) + data files) to ZIP
+    string:RegExp r = re `[\s+\\/:;<>|?*]`;
+    string zipFileName = r.replaceAll(experimentComplete.experiment.name, "-") + ".zip";
     var zipPath = check file:joinPath(tmpDir, zipFileName);
     var zipPathAbs = check file:getAbsolutePath(zipPath);
     log:printDebug("Create zip " + zipPathAbs + " ...");

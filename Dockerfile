@@ -4,8 +4,8 @@ RUN apt-get -y update && apt-get install unzip
 WORKDIR /app
 
 # install ballerina
-ARG BAL_VERSION="2201.2.0-swan-lake"
-RUN wget --no-verbose https://dist.ballerina.io/downloads/2201.2.0/ballerina-${BAL_VERSION}.zip
+ARG BAL_VERSION="2201.7.0-swan-lake"
+RUN wget --no-verbose https://dist.ballerina.io/downloads/2201.7.0/ballerina-${BAL_VERSION}.zip
 RUN unzip ballerina-${BAL_VERSION}
 ENV PATH="${PATH}:/app/ballerina-${BAL_VERSION}/bin"
 

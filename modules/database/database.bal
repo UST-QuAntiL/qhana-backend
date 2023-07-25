@@ -176,8 +176,6 @@ public type ExperimentDataReference record {|
 
 # Database record of references to experiment data.
 #
-# + name - the (file-)name of the experiment data
-# + 'version - the version of the data
 # + 'type - the data type of the data
 # + contentType - the content type of the data
 public type TypedExperimentDataReference record {|

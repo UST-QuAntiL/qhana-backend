@@ -3,14 +3,14 @@ services:
     build:
       context: .
       args:
-        BAL_VERSION: 2201.2.0-swan-lake
+        BAL_VERSION: 2201.7.0-swan-lake
     image: qhana-backend
     volumes:
       - ./experimentData:/app/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      QHANA_URL_MAPPING: '{"(?<=^|https?://)localhost": "host.docker.internal"}'
+      QHANA_URL_MAPPING: '{"^http://localhost": "http://host.docker.internal", "^https://localhost": "https://host.docker.internal"}' # FIXME patterns can be combined to '{"(?<=^|https?://)localhost": "host.docker.internal"}' once ballerina supports positive lookbehind (https://github.com/ballerina-platform/ballerina-lang/issues/40480)
       QHANA_DB_TYPE: 'mariadb'
       QHANA_DB_HOST: 'db:3306'
       QHANA_DB_NAME: 'QHAnaExperiments'
