@@ -531,7 +531,7 @@ public isolated function mapToTimelineSubstepListResponse(
 # + experimentId - the current experiment id
 # + url - the data input URL to parse
 # + return - the parsed parameters
-public isolated function mapFileUrlToDataRef(int experimentId, string url) returns database:ExperimentDataReference|error {
+public isolated transactional function mapFileUrlToDataRef(int experimentId, string url) returns database:ExperimentDataReference|error {
     string:RegExp regex = re `^https?://?[^/]*/experiments/${experimentId}/data/([^/]+)/download\?version=(latest|[0-9]+)$`;
     if !url.matches(regex) {
         return error("url does not match any file from the experiment. " + url);
@@ -547,13 +547,8 @@ public isolated function mapFileUrlToDataRef(int experimentId, string url) retur
     }
     string version = versionSpan.substring();
     if version == "latest" {
-        transaction {
-            var data = check database:getData(experimentId, filenameSpan.substring(), "latest");
-            check commit;
-            version = data.version.toJsonString();
-        } on fail error err {
-            return error("Could not get latest version of data. " + err.message());
-        }
+        var data = check database:getData(experimentId, filenameSpan.substring(), "latest");
+        version = data.version.toJsonString();
     }
     return {
         name: filenameSpan.substring(),
