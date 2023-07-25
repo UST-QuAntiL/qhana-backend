@@ -66,4 +66,4 @@ USER ballerina
 ENV PATH="${PATH}:/app/liquibase"
 
 # run backend
-CMD /app/start_proxy.sh && /app/start-docker.sh
+CMD (cd /app && ./start_proxy.sh) && /app/start-docker.sh
