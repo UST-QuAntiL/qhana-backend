@@ -386,7 +386,7 @@ service / on new http:Listener(serverPort) {
     # + 'item\-count - the number of items per page (5 <= item-count <= 500)
     # + sort - 1 for asc sort, -1 for desc sort by experiment name
     # + return - the list resource containing the experiments
-    resource function get experiments(string? search, int? page = 0, int? 'item\-count = 10, int? sort = 1) returns ExperimentListResponse|http:InternalServerError|http:BadRequest|http:NotFound {
+    resource function get experiments(string? search, int? page = 0, int? item\-count = 10, int? sort = 1) returns ExperimentListResponse|http:InternalServerError|http:BadRequest|http:NotFound {
         int intPage = (page is ()) ? 0 : page;
         int itemCount = (item\-count is ()) ? 10 : item\-count;
         int intSort = (sort is ()) ? 1 : sort;
