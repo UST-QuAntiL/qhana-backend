@@ -383,7 +383,7 @@ service / on new http:Listener(serverPort) {
     #
     # + search - filter by experiment name
     # + page - the requested page (starting with page 0)
-    # + 'item\-count - the number of items per page (5 <= item-count <= 500)
+    # + item\-count - the number of items per page (5 <= item-count <= 500)
     # + sort - 1 for asc sort, -1 for desc sort by experiment name
     # + return - the list resource containing the experiments
     resource function get experiments(string? search, int? page = 0, int? item\-count = 10, int? sort = 1) returns ExperimentListResponse|http:InternalServerError|http:BadRequest|http:NotFound {
