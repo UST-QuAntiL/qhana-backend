@@ -24,6 +24,17 @@ LABEL org.opencontainers.image.source="https://github.com/UST-QuAntiL/qhana-back
 
 RUN apt-get -y update && apt-get install -y sqlite3 unzip zip
 
+WORKDIR /app
+
+# install proxy
+ADD https://raw.githubusercontent.com/UST-QuAntiL/docker-localhost-proxy/v0.3/install_proxy.sh install_proxy.sh
+RUN chmod +x install_proxy.sh && ./install_proxy.sh
+
+# add localhost proxy files
+ADD --chown=ballerina https://raw.githubusercontent.com/UST-QuAntiL/docker-localhost-proxy/v0.3/Caddyfile.template Caddyfile.template
+ADD --chown=ballerina https://raw.githubusercontent.com/UST-QuAntiL/docker-localhost-proxy/v0.3/start_proxy.sh start_proxy.sh
+RUN chmod +x start_proxy.sh
+
 # create unpriviledged user
 RUN useradd ballerina
 
@@ -48,15 +59,6 @@ ADD --chown=ballerina https://github.com/ufoscout/docker-compose-wait/releases/d
 # make scripts executable
 RUN chmod +x /app/wait && chmod +x /app/start-docker.sh
 
-# install proxy
-ADD https://raw.githubusercontent.com/UST-QuAntiL/docker-localhost-proxy/v0.3/install_proxy.sh install_proxy.sh
-RUN chmod +x install_proxy.sh && ./install_proxy.sh
-
-# add localhost proxy files
-ADD --chown=ballerina https://raw.githubusercontent.com/UST-QuAntiL/docker-localhost-proxy/v0.3/Caddyfile.template Caddyfile.template
-ADD --chown=ballerina https://raw.githubusercontent.com/UST-QuAntiL/docker-localhost-proxy/v0.3/start_proxy.sh start_proxy.sh
-RUN chmod +x start_proxy.sh
-
 # switch to unpriviledged user
 USER ballerina
 
@@ -64,4 +66,4 @@ USER ballerina
 ENV PATH="${PATH}:/app/liquibase"
 
 # run backend
-CMD ./start_proxy.sh && /app/start-docker.sh
+CMD (cd /app && ./start_proxy.sh) && /app/start-docker.sh
