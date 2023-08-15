@@ -341,7 +341,7 @@ public isolated transactional function getExperimentDBExport(ExperimentFull expe
         }
         int counter = 0;
         foreach TimelineStepFull timelineStepDb in timelineStepListDb {
-            if config.restriction == "STEPS" {
+            if config.restriction == "STEPS" && counter < stepList.length() {
                 // skip steps not in stepList 
                 if timelineStepDb.sequence == stepList[counter] {
                     counter += 1;
@@ -376,7 +376,7 @@ public isolated transactional function getExperimentDBExport(ExperimentFull expe
     }
 
     experimentDataList = check getExportDataList(experiment.experimentId, config, dataIdList);
-
+    
     return {
         experiment: {name: experiment.name, description: experiment.description, templateId: experiment?.templateId},
         timelineSteps: timelineSteps,
