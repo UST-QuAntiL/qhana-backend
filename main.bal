@@ -522,7 +522,7 @@ service / on new http:Listener(serverPort) {
     # + sort - 1 for asc sort, -1 for desc sort by name and version
     # + search - search keyword in name, data type and content type (insensitive)
     # + return - the paginated list of data resources
-    resource function get experiments/[int experimentId]/data(boolean? all\-versions, string? search, int page = 0, int item\-count = 10, int? sort = 1) returns ExperimentDataListResponse|http:NotFound|http:InternalServerError|http:BadRequest {
+    resource function get experiments/[int experimentId]/data(boolean? all\-versions, string? search, string? data\-type, int page = 0, int item\-count = 10, int? sort = 1) returns ExperimentDataListResponse|http:NotFound|http:InternalServerError|http:BadRequest {
         boolean includeAllVersions = all\-versions == true || all\-versions == ();
         int intSort = (sort is ()) ? 1 : sort;
         string searchString = (search is ()) ? "" : search;
@@ -541,13 +541,13 @@ service / on new http:Listener(serverPort) {
         database:ExperimentDataFull[] data;
 
         transaction {
-            dataCount = check database:getExperimentDataCount(experimentId, searchString, all = includeAllVersions);
+            dataCount = check database:getExperimentDataCount(experimentId, searchString, all = includeAllVersions, dataType = data\-type);
             if (offset >= dataCount) {
                 // page is out of range!
                 check commit;
                 return <http:NotFound>{};
             } else {
-                data = check database:getDataList(experimentId, searchString, all = includeAllVersions, 'limit = item\-count, offset = offset, sort = intSort);
+                data = check database:getDataList(experimentId, searchString, all = includeAllVersions, dataType = data\-type, 'limit = item\-count, offset = offset, sort = intSort);
                 check commit;
             }
         } on fail error err {

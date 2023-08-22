@@ -17,6 +17,7 @@ import ballerina/time;
 import ballerina/sql;
 import ballerinax/java.jdbc;
 import ballerina/os;
+import ballerina/regex;
 import ballerina/mime;
 
 # The connection pool config for sqlite databases.
@@ -584,8 +585,9 @@ public isolated transactional function getExperimentTemplate(int experimentId) r
 # + experimentId - The experiment id
 # + search - search keyword in name, data type and content type (insensitive)
 # + all - If true count all experiment data including old version, if false count only the newest verwions (e.g. distinct data names)
+# + dataType - a filter for allowed data types (may contain * as a wildcard character)
 # + return - The count or the encountered error
-public isolated transactional function getExperimentDataCount(int experimentId, string search, boolean all = true) returns int|error {
+public isolated transactional function getExperimentDataCount(int experimentId, string search, boolean all = true, string? dataType=()) returns int|error {
     stream<RowCount, sql:Error?> result;
     sql:ParameterizedQuery baseQuery;
     if all {
@@ -593,7 +595,7 @@ public isolated transactional function getExperimentDataCount(int experimentId, 
     } else {
         baseQuery = `SELECT count(DISTINCT name) AS rowCount FROM ExperimentData `;
     }
-    result = experimentDB->query(sql:queryConcat(baseQuery, experimentDataFilter(experimentId, search), `;`));
+    result = experimentDB->query(sql:queryConcat(baseQuery, experimentDataFilter(experimentId, search, dataType), `;`));
     var count = result.next();
 
     check result.close();
@@ -627,13 +629,10 @@ public isolated transactional function getDataTypesSummary(int experimentId) ret
     return dataSummary;
 }
 
-public isolated transactional function getDataList(int experimentId, string? search, boolean all = true, int 'limit = 100, int offset = 0, int sort = 1) returns ExperimentDataFull[]|error {
+public isolated transactional function getDataList(int experimentId, string? search, boolean all = true, string? dataType=(), int 'limit = 100, int offset = 0, int sort = 1) returns ExperimentDataFull[]|error {
     sql:ParameterizedQuery baseQuery = `SELECT dataId, experimentId, name, version, location, type, contentType 
-                     FROM ExperimentData WHERE experimentId=${experimentId} `;
-    if search != () && search != "" {
-        string searchString = "%" + search + "%";
-        baseQuery = sql:queryConcat(baseQuery, `AND ((name LIKE ${searchString}) OR (type LIKE ${searchString}) OR (contentType LIKE ${searchString})) `);
-    }
+                     FROM ExperimentData `;
+    baseQuery = sql:queryConcat(baseQuery, experimentDataFilter(experimentId, search, dataType));
     if !all {
         baseQuery = sql:queryConcat(baseQuery, ` AND version=(SELECT MAX(t2.version)
                                 FROM ExperimentData AS t2 
@@ -1376,17 +1375,42 @@ public isolated transactional function saveTimelineSubstepInputData(int stepId, 
 # # Filter functions
 
 # Build filter query fragment to find matches in name, type and content of experiment data.
+# 
+# This filter always starts the where clause.
 #
 # + experimentId - Experiment id
 # + search - Search string to match
 # + return - Return filter query fragment
-public isolated function experimentDataFilter(int experimentId, string search) returns sql:ParameterizedQuery {
-    sql:ParameterizedQuery filter = `  WHERE experimentId = ${experimentId} `;
-    if search != "" {
+public isolated function experimentDataFilter(int experimentId, string? search, string? dataType) returns sql:ParameterizedQuery {
+    sql:ParameterizedQuery[] filter = [`  WHERE experimentId = ${experimentId} `];
+    if search != "" && search != () {
         string searchString = "%" + search + "%";
-        return sql:queryConcat(filter, ` AND ((name LIKE ${searchString}) OR (type  LIKE ${searchString}) OR (contentType LIKE ${searchString})) `);
+        filter.push(` AND ((name LIKE ${searchString}) OR (type  LIKE ${searchString}) OR (contentType LIKE ${searchString})) `);
     }
-    return filter;
+    var dataTypeFilter = mimetypeLikeToDbLikeString(dataType);
+    if dataTypeFilter != () {
+        filter.push(` AND type LIKE ${dataTypeFilter} `);
+    }
+    return sql:queryConcat(...filter);
+}
+
+# Create a database LIKE filter string using % as wildcard from a mimetype like filter..
+#
+# + mimetypeLike - the mimetype like filter (e.g. "*/*"", "text/*"", etc.)
+# + return - the LIKE filter string or () if the filter would match everything (e.g. (), "text/%", etc.)
+public isolated function mimetypeLikeToDbLikeString(string? mimetypeLike) returns string? {
+    if mimetypeLike == () {
+        return ();
+    }
+    var trimmed = mimetypeLike.trim();
+    if trimmed == "*" || trimmed == "*/*" || trimmed == "" {
+        return (); // no filtering needed, true wildcard pattern or empty filter
+    }
+    if trimmed.includes("/") {
+        return regex:replaceAll(trimmed, "\\*", "?");
+    }
+    // if no / is present treat the whole string as if it ends implicitly with "/*"
+    return trimmed + "/%";
 }
 
 # Build filter query fragment to find matches in name.
