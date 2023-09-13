@@ -75,6 +75,7 @@ function getPort() returns int {
             // error should never happen if regex is correct...
         }
     }
+    log:printInfo("Binding to port " + port.toBalString());
     return port;
 }
 
