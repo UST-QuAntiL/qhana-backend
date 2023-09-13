@@ -1012,7 +1012,7 @@ public isolated transactional function getStepOutputData(int|TimelineStepFull st
 public isolated transactional function saveTimelineStepOutputData(int stepId, int experimentId, ExperimentData[] outputData) returns error? {
     sql:ParameterizedQuery baseQuery = `INSERT INTO ExperimentData (experimentId, name, version, location, type, contentType) VALUES `;
     sql:ParameterizedQuery[] dataQuery = from var d in outputData
-        select `(${experimentId}, ${d.name}, (SELECT version FROM (SELECT count(*) + 1 AS version FROM ExperimentData WHERE name = ${d.name}) subquery), ${d.location}, ${d.'type}, ${d.contentType})`;
+        select `(${experimentId}, ${d.name}, (SELECT version FROM (SELECT coalesce(max(version) + 1, 1) AS version FROM ExperimentData WHERE name = ${d.name} AND experimentId = ${experimentId}) subquery), ${d.location}, ${d.'type}, ${d.contentType})`;
 
     foreach var insertData in dataQuery {
         var result = check experimentDB->execute(sql:queryConcat(baseQuery, insertData));
