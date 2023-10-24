@@ -640,11 +640,12 @@ service / on new http:Listener(serverPort) {
     # + 'version - filter by version (name + version for exact match)
     # + status - filter by status (pending/finished)
     # + uncleared\-substep - filter by step status (whether there is an uncleared substep that requires user inputs) - If set to 1 (or any positive number), steps must have at least one uncleared substeps. Else, be set to -1 (or any negative number). Set to 0 if not specified.
+    # + result\-quality - filter by result quality (unknown/neutral/good/bad/error/unusable)
     # + page - the requested page (starting with page 0)
     # + 'item\-count - the number of items per page (5 <= item-count <= 500)
     # + sort - 1 for asc sort, -1 for desc sort by step sequence
     # + return - the list resource containing the timeline entries
-    resource function get experiments/[int experimentId]/timeline(string? plugin\-name, string? 'version, string? status, int? uncleared\-substep, int page = 0, int item\-count = 0, int? sort = 1) returns TimelineStepListResponse|http:BadRequest|http:NotFound|http:InternalServerError {
+    resource function get experiments/[int experimentId]/timeline(string? plugin\-name, string? 'version, string? status, int? uncleared\-substep, string? result\-quality, int page = 0, int item\-count = 0, int? sort = 1) returns TimelineStepListResponse|http:BadRequest|http:NotFound|http:InternalServerError {
 
         if (page < 0) {
             return <http:BadRequest>{body: "Cannot retrieve a negative page number!"};
@@ -662,13 +663,13 @@ service / on new http:Listener(serverPort) {
 
         transaction {
 
-            stepCount = check database:getTimelineStepCount(experimentId, plugin\-name, 'version, status, uncleared\-substep);
+            stepCount = check database:getTimelineStepCount(experimentId, plugin\-name, 'version, status, uncleared\-substep, result\-quality);
             if (offset >= stepCount) {
                 // page is out of range!
                 check commit;
                 return <http:NotFound>{};
             } else {
-                steps = check database:getTimelineStepList(experimentId, plugin\-name, 'version, status, uncleared\-substep, 'limit = item\-count, offset = offset, sort = intSort);
+                steps = check database:getTimelineStepList(experimentId, plugin\-name, 'version, status, uncleared\-substep, result\-quality, 'limit = item\-count, offset = offset, sort = intSort);
                 check commit;
             }
 

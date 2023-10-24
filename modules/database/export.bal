@@ -281,7 +281,7 @@ public isolated transactional function getTimelineStepLimit(int experimentId) re
     // check if < 10000 steps
     int count = check experimentDB->queryRow(sql:queryConcat(
         `SELECT count(*) FROM TimelineStep `,
-        timelineStepListFilter(experimentId, (), (), (), ()), `;`
+        timelineStepListFilter(experimentId, (), (), (), (), ()), `;`
     ));
     if count > 10000 {
         log:printError(string `Exceeded limit for TimelineSteps. Limit is set to 10000. Found ${count} steps. Only return 10000 steps.`);
@@ -333,7 +333,7 @@ public isolated transactional function getExperimentDBExport(ExperimentFull expe
 
     if config.restriction != "DATA" {
         // iterate over timeline steps
-        TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experiment.experimentId, (), (), (), (), allAttributes = true, 'limit = check getTimelineStepLimit(experiment.experimentId));
+        TimelineStepFull[] timelineStepListDb = check getTimelineStepList(experiment.experimentId, (), (), (), (), (), allAttributes = true, 'limit = check getTimelineStepLimit(experiment.experimentId));
 
         int[] stepList = [];
         if config.restriction == "STEPS" {

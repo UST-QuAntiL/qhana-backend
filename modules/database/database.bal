@@ -732,13 +732,14 @@ public isolated transactional function getStepsUsingData(int|ExperimentDataFull 
 # + 'version - The plugin version  
 # + status - Filter for the current status of the timeline step result
 # + uncleared\-substep - Filter for (un)cleared substeps. If set to 1 (or any postivie number), steps must have at least one uncleared substeps. Else, must be set to -1 (or any negative number). Set to 0 if not specified.
+# + result\-quality - Filter for the result quality of the timeline step result
 # + return - Return timeline step count
-public isolated transactional function getTimelineStepCount(int experimentId, string? pluginName, string? 'version, string? status, int? uncleared\-substep) returns int|error {
+public isolated transactional function getTimelineStepCount(int experimentId, string? pluginName, string? 'version, string? status, int? uncleared\-substep, string? result\-quality) returns int|error {
     sql:ParameterizedQuery query = `SELECT count(*) AS rowCount FROM TimelineStep `;
 
     stream<RowCount, sql:Error?> result = experimentDB->query(sql:queryConcat(
         query,
-        timelineStepListFilter(experimentId, pluginName, 'version, status, uncleared\-substep),
+        timelineStepListFilter(experimentId, pluginName, 'version, status, uncleared\-substep, result\-quality),
         `;`
     ));
 
@@ -789,12 +790,13 @@ public isolated transactional function castToTimelineStepFull(TimelineStepSQL st
 # + 'version - The plugin version  
 # + status - Filter for the current status of the timeline step result
 # + uncleared\-substep - Filter for (un)cleared substeps. If set to 1 (or any postivie number), steps must have at least one uncleared substeps. Else, must be set to -1 (or any negative number). Set to 0 if not specified.
+# + result\-quality - Filter for the result quality of the timeline step result
 # + allAttributes - Include all attributes in result
 # + 'limit - The maximum number of timline steps fetched in one call (default: `100`)
 # + offset - The offset applied to the sql query (default: `0`)
 # + sort - 1 for asc sort, -1 for desc sort by step sequence
 # + return - The list of timpline steps or the encountered error
-public isolated transactional function getTimelineStepList(int experimentId, string? pluginName, string? 'version, string? status, int? uncleared\-substep, boolean allAttributes = false, int 'limit = 100, int offset = 0, int sort = 1) returns TimelineStepFull[]|error {
+public isolated transactional function getTimelineStepList(int experimentId, string? pluginName, string? 'version, string? status, int? uncleared\-substep, string? result\-quality, boolean allAttributes = false, int 'limit = 100, int offset = 0, int sort = 1) returns TimelineStepFull[]|error {
 
     sql:ParameterizedQuery baseQuery = `SELECT TimelineStep.stepId, experimentId, sequence, `;
     if configuredDBType == "sqlite" {
@@ -821,7 +823,7 @@ public isolated transactional function getTimelineStepList(int experimentId, str
     stream<TimelineStepSQL, sql:Error?> timelineSteps;
     timelineSteps = experimentDB->query(sql:queryConcat(
         baseQuery,
-        timelineStepListFilter(experimentId, pluginName, 'version, status, uncleared\-substep),
+        timelineStepListFilter(experimentId, pluginName, 'version, status, uncleared\-substep, result\-quality),
         ` ORDER BY sequence `, sortOrder, limitFilter, `;`
     ));
 
@@ -1433,8 +1435,9 @@ public isolated function experimentListFilter(string? search) returns sql:Parame
 # + 'version - Plugin version filter
 # + status - Plugin status filter
 # + uncleared\-substep - Filter for (un)cleared substeps. If set to 1 (or any positive number), steps must have at least one uncleared substep. Else, set to -1 (or any negative number). Set to 0 if not specified.
+# + result\-quality - Result quality filter
 # + return - Return filter query fragment
-public isolated function timelineStepListFilter(int experimentId, string? pluginName, string? 'version, string? status, int? uncleared\-substep) returns sql:ParameterizedQuery {
+public isolated function timelineStepListFilter(int experimentId, string? pluginName, string? 'version, string? status, int? uncleared\-substep, string? result\-quality) returns sql:ParameterizedQuery {
     sql:ParameterizedQuery filter = ` WHERE experimentId = ${experimentId} `;
     if pluginName != () && pluginName != "" {
         string pluginNameString = "%" + pluginName + "%";
@@ -1455,6 +1458,10 @@ public isolated function timelineStepListFilter(int experimentId, string? plugin
         } else {
             filter = sql:queryConcat(filter, ` TimelineSubstep.cleared = 1) `);
         }
+    }
+    if result\-quality != () && result\-quality != "" {
+        string resultQualityString = "%" + result\-quality + "%";
+        filter = sql:queryConcat(filter, ` AND resultQuality LIKE ${resultQualityString} `);
     }
     return filter;
 }
