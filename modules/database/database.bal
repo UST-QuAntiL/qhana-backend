@@ -1382,6 +1382,7 @@ public isolated transactional function saveTimelineSubstepInputData(int stepId, 
 #
 # + experimentId - Experiment id
 # + search - Search string to match
+# + dataType - Data type to match
 # + return - Return filter query fragment
 public isolated function experimentDataFilter(int experimentId, string? search, string? dataType) returns sql:ParameterizedQuery {
     sql:ParameterizedQuery[] filter = [`  WHERE experimentId = ${experimentId} `];
