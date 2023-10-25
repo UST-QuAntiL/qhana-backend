@@ -796,7 +796,7 @@ public isolated transactional function castToTimelineStepFull(TimelineStepSQL st
 # + offset - The offset applied to the sql query (default: `0`)
 # + sort - 1 for asc sort, -1 for desc sort by step sequence
 # + return - The list of timpline steps or the encountered error
-public isolated transactional function getTimelineStepList(int experimentId, string? pluginName, string? 'version, string? status, int? unclearedSubstep, string? resultQuality, boolean allAttributes = false, int 'limit = 100, int offset = 0, int sort = 1) returns TimelineStepFull[]|error {
+public isolated transactional function getTimelineStepList(int experimentId, string? pluginName = (), string? 'version = (), string? status = (), int? unclearedSubstep = (), string? resultQuality = (), boolean allAttributes = false, int 'limit = 100, int offset = 0, int sort = 1) returns TimelineStepFull[]|error {
 
     sql:ParameterizedQuery baseQuery = `SELECT TimelineStep.stepId, experimentId, sequence, `;
     if configuredDBType == "sqlite" {
@@ -1437,7 +1437,7 @@ public isolated function experimentListFilter(string? search) returns sql:Parame
 # + unclearedSubstep - Filter for (un)cleared substeps. If set to 1 (or any positive number), steps must have at least one uncleared substep. Else, set to -1 (or any negative number). Set to 0 if not specified.
 # + resultQuality - Result quality filter
 # + return - Return filter query fragment
-public isolated function timelineStepListFilter(int experimentId, string? pluginName, string? 'version, string? status, int? unclearedSubstep, string? resultQuality) returns sql:ParameterizedQuery {
+public isolated function timelineStepListFilter(int experimentId, string? pluginName = (), string? 'version = (), string? status = (), int? unclearedSubstep = (), string? resultQuality = ()) returns sql:ParameterizedQuery {
     sql:ParameterizedQuery filter = ` WHERE experimentId = ${experimentId} `;
     if pluginName != () && pluginName != "" {
         string pluginNameString = "%" + pluginName + "%";
