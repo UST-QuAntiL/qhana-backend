@@ -1460,8 +1460,7 @@ public isolated function timelineStepListFilter(int experimentId, string? plugin
         }
     }
     if resultQuality != () && resultQuality != "" {
-        string resultQualityString = "%" + resultQuality + "%";
-        filter = sql:queryConcat(filter, ` AND resultQuality LIKE ${resultQualityString} `);
+        filter = sql:queryConcat(filter, ` AND resultQuality = ${resultQuality} `);
     }
     return filter;
 }
