@@ -80,6 +80,16 @@ isolated function removeResultWatcherFromRegistry(int stepId) returns ResultWatc
     }
 }
 
+isolated function checkResultWatcherDbState(int stepId) returns boolean|error {
+    transaction {
+        _ = check database:getTimelineStepResultEndpoint(stepId);
+        check (trap commit);
+    } on fail {
+        return false;
+    }
+    return true;
+}
+
 # Record describing output data of a task result.
 #
 # + href - the link to the output data
@@ -136,16 +146,23 @@ isolated function timelineSubstepToDBTimelineSubstep(TimelineSubstep substep) re
     return converted;
 }
 
+type TaskResponseApiLink record {
+    string href;
+    string 'type;
+};
+
 # Record describing the pending task result and status resource.
 #
 # + status - a string describing the current task status
 # + log - a human readable log of the task progress
+# + links - a list of additional endpoints to call
 # + outputs - a list of data outputs once the task is finished
 # + steps - a list of substeps of the current task
 # + progress - the current progress of the task
 type TaskStatusResponse record {
     string status;
     string? log?;
+    TaskResponseApiLink[] links?;
     TaskDataOutput[]? outputs?;
     TimelineSubstep[] steps?;
     Progress progress?;
@@ -377,7 +394,7 @@ isolated class ResultWatcherRescheduler {
         log:printInfo(string `Reschedule watcher ${self.watcher.stepId} after new substep was found.`);
         // TODO: Probably needs to be changed in the future
         (decimal|int)[] initialIntervals = configuredWatcherIntervalls;
-        error? err = self.watcher.schedule(...initialIntervals);
+        error? err = self.watcher.schedule(initialIntervals);
         if err != () {
             log:printError("Failed to reschedule watcher.", 'error = err, stackTrace = err.stackTrace());
 
@@ -396,6 +413,8 @@ public isolated class ResultWatcher {
     final http:Client httpClient;
     final int experimentId;
     final int stepId;
+    final boolean isSubscribed;
+    final boolean runOnlyOnce;
     private final string & readonly resultEndpoint;
     private int errorCounter;
     private task:JobId? jobId = ();
@@ -421,6 +440,30 @@ public isolated class ResultWatcher {
 
                 }
             }
+            return;
+        }
+
+        // check if result watcher is still in database and if not unschedule watcher immediately
+        boolean|error isResultWatcherInDB = trap checkResultWatcherDbState(self.stepId);
+
+        if isResultWatcherInDB is error {
+            // DO nothing, ignore this DB error
+            log:printError(string `Failed to querye result watcher entry for step ${self.stepId} from the database.`, 'error = isResultWatcherInDB, stackTrace = isResultWatcherInDB.stackTrace());
+        } else {
+            if isResultWatcherInDB == false {
+                var err = self.unschedule();
+                if err is error {
+                    log:printError(string `Failed to unsubscribe step result watcher for step ${self.stepId}`, 'error = err, stackTrace = err.stackTrace());
+                } else {
+                    // not sure if this is needed here
+                    var err2 = removeResultWatcherFromRegistry(self.stepId);
+                    if err2 is error {
+                        log:printError(string `Failed to remove result watcher from registry for step ${self.stepId}`, 'error = err2, stackTrace = err2.stackTrace());
+
+                    }
+                }
+                return;
+            }
         }
 
         // request specified endpoint
@@ -439,6 +482,10 @@ public isolated class ResultWatcher {
                 }
             }
             self.checkTaskResult(result);
+        }
+
+        if (self.runOnlyOnce) {
+            return; // was a one time task
         }
 
         // handle backoff counter
@@ -483,8 +530,9 @@ public isolated class ResultWatcher {
     #
     # + interval - the time in seconds
     # + maxCount - how often the task will be repeated max (-1 for infinite repeats)
+    # + scheduleImmediate - schedule the next task run as soon as possible
     # + return - any error
-    private isolated function reschedule(decimal interval, int maxCount = -1) returns error? {
+    private isolated function reschedule(decimal interval, int maxCount = -1, boolean scheduleImmediate=false) returns error? {
         error? err = self.unschedule();
 
         if (err != ()) {
@@ -496,7 +544,12 @@ public isolated class ResultWatcher {
             }
         }
 
-        time:Utc delay = time:utcAddSeconds(time:utcNow(), interval);
+        time:Utc delay;
+        if scheduleImmediate {
+            delay = time:utcAddSeconds(time:utcNow(), 0.1);
+        } else {
+            delay = time:utcAddSeconds(time:utcNow(), interval);
+        }
 
         lock {
             // initial delay of new job matches new interval (this prevents the job from executing immediately)
@@ -520,8 +573,9 @@ public isolated class ResultWatcher {
     # Unschedules the job first if it was already scheduled.
     #
     # + intervals - usage: `[intervall1, backoffCounter1, intervall2, backoffCounter2, ..., [intervallLast]]`
+    # + scheduleImmediate - schedule the next task run as soon as possible
     # + return - The error encountered while (re)scheduling this job (or parsing the intervals)
-    public isolated function schedule(decimal|int... intervals) returns error? {
+    public isolated function schedule((decimal|int)[] intervals, boolean scheduleImmediate=false) returns error? {
         if intervals.length() <= 0 {
             return error("Must specify at least one inteval!");
         }
@@ -549,7 +603,7 @@ public isolated class ResultWatcher {
 
             int? maxRuns = self.currentBackoffCounter;
 
-            check self.reschedule(startingIntervall, (maxRuns == ()) ? -1 : maxRuns + 1);
+            check self.reschedule(startingIntervall, (maxRuns == ()) ? -1 : maxRuns + 1, scheduleImmediate);
         }
     }
 
@@ -577,8 +631,9 @@ public isolated class ResultWatcher {
             if result.status == "UNKNOWN" || result.status == "PENDING" {
                 ResultProcessor processor = new (result, self.experimentId, self.stepId, self.resultEndpoint);
                 boolean isChanged = check processor.processIntermediateResult();
-                if isChanged {
+                if isChanged && !self.isSubscribed {
                     // if new subtasks were found, reschedule to poll more frequently again
+                    // but only if no webhook subscription is active
                     var _ = check task:scheduleOneTimeJob(new ResultWatcherRescheduler(self), time:utcToCivil(time:utcAddSeconds(time:utcNow(), 1)));
                 }
             } else {
@@ -600,10 +655,14 @@ public isolated class ResultWatcher {
     # Initialize the result watcher task.
     #
     # + stepId - the database id of the step to watch
-    isolated function init(int stepId) returns error? {
+    # + isSubscribed - true if the watcher is only used as a backup as the webhook is registered as a subscriber for updates
+    # + once - if the job is only scheduled once and then discarded, set this to true
+    isolated function init(int stepId, boolean isSubscribed=false, boolean once=false) returns error? {
         self.errorCounter = 0;
 
         self.stepId = stepId;
+        self.isSubscribed = isSubscribed;
+        self.runOnlyOnce = once;
 
         string? resultEndpoint;
 
@@ -628,7 +687,109 @@ public isolated class ResultWatcher {
             self.resultEndpoint = resultEndpoint;
             self.httpClient = check new (self.resultEndpoint);
         }
-        addResultWatcherToRegistry(self); // TODO: perhaps refactor into helper function creating watcher and adding it into registry
+    }
+}
+
+# A one time background job that starts the result watcher for the configured result endpoint.
+public isolated class ScheduleResultWatcher {
+
+    *task:Job;
+    final int stepId;
+    final (decimal|int)[] & readonly watcherIntervalls;
+    final (decimal|int)[] & readonly subscribedWatcherIntervalls;
+
+    private function getSubscribeLink() returns TaskResponseApiLink?|error {
+        transaction {
+            string? resultEndpoint = check database:getTimelineStepResultEndpoint(self.stepId);
+            check (trap commit);
+            if resultEndpoint is string {
+                http:Client httpClient = check new (resultEndpoint);
+                TaskStatusResponse result = check httpClient->get("");
+                if result.hasKey("links") {
+                    TaskResponseApiLink[]? links = result.links;
+                    if !(links is ()) {
+                        foreach var link in links {
+                            if link.'type == "subscribe" {
+                                return link;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return ();
+    }
+
+    private function subscribe(TaskResponseApiLink subscribeLink) returns boolean|error {
+        http:Client httpClient = check new (subscribeLink.href);
+        json body = {
+            "command": "subscribe", 
+            "webhookHref": string`${serverHost}/webhooks/${self.stepId}`
+        };
+        json _ = check httpClient->post(path="", message = body.toJsonString(), mediaType = "application/JSON");
+        log:printInfo(string`Successfully subscribed to task result updates for step with id ${self.stepId}. (url=${subscribeLink.href})`);
+        return true;
+    }
+
+    public function execute() {
+        // Subscribe to update events
+        boolean subscribed = false;
+        do {
+            TaskResponseApiLink? subscribeLink = check self.getSubscribeLink();
+            if !(subscribeLink is ()) {
+                subscribed = check self.subscribe(subscribeLink);
+            }
+        } on fail error err {
+            log:printError(string`Failed to subscribe to task result updates for step with id ${self.stepId}.`, 'error = err, stackTrace = err.stackTrace());
+        }
+
+        // schedule watcher
+        do {
+            ResultWatcher watcher = check new (self.stepId, isSubscribed = subscribed);
+            addResultWatcherToRegistry(watcher);
+            if subscribed {
+                // run once as soon as possible as we might have missed the first webhook already
+                check watcher.schedule(self.subscribedWatcherIntervalls, scheduleImmediate=true);
+            } else {
+                check watcher.schedule(self.watcherIntervalls);
+            }
+        } on fail error err {
+            log:printError(string`Failed to schedule task result watcher for step with id ${self.stepId}.`, 'error = err, stackTrace = err.stackTrace());
+        }
+    }
+
+    public function schedule() returns error? {
+        var now = time:utcToCivil(time:utcAddSeconds(time:utcNow(), 0.1));
+        _ = check task:scheduleOneTimeJob(self, now);
+    }
+
+    # Initialize the result watcher schedule task.
+    #
+    # + stepId - the database id of the step to watch
+    isolated function init(int stepId, (decimal|int)[] watcherIntervalls, (decimal|int)[] subscribedWatcherIntervalls) returns error? {
+        self.stepId = stepId;
+        self.watcherIntervalls = watcherIntervalls.cloneReadOnly();
+        self.subscribedWatcherIntervalls = subscribedWatcherIntervalls.cloneReadOnly();
+    }
+}
+
+public isolated function ScheduleWatcherOnce(int stepId) returns error? {
+    ResultWatcher|error watcher = getResultWatcherFromRegistry(stepId);
+
+    if watcher is error {
+        // no watcher found, create a one off watcher
+        ResultWatcher newWatcher = check new (stepId, once=true);
+
+        var now = time:utcToCivil(time:utcAddSeconds(time:utcNow(), 0.1));
+        _ = check task:scheduleOneTimeJob(newWatcher, now);
+    } else {
+        // existing watcher found, use rescheduling mechanism to avoid concurrent updates
+        if watcher.isSubscribed {
+            // run once as soon as possible as have received an update
+            check watcher.schedule(configuredSubscribedWatcherIntervalls, scheduleImmediate=true);
+        } else {
+            check watcher.schedule(configuredWatcherIntervalls);
+        }
     }
 }
 

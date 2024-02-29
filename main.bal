@@ -149,6 +149,38 @@ function getWatcherIntervallConfig() returns (decimal|int)[] {
 # The final configured watcher intervalls.
 final (decimal|int)[] & readonly configuredWatcherIntervalls = getWatcherIntervallConfig().cloneReadOnly();
 
+# User configurable watcher intervall configuration used when already subscribed to receive webhook updates.
+# Can also be configured by setting the `QHANA_SUBSCRIBED_WATCHER_INTERVALLS` environment variable.
+# The numbers are interpreted as folowing: `[<intervall in seconds>, [<iterations until next intervall>]]*`
+# If the list ends with an intervall, i.e., the iterations count is missing, then the intervall 
+# will be repeated indefinitely.
+configurable (decimal|int)[] subscribedWatcherIntervallConfig = [60, 10, 600];
+
+# Get the watcher intervalls from the `QHANA_SUBSCRIBED_WATCHER_INTERVALLS` environment variable.
+# If not present use the configurable variable `watcherIntervallConfig` as fallback.
+#
+# + return - the configured watcher intervalls
+function getSubscribedWatcherIntervallConfig() returns (decimal|int)[] {
+    string intervalls = os:getEnv("QHANA_SUBSCRIBED_WATCHER_INTERVALLS");
+    if (intervalls.length() > 0) {
+        if (intervalls.startsWith("(") && intervalls.endsWith(")")) {
+            // Remove enclosing brackets from start/end of string if present
+            intervalls = intervalls.substring(1, intervalls.length() - 1);
+        }
+        do {
+            string:RegExp r = re `[\s,;]+`;
+            return from string i in r.split(intervalls)
+                select check coerceToPositiveNumber(i);
+        } on fail error err {
+            log:printError("Failed to parse environment variable QHANA_SUBSCRIBED_WATCHER_INTERVALLS!\n", 'error = err, stackTrace = err.stackTrace());
+        }
+    }
+    return subscribedWatcherIntervallConfig;
+}
+
+# The final configured watcher intervalls.
+final (decimal|int)[] & readonly configuredSubscribedWatcherIntervalls = getSubscribedWatcherIntervallConfig().cloneReadOnly();
+
 # User configurable URL map which is used by the backend to rewrite URLs used by the result watchers.
 # Can also be configured by setting the `QHANA_URL_MAPPING` environment variable.
 # The keys are regex patterns and the values replacement string.
@@ -717,8 +749,8 @@ service / on new http:Listener(serverPort) {
             return resultErr;
         }
         do {
-            ResultWatcher watcher = check new (createdStep.stepId);
-            check watcher.schedule(...configuredWatcherIntervalls);
+            ScheduleResultWatcher watcherScheduler = check new (createdStep.stepId, configuredWatcherIntervalls, configuredSubscribedWatcherIntervalls);
+            check watcherScheduler.schedule();
         } on fail error err {
             log:printError("Failed to start watcher.", 'error = err, stackTrace = err.stackTrace());
             // if with return does not correctly narrow type for rest of function... this does.
@@ -878,11 +910,11 @@ service / on new http:Listener(serverPort) {
         }
         do {
             // reschedule result watcher (already running for the timeline step the substep is associated with)
-            ResultWatcher watcher;
-            lock {
-                watcher = check getResultWatcherFromRegistry(step.stepId);
+            var watcher = getResultWatcherFromRegistry(step.stepId);
+            if !(watcher is error) && !watcher.isSubscribed {
+                // watcher is the main source of updates, reschedule with initial intervalls for faster updates
+                check watcher.schedule(configuredWatcherIntervalls);
             }
-            check watcher.schedule(...configuredWatcherIntervalls);
         } on fail error err {
             log:printError("Failed to restart watcher.", 'error = err, stackTrace = err.stackTrace());
             // if with return does not correctly narrow type for rest of function... this does.
@@ -970,7 +1002,12 @@ service / on new http:Listener(serverPort) {
         } else {
             resp.addHeader("Content-Disposition", "attachment; filename=\"parameters\"");
         }
-        resp.setTextPayload(substep.parameters, contentType = substep.parametersContentType);
+        string params = "";
+        var subsbstepParams = substep.parameters;
+        if !(subsbstepParams is ()) {
+            params = subsbstepParams;
+        }
+        resp.setTextPayload(params, contentType = substep.parametersContentType);
 
         check caller->respond(resp);
     }
@@ -1267,6 +1304,17 @@ service / on new http:Listener(serverPort) {
         }
         return mapToTemplatePostResponse(experimentId, template);
     }
+
+    # Webhooks receiving task update events.
+    #
+    # + stepId - the step id of the task that caused the update
+    # + 'source - the source url of the update
+    # + event - the type of event
+    # + return - possible errors
+    resource function post webhooks/[int stepId](string? 'source=(), string? event=()) returns error? {
+        log:printDebug(string`Received webhook for stepId ${stepId}. (event=${event.toBalString()}, source=${'source.toBalString()})`);
+        check ScheduleWatcherOnce(stepId);
+    }
 }
 
 # Start all ResultWatchers from their DB entries.
@@ -1295,8 +1343,8 @@ public function main() {
     transaction {
         var stepsToWatch = check database:getTimelineStepsWithResultWatchers();
         foreach var stepId in stepsToWatch {
-            ResultWatcher watcher = check new (stepId);
-            check watcher.schedule(...configuredWatcherIntervalls);
+            ScheduleResultWatcher watcherScheduler = check new (stepId, configuredWatcherIntervalls, configuredSubscribedWatcherIntervalls);
+            check watcherScheduler.schedule();
         }
         check commit;
     } on fail error err {
