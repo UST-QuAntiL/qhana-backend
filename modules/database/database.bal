@@ -17,7 +17,7 @@ import ballerina/time;
 import ballerina/sql;
 import ballerinax/java.jdbc;
 import ballerina/os;
-import ballerina/regex;
+import ballerina/lang.regexp;
 import ballerina/mime;
 
 # The connection pool config for sqlite databases.
@@ -352,7 +352,7 @@ public type TimelineSubstepSQL record {|
 # + parametersContentType - the content type of these parameters
 public type TimelineSubstepWithParams record {|
     *TimelineSubstepSQL;
-    string parameters;
+    string? parameters;
     string parametersContentType = mime:APPLICATION_FORM_URLENCODED;
 |};
 
@@ -1410,7 +1410,7 @@ public isolated function mimetypeLikeToDbLikeString(string? mimetypeLike) return
         return (); // no filtering needed, true wildcard pattern or empty filter
     }
     if trimmed.includes("/") {
-        return regex:replaceAll(trimmed, "\\*", "?");
+        return regexp:replaceAll(re `\*`, trimmed, "?");
     }
     // if no / is present treat the whole string as if it ends implicitly with "/*"
     return trimmed + "/%";
