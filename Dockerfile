@@ -1,10 +1,10 @@
-FROM eclipse-temurin:11 AS builder
+FROM eclipse-temurin:17 AS builder
 
 RUN apt-get -y update && apt-get install unzip
 WORKDIR /app
 
 # install ballerina
-ARG BAL_VERSION="2201.7.2"
+ARG BAL_VERSION="2201.8.5"
 RUN wget --no-verbose https://dist.ballerina.io/downloads/${BAL_VERSION}/ballerina-${BAL_VERSION}-swan-lake.zip
 RUN unzip ballerina-${BAL_VERSION}-swan-lake
 ENV PATH="${PATH}:/app/ballerina-${BAL_VERSION}-swan-lake/bin"
@@ -18,13 +18,16 @@ COPY . /app
 
 RUN bal build --observability-included
 
-FROM eclipse-temurin:11-jre
+FROM eclipse-temurin:17-jre
 
 LABEL org.opencontainers.image.source="https://github.com/UST-QuAntiL/qhana-backend"
 
 RUN apt-get -y update && apt-get install -y sqlite3 unzip zip
 
 WORKDIR /app
+
+# create unpriviledged user
+RUN useradd ballerina
 
 # install proxy
 ADD https://raw.githubusercontent.com/UST-QuAntiL/docker-localhost-proxy/v0.3/install_proxy.sh install_proxy.sh
@@ -34,9 +37,6 @@ RUN chmod +x install_proxy.sh && ./install_proxy.sh
 ADD --chown=ballerina https://raw.githubusercontent.com/UST-QuAntiL/docker-localhost-proxy/v0.3/Caddyfile.template Caddyfile.template
 ADD --chown=ballerina https://raw.githubusercontent.com/UST-QuAntiL/docker-localhost-proxy/v0.3/start_proxy.sh start_proxy.sh
 RUN chmod +x start_proxy.sh
-
-# create unpriviledged user
-RUN useradd ballerina
 
 # create persistent data volume and change its owner to the new user
 RUN mkdir --parents /app/data && chown --recursive ballerina /app
