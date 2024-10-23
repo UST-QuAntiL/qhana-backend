@@ -1,7 +1,8 @@
 #!/bin/sh
+LIQUIBASE_HUB_MODE=OFF
 
 # prepare sqlite database
-liquibase --url=jdbc:sqlite:qhana-backend.db --classpath=/app --driver=org.sqlite.JDBC --changelog-file=changelog.xml --secure-parsing=false --hub-mode=off updateTestingRollback
+liquibase --url=jdbc:sqlite:qhana-backend.db --classpath=/app --driver=org.sqlite.JDBC --changelog-file=changelog.xml --secure-parsing=false updateTestingRollback
 
 # insert env var for mariadb liquibase config
 cat << EOF > /app/liquibase.properties

@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # get sqlite driver for liquibase
-JDBC=lib/sqlite-jdbc-3.36.0.3.jar
+JDBC=lib/sqlite-jdbc-3.46.1.3.jar
 if [ ! -f "$JDBC" ]; then
-    wget -P lib https://github.com/xerial/sqlite-jdbc/releases/download/3.36.0.3/sqlite-jdbc-3.36.0.3.jar
+    wget -P lib https://github.com/xerial/sqlite-jdbc/releases/download/3.46.1.3/sqlite-jdbc-3.46.1.3.jar
 fi
 
 # set up db or deploy db changes
