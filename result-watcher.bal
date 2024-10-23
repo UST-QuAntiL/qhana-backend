@@ -758,7 +758,7 @@ public isolated class ScheduleResultWatcher {
         }
     }
 
-    public function schedule() returns error? {
+    public isolated function schedule() returns error? {
         var now = time:utcToCivil(time:utcAddSeconds(time:utcNow(), 0.1));
         _ = check task:scheduleOneTimeJob(self, now);
     }
