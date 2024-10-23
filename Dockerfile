@@ -1,28 +1,28 @@
-FROM eclipse-temurin:17 AS builder
+FROM eclipse-temurin:21 AS builder
 
 RUN apt-get -y update && apt-get install unzip
 WORKDIR /app
 
 # install ballerina
-ARG BAL_VERSION="2201.8.6"
+ARG BAL_VERSION="2201.10.2"
 RUN wget --no-verbose https://dist.ballerina.io/downloads/${BAL_VERSION}/ballerina-${BAL_VERSION}-swan-lake.zip
-RUN unzip ballerina-${BAL_VERSION}-swan-lake
+RUN unzip -q ballerina-${BAL_VERSION}-swan-lake
 ENV PATH="${PATH}:/app/ballerina-${BAL_VERSION}-swan-lake/bin"
 
 # install liquibase
-RUN wget --no-verbose https://github.com/liquibase/liquibase/releases/download/v4.11.0/liquibase-4.11.0.zip
-RUN unzip liquibase-4.11.0.zip -d /app/liquibase
+RUN wget --no-verbose https://github.com/liquibase/liquibase/releases/download/v4.29.2/liquibase-4.29.2.zip
+RUN unzip -q liquibase-4.29.2.zip -d /app/liquibase
 
 # copy files
 COPY . /app
 
 RUN bal build --observability-included
 
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:21-jre
 
 LABEL org.opencontainers.image.source="https://github.com/UST-QuAntiL/qhana-backend"
 
-RUN apt-get -y update && apt-get install -y sqlite3 unzip zip
+RUN apt-get -y update && apt-get install -y sqlite3 unzip zip && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
