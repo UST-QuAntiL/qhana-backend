@@ -36,58 +36,13 @@ public type ApiResponse record {|
 # The root api response
 #
 # + experiments - Url to the experiments collection resource
-# + pluginRunners - Url to the plugin runners collection resource
 # + tasks - Url to the tasks collection resource
 public type RootResponse record {|
     *ApiResponse;
     string experiments;
-    string pluginRunners;
     string tasks;
 |};
 
-# Post payload to create new plugin endpoint resources.
-#
-# + url - the URL of the plugin endpoint
-# + 'type - the type of the endpoint ("Plugin"|"PluginRunner")
-public type PluginEndpointPost record {|
-    string url;
-    string 'type = "PluginRunner";
-|};
-
-# A plugin endpoint resource.
-#
-# + endpointId - the id of the plugin endpoint
-# + url - the URL of the plugin endpoint
-# + 'type - the type of the endpoint ("Plugin"|"PluginRunner")
-public type PluginEndpointResponse record {|
-    *ApiResponse;
-    int endpointId;
-    string url;
-    string 'type = "PluginRunner";
-|};
-
-# The plugin endpoints list resource.
-#
-# + items - the plugin endpoint resources
-# + itemCount - the total count of plugin endpoints
-public type PluginEndpointsListResponse record {|
-    *ApiResponse;
-    PluginEndpointResponse[] items;
-    int itemCount;
-|};
-
-# Helper function to map from `PluginEndpointFull` database record to API record.
-#
-# + endpoint - the input database record
-# + return - the mapped record
-public isolated function mapToPluginEndpointResponse(database:PluginEndpointFull endpoint) returns PluginEndpointResponse {
-    return {
-        '\@self: string `${serverHost}/plugin-endpoints/${endpoint.id}`,
-        endpointId: endpoint.id,
-        url: endpoint.url,
-        'type: endpoint.'type
-    };
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Experiments /////////////////////////////////////////////////////////////////
