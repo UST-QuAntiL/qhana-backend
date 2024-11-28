@@ -679,6 +679,24 @@ public isolated transactional function getData(int experimentId, string name, st
     return error(string `Experiment data with experimentId: ${experimentId}, name: ${name} and version: ${'version == () ? "latest" : 'version} was not found!`);
 }
 
+public isolated transactional function getAllDataVersions(int experimentId, string name) returns ExperimentDataFull[]|error {
+    sql:ParameterizedQuery baseQuery = `SELECT dataId, experimentId, name, version, location, type, contentType 
+                     FROM ExperimentData WHERE experimentId=${experimentId} AND name=${name} ORDER BY version DESC;`;
+
+    stream<ExperimentDataFull, sql:Error?> experimentData = experimentDB->query(baseQuery);
+
+    ExperimentDataFull[]? experimentDataList = check from var data in experimentData
+        select data;
+
+    check experimentData.close();
+
+    if experimentDataList != () {
+        return experimentDataList;
+    }
+
+    return [];
+}
+
 public isolated transactional function getProducingStepOfData(int|ExperimentDataFull data) returns int|error {
     stream<record {int producingStep;}, sql:Error?> step;
 
