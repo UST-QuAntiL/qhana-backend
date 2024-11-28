@@ -559,6 +559,45 @@ service / on new http:Listener(serverPort) {
         return {'\@self: string `${serverHost}/experiments/${experimentId}/data/${name}/versions/`, items: dataList, itemCount: dataList.length()};
     }
 
+    # Get related experiment data resources.
+    #
+    # + experimentId - the id of the experiment
+    # + name - the name of the experiment data resource to look up related data for
+    # + 'version - the version of the experiment data resource to look up related data for (optional, defaults to "latest")
+    # + relation - the type of relation (i.e. "exact" data produced in the same timeline step, "pre" data produced in the same or any previous timeline step where a version of this data was produced, "post" same as "pre" but with future timeline steps, "any" combines "pre" and "post")
+    # + include\-self - if true, then different versions (including the requested version) of the data resource to look up related data for are included
+    # + data\-type - limit the related data to data with a matching data type
+    # + content\-type - limit the related data to data with a matching content type
+    # + return - the related data resources as a simple list
+    resource function get experiments/[int experimentId]/data/[string name]/related(string 'version="latest", "any"|"pre"|"post"|"exact" relation="exact", boolean include\-self=false, string? data\-type=(), string? content\-type=()) returns ExperimentDataListResponse|http:InternalServerError {
+        database:ExperimentDataFull[] data = [];
+
+        transaction {
+            data = check database:getRelatedData(experimentId, name, 'version, relation, include\-self, data\-type, content\-type);
+            check commit;
+        } on fail error err {
+            log:printError(string`Could not get related data of data with name ${name} and version ${'version}.`, 'error = err, stackTrace = err.stackTrace());
+
+            // if with return does not correctly narrow type for rest of function... this does.
+            http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
+            return resultErr;
+        }
+
+        var dataList = from var d in data
+            select mapToExperimentDataResponse(d);
+        var selfUrl = string `${serverHost}/experiments/${experimentId}/data/${name}/related/?version=${version}&relation=${relation}`;
+        if !(data\-type is ()) {
+            selfUrl = string `${selfUrl}&data-type=${data\-type}`;
+        }
+        if !(content\-type is ()) {
+            selfUrl = string `${selfUrl}&content-type=${content\-type}`;
+        }
+        if include\-self {
+            selfUrl = string `${selfUrl}&include-self=${include\-self}`;
+        }
+        return {'\@self: selfUrl, items: dataList, itemCount: dataList.length()};
+    }
+
     # Download the actual data behind the experiment data resource.
     #
     # + experimentId - the id of the experiment
@@ -566,6 +605,7 @@ service / on new http:Listener(serverPort) {
     # + return - the data of the experiment data resource
     resource function get experiments/[int experimentId]/data/[string name]/download(string? 'version, http:Caller caller) returns error? {
         database:ExperimentDataFull data;
+        database:ExperimentDataFull[] relatedAttributeMetadata = [];
 
         http:Response resp = new;
         resp.addHeader("Access-Control-Allow-Origin", "*");
@@ -574,6 +614,12 @@ service / on new http:Listener(serverPort) {
 
         transaction {
             data = check database:getData(experimentId, name, 'version);
+
+            string dataType = data.'type;
+
+            if (dataType.startsWith("entity/") && !dataType.endsWith("/attribute-metadata") || dataType.startsWith("graph/")) {
+                relatedAttributeMetadata = check database:getRelatedData(experimentId, name, data.'version, "pre", dataType = "entity/attribute-metadata");
+            }
             check commit;
         } on fail error err {
             log:printError("Could not get experiment data for download.", 'error = err, stackTrace = err.stackTrace());
@@ -583,6 +629,12 @@ service / on new http:Listener(serverPort) {
 
             check caller->respond(resp);
             return;
+        }
+
+        if relatedAttributeMetadata.length() > 0 {
+            var attrMetadata = relatedAttributeMetadata[relatedAttributeMetadata.length()-1];
+            var downloadLink = string`${serverHost}/experiments/${attrMetadata.experimentId}/data/${attrMetadata.name}/download?version=${attrMetadata.'version}`;
+            resp.addHeader("X-Attribute-Metadata", downloadLink);
         }
 
         resp.statusCode = http:STATUS_OK;
