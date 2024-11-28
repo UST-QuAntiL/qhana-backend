@@ -697,6 +697,70 @@ public isolated transactional function getAllDataVersions(int experimentId, stri
     return [];
 }
 
+public isolated transactional function getRelatedData(int experimentId, string name, string|int 'version, "pre"|"exact"|"post"|"any" relation, boolean includeSelf=false, string? dataType=(), string? contentType=()) returns ExperimentDataFull[]|error {
+    final var data = check getData(experimentId, name, 'version);
+
+    // get all steps where this data object was created/changed
+    sql:ParameterizedQuery[] subQuery = [
+        `SELECT stepId FROM StepData JOIN ExperimentData ON StepData.dataId = ExperimentData.dataId
+            WHERE ExperimentData.experimentId=${data.experimentId} AND ExperimentData.name=${data.name} `
+    ];
+    if (relation == "pre") { // include steps before the specific version
+        subQuery.push(` AND ExperimentData.version <= ${data.version} `);
+    }
+    if (relation == "exact") { // only the step of the specific version
+        subQuery.push(` AND ExperimentData.version = ${data.version} `);
+    }
+    if (relation == "post") { // include steps after the specific verion
+        subQuery.push(` AND ExperimentData.version >= ${data.version} `);
+    }
+    // default case "any", include steps for all versions
+
+
+    sql:ParameterizedQuery[] baseQuery = [
+        `SELECT DISTINCT ExperimentData.dataId, experimentId, name, version, location, type, contentType
+            FROM ExperimentData JOIN StepData ON StepData.dataId = ExperimentData.dataId
+            WHERE experimentId=${experimentId} `
+    ];
+    baseQuery.push(` AND stepId IN ( `);
+    baseQuery.push(sql:queryConcat(...subQuery));
+    baseQuery.push(` ) `);
+
+    // exclude different versions and current version from results
+    if !includeSelf {
+        baseQuery.push(` AND name != ${data.name} `);
+    }
+
+    // only include certain file types
+    if !(dataType is ()) {
+        var dataTypeFilter = mimetypeLikeToDbLikeString(dataType);
+        if dataTypeFilter != () {
+            baseQuery.push(` AND type LIKE ${dataTypeFilter} `);
+        }
+    }
+    if !(contentType is ()) {
+        var contentTypeFilter = mimetypeLikeToDbLikeString(contentType);
+        if contentTypeFilter != () {
+            baseQuery.push(` AND contentType LIKE ${contentTypeFilter} `);
+        }
+    }
+
+    baseQuery.push(`;`);
+
+    stream<ExperimentDataFull, sql:Error?> experimentData = experimentDB->query(sql:queryConcat(...baseQuery));
+
+    ExperimentDataFull[]? experimentDataList = check from var relatedData in experimentData
+        select relatedData;
+
+    check experimentData.close();
+
+    if experimentDataList != () {
+        return experimentDataList;
+    }
+
+    return [];
+}
+
 public isolated transactional function getProducingStepOfData(int|ExperimentDataFull data) returns int|error {
     stream<record {int producingStep;}, sql:Error?> step;
 
