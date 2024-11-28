@@ -604,13 +604,20 @@ service / on new http:Listener(serverPort) {
         transaction {
 
             stepCount = check database:getTimelineStepCount(experimentId, plugin\-name, 'version, status, uncleared\-substep, result\-quality);
-            if (offset >= stepCount) {
-                // page is out of range!
+            if (stepCount == 0 && offset == 0) {
+                // empty first page
                 check commit;
-                return <http:NotFound>{};
+                return {'\@self: string `${serverHost}/experiments/${experimentId}/timeline`, items: [], itemCount: stepCount};
             } else {
-                steps = check database:getTimelineStepList(experimentId, plugin\-name, 'version, status, uncleared\-substep, result\-quality, 'limit = item\-count, offset = offset, sort = intSort);
-                check commit;
+                // else is requred for type checker to be happy...
+                if (offset >= stepCount) {
+                    // page is out of range!
+                    check commit;
+                    return <http:NotFound>{};
+                } else {
+                    steps = check database:getTimelineStepList(experimentId, plugin\-name, 'version, status, uncleared\-substep, result\-quality, 'limit = item\-count, offset = offset, sort = intSort);
+                    check commit;
+                }
             }
 
         } on fail error err {
