@@ -508,6 +508,7 @@ service / on new http:Listener(serverPort) {
     # Get a specific experiment data resource.
     #
     # + experimentId - the id of the experiment
+    # + name - the name of the experiment data resource
     # + version - the version of the experiment data resource (optional, defaults to "latest")
     # + return - the experiment data resource
     resource function get experiments/[int experimentId]/data/[string name](string? 'version) returns ExperimentDataResponse|http:InternalServerError {
@@ -527,6 +528,35 @@ service / on new http:Listener(serverPort) {
         }
 
         return mapToExperimentDataResponse(data, producingStep, inputFor);
+    }
+
+    # Get all versions of an experiment data resource.
+    #
+    # + experimentId - the id of the experiment
+    # + name - the name of the experiment data resource
+    # + return -all versions of the experiment data in a simple list
+    resource function get experiments/[int experimentId]/data/[string name]/versions() returns ExperimentDataListResponse|http:NotFound|http:InternalServerError {
+        database:ExperimentDataFull[] data = [];
+
+        transaction {
+            data = check database:getAllDataVersions(experimentId, name);
+            check commit;
+        } on fail error err {
+            log:printError(string`Could not get versions of data with name ${name}.`, 'error = err, stackTrace = err.stackTrace());
+
+            // if with return does not correctly narrow type for rest of function... this does.
+            http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
+            return resultErr;
+        }
+
+        if data.length() == 0 {
+            return <http:NotFound>{};
+        }
+
+        var dataList = from var d in data
+            select mapToExperimentDataResponse(d);
+        // TODO add query params to self URL
+        return {'\@self: string `${serverHost}/experiments/${experimentId}/data/${name}/versions/`, items: dataList, itemCount: dataList.length()};
     }
 
     # Download the actual data behind the experiment data resource.
