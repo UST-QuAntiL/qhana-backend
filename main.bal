@@ -644,6 +644,8 @@ service / on new http:Listener(serverPort) {
         } else {
             resp.addHeader("Content-Disposition", string `attachment; filename="${data.name}"`);
         }
+
+        resp.addHeader("X-Data-Type", data.'type);
         resp.setFileAsPayload(data.location, contentType = data.contentType);
 
         check caller->respond(resp);
