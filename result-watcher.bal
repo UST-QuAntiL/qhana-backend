@@ -306,14 +306,22 @@ isolated class ResultProcessor {
             // compensate for file creation outside of transaction control
             'transaction:onRollback(self.compensateFileCreation);
 
+            database:ExperimentData[] copiedOutputs = [];
+
             // process task output data
             if outputs is TaskDataOutput[] {
                 foreach var output in outputs {
                     var dataRef = self.getExperimentDataFromURL(output.href);
                     if !(dataRef is error) {
                         // data is already present in DB
-                        // TODO check if experiment ID is similar
-                        // TODO create new data entry?
+                        copiedOutputs.push({
+                            name: dataRef.name,
+                            'version: -1,
+                            // FIXME copy files if from a different experiment ID
+                            location: dataRef.location,
+                            'type: dataRef.'type,
+                            contentType: dataRef.contentType
+                        });
                         continue;
                     }
                     http:Client c = check new (output.href);
@@ -351,6 +359,7 @@ isolated class ResultProcessor {
             lock {
                 _ = check database:saveTimelineStepOutputData(self.stepId, self.experimentId, self.processedOutputs);
             }
+            _ = check database:saveTimelineStepOutputData(self.stepId, self.experimentId, copiedOutputs);
 
             var r = self.result;
             var status = r.status;
