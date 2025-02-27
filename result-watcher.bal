@@ -372,7 +372,7 @@ isolated class ResultProcessor {
         }
     }
 
-    # Check is a URL is for local experimentData and return the data.
+    # Check if a URL is for local experimentData and return the data.
     #
     # + url - the data input URL to parse
     # + return - the experiment data or an error
