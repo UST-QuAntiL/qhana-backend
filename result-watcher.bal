@@ -15,6 +15,7 @@
 import ballerina/http;
 import ballerina/task;
 import ballerina/file;
+import ballerina/lang.regexp;
 import ballerina/io;
 import ballerina/log;
 import ballerina/os;
@@ -305,9 +306,24 @@ isolated class ResultProcessor {
             // compensate for file creation outside of transaction control
             'transaction:onRollback(self.compensateFileCreation);
 
+            database:ExperimentData[] copiedOutputs = [];
+
             // process task output data
             if outputs is TaskDataOutput[] {
                 foreach var output in outputs {
+                    var dataRef = self.getExperimentDataFromURL(output.href);
+                    if !(dataRef is error) {
+                        // data is already present in DB
+                        copiedOutputs.push({
+                            name: dataRef.name,
+                            'version: -1,
+                            // FIXME copy files if from a different experiment ID
+                            location: dataRef.location,
+                            'type: dataRef.'type,
+                            contentType: dataRef.contentType
+                        });
+                        continue;
+                    }
                     http:Client c = check new (output.href);
                     http:Response fileResponse = check c->get("");
                     var fileDir = check database:prepareStorageLocation(self.experimentId, storageLocation);
@@ -343,6 +359,7 @@ isolated class ResultProcessor {
             lock {
                 _ = check database:saveTimelineStepOutputData(self.stepId, self.experimentId, self.processedOutputs);
             }
+            _ = check database:saveTimelineStepOutputData(self.stepId, self.experimentId, copiedOutputs);
 
             var r = self.result;
             var status = r.status;
@@ -353,6 +370,33 @@ isolated class ResultProcessor {
 
             check commit;
         }
+    }
+
+    # Check if a URL is for local experimentData and return the data.
+    #
+    # + url - the data input URL to parse
+    # + return - the experiment data or an error
+    private isolated transactional function getExperimentDataFromURL(string url) returns database:ExperimentDataFull|error {
+        string:RegExp regex = re `^https?://?[^/]*/experiments/([^/]+)/data/([^/]+)/download\?version=(latest|[0-9]+)$`;
+        if !url.matches(regex) {
+            return error("url does not match any file from the experiment. " + url);
+        }
+        regexp:Groups? groups = regex.findGroups(url);
+        if groups == () {
+            return error("A malformed url slipped through the regex test. " + url);
+        }
+        regexp:Span? experimentIdSpan = groups[1];
+        regexp:Span? filenameSpan = groups[2];
+        regexp:Span? versionSpan = groups[3];
+        if experimentIdSpan == () || filenameSpan == () || versionSpan == () {
+            return error("A malformed url slipped through the regex test. ExperimentID, Filename, or version missing. " + url);
+        }
+        int experimentId = check int:fromString(experimentIdSpan.substring());
+        string version = versionSpan.substring();
+        if version == "latest" {
+            return database:getData(experimentId, filenameSpan.substring(), "latest");
+        }
+        return database:getData(experimentId, filenameSpan.substring(), version);
     }
 
     # Save an error result to the database.
