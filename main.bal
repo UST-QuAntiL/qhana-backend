@@ -646,7 +646,7 @@ service / on new http:Listener(serverPort) {
         }
 
         resp.addHeader("X-Data-Type", data.'type);
-        resp.setFileAsPayload(data.location, contentType = data.contentType);
+        check trap resp.setFileAsPayload(data.location, contentType = data.contentType);
 
         check caller->respond(resp);
     }
@@ -1132,7 +1132,7 @@ service / on new http:Listener(serverPort) {
 
         resp.statusCode = http:STATUS_OK;
         resp.addHeader("Content-Disposition", string `attachment; filename="${exportResult.name}"`);
-        resp.setFileAsPayload(exportResult.location, contentType = "application/zip");
+        check trap resp.setFileAsPayload(exportResult.location, contentType = "application/zip");
         check caller->respond(resp);
     }
 
