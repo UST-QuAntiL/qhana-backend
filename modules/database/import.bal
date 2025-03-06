@@ -166,7 +166,7 @@ public isolated transactional function importExperimentData(ExperimentFull exper
         check file:copy(filePathAbs, targetFile, file:REPLACE_EXISTING);
 
         // replace data location with new absolute location
-        experimentData.location = filePath;
+        experimentData.location = targetFilePath;
 
         // create db entries
         int newDataId = check importExperimentDataDB(experiment.experimentId, experimentData);
