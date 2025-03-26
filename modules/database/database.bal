@@ -1492,7 +1492,7 @@ public isolated function mimetypeLikeToDbLikeString(string? mimetypeLike) return
         return (); // no filtering needed, true wildcard pattern or empty filter
     }
     if trimmed.includes("/") {
-        return regexp:replaceAll(re `\*`, trimmed, "?");
+        return regexp:replaceAll(re `\*`, trimmed, "%");
     }
     // if no / is present treat the whole string as if it ends implicitly with "/*"
     return trimmed + "/%";
