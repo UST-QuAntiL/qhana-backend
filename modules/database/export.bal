@@ -394,19 +394,15 @@ public isolated transactional function getExperimentDBExport(ExperimentFull expe
 # + exportId - export id
 # + config - export configuration
 # + os - os type to determine appropriate exec command
-# + storageLocation - storage location
 # + return - record with details about created zip files or error
-public isolated transactional function exportExperiment(ExperimentFull experiment, int exportId, ExperimentExportConfig config, string os, string storageLocation) returns ExperimentExportZip|error {
+public isolated transactional function exportExperiment(ExperimentFull experiment, int exportId, ExperimentExportConfig config, string os) returns ExperimentExportZip|error {
 
     ExperimentCompleteExport experimentComplete = check getExperimentDBExport(experiment, config);
     // data files
     string[] dataFileLocations = [];
     ExperimentDataExport[] experimentDataList = experimentComplete.experimentDataList;
     foreach var experimentData in experimentDataList {
-        string location = experimentData.location;
-        experimentData.location = check extractFilename(location); // only file name
-        var path = check file:joinPath(storageLocation, experiment.experimentId.toString(), experimentData.location);
-        var abspath = check file:getAbsolutePath(path);
+        var abspath = check file:getAbsolutePath(experimentData.location);
         log:printDebug("Add file " + abspath + "...");
         dataFileLocations.push(abspath);
     }
@@ -560,7 +556,7 @@ public class exportJob {
     public isolated function execute() {
         transaction {
             ExperimentExportZip experimentZip;
-            experimentZip = check exportExperiment(self.experiment, self.exportId, self.exportConfig, self.configuredOS, self.storageLocation);
+            experimentZip = check exportExperiment(self.experiment, self.exportId, self.exportConfig, self.configuredOS);
 
             _ = check experimentDB->execute(
                 `UPDATE ExperimentExport 
