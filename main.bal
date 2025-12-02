@@ -651,6 +651,35 @@ service / on new http:Listener(serverPort) {
         check caller->respond(resp);
     }
 
+    # HEAD Method for the file data download resource.
+    #
+    # + experimentId - the id of the experiment
+    # + version - the version of the experiment data resource (optional, defaults to "latest")
+    # + return - metadata about this resource
+    resource function head experiments/[int experimentId]/data/[string name]/download(string? 'version, http:Caller caller) returns error? {
+        database:ExperimentDataFull data;
+
+        http:Response resp = new;
+        resp.addHeader("Access-Control-Allow-Origin", "*");
+        resp.addHeader("Access-Control-Allow-Methods", "OPTIONS, GET");
+        resp.addHeader("Access-Control-Allow-Headers", "range,Content-Type,Depth,User-Agent,X-File-Size,X-Requested-With,If-Modified-Since,X-File-Name,Cache-Control,Access-Control-Allow-Origin");
+
+        transaction {
+            data = check database:getData(experimentId, name, 'version);
+            check commit;
+        } on fail error err {
+            resp.statusCode = http:STATUS_NOT_FOUND;
+
+            check caller->respond(resp);
+            return;
+        }
+
+        resp.statusCode = http:STATUS_OK;
+        resp.addHeader("content-type", data.contentType);
+
+        check caller->respond(resp);
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // Timeline ////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
