@@ -788,6 +788,50 @@ service / on new http:Listener(serverPort) {
         return mapToTimelineStepResponse(createdStep, (), inputData, []);
     }
 
+    # Cancel a running timeline step.
+    #
+    # + experimentId - the id of the experiment
+    # + timelineStepSequence - the step number of the timeline step
+    # + return - 200 OK or error
+    resource function post experiments/[int experimentId]/timeline/[int timelineStepSequence]/cancel(http:Caller caller) returns error? {
+        http:Response resp = new;
+        string? resultEndpoint = ();
+        
+        transaction {
+            database:TimelineStepWithParams step = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStepSequence);
+            int stepId = step.stepId;
+
+            resultEndpoint = check database:getTimelineStepResultEndpoint(stepId);
+            
+            check database:deleteTimelineStepResultWatcher(stepId);
+
+            check database:updateTimelineStepStatus(stepId, "CANCELED", "Task was canceled by the user.");
+            
+            check commit;
+        } on fail error err {
+            log:printError("Could not cancel timeline step.", 'error = err, stackTrace = err.stackTrace());
+            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+            resp.setPayload({"message": "Something went wrong. Please try again later."});
+            check caller->respond(resp);
+            return;
+        }
+
+        if resultEndpoint is string && resultEndpoint != "" {
+            http:Client pluginClient = check new (resultEndpoint);
+            http:Response|error cancelRes = pluginClient->delete("");
+            
+            if cancelRes is error {
+                log:printError("Failed to send DELETE request to plugin runner.", 'error = cancelRes);
+            } else {
+                log:printInfo(string`Plugin runner cancel response: ${cancelRes.statusCode.toString()}`);
+            }
+        }
+
+        resp.statusCode = http:STATUS_OK;
+        resp.setPayload({"message": "Task successfully canceled."});
+        check caller->respond(resp);
+    }
+
     # Get a specific timeline step by its step number.
     #
     # + experimentId - the id of the experiment
@@ -1341,7 +1385,11 @@ service / on new http:Listener(serverPort) {
     # + return - possible errors
     resource function post webhooks/[int stepId](string? 'source=(), string? event=()) returns error? {
         log:printDebug(string`Received webhook for stepId ${stepId}. (event=${event.toBalString()}, source=${'source.toBalString()})`);
-        check ScheduleWatcherOnce(stepId);
+        
+        error? err =  ScheduleWatcherOnce(stepId);
+        if err is error {
+            log:printDebug(string`Ignored webhook for stepId ${stepId}: ${err.message()}`);      
+        }
     }
 }
 
