@@ -792,44 +792,58 @@ service / on new http:Listener(serverPort) {
     #
     # + experimentId - the id of the experiment
     # + timelineStepSequence - the step number of the timeline step
-    # + return - 200 OK or error
-    resource function post experiments/[int experimentId]/timeline/[int timelineStepSequence]/cancel(http:Caller caller) returns error? {
-        http:Response resp = new;
+    # + return - 204 No Content or error
+    resource function post experiments/[int experimentId]/timeline/[int timelineStepSequence]/cancel() returns http:NoContent|http:InternalServerError|error {
         string? resultEndpoint = ();
+        int stepId;
         
         transaction {
             database:TimelineStepWithParams step = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStepSequence);
-            int stepId = step.stepId;
-
+            stepId = step.stepId;
             resultEndpoint = check database:getTimelineStepResultEndpoint(stepId);
-            
-            check database:deleteTimelineStepResultWatcher(stepId);
 
+            check commit;
+        } on fail error err {
+            log:printError("Could not get timeline step status from database.", 'error = err, stackTrace = err.stackTrace());
+            http:InternalServerError resultErr = {body: "Something went wrong while retrieving the timeline step status from the database."};
+            return resultErr;
+        } 
+            
+        if resultEndpoint is string && resultEndpoint != "" {
+            http:Client httpClient = check new (resultEndpoint);
+
+            json payload = {
+                "command": "cancel", 
+                "webhookHref": "http://localhost/dummy-url"
+            };
+            http:Response|error cancelRes = httpClient->post("", payload);
+            
+            if cancelRes is error {
+                log:printError(string`Network failure: Could not reach plugin runner at ${resultEndpoint}`, 'error = cancelRes);
+                return cancelRes;
+            } 
+
+            if cancelRes.statusCode >= 400 {
+                log:printError(string`Plugin runner rejected cancellation. HTTP Status: ${cancelRes.statusCode.toString()}`);
+                http:InternalServerError resultErr = {body: "Plugin runner failed to cancel the task."};
+                return resultErr;
+            }
+        }
+
+        transaction {
+            check database:deleteTimelineStepResultWatcher(stepId);
             check database:updateTimelineStepStatus(stepId, "CANCELED", "Task was canceled by the user.");
             
             check commit;
         } on fail error err {
-            log:printError("Could not cancel timeline step.", 'error = err, stackTrace = err.stackTrace());
-            resp.statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
-            resp.setPayload({"message": "Something went wrong. Please try again later."});
-            check caller->respond(resp);
-            return;
-        }
-
-        if resultEndpoint is string && resultEndpoint != "" {
-            http:Client pluginClient = check new (resultEndpoint);
-            http:Response|error cancelRes = pluginClient->delete("");
+            log:printError("Could not update timeline step status in database.", 'error = err, stackTrace = err.stackTrace());
             
-            if cancelRes is error {
-                log:printError("Failed to send DELETE request to plugin runner.", 'error = cancelRes);
-            } else {
-                log:printInfo(string`Plugin runner cancel response: ${cancelRes.statusCode.toString()}`);
-            }
+            http:InternalServerError resultErr = {body: "Something went wrong while updating the local database."};
+            return resultErr;
         }
 
-        resp.statusCode = http:STATUS_OK;
-        resp.setPayload({"message": "Task successfully canceled."});
-        check caller->respond(resp);
+        http:NoContent successResp = {};
+        return successResp;
     }
 
     # Get a specific timeline step by its step number.
@@ -1389,6 +1403,7 @@ service / on new http:Listener(serverPort) {
         error? err =  ScheduleWatcherOnce(stepId);
         if err is error {
             log:printDebug(string`Ignored webhook for stepId ${stepId}: ${err.message()}`);      
+            return err;
         }
     }
 }
