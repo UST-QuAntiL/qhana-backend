@@ -812,10 +812,7 @@ service / on new http:Listener(serverPort) {
         if resultEndpoint is string && resultEndpoint != "" {
             http:Client httpClient = check new (resultEndpoint);
 
-            json payload = {
-                "command": "cancel", 
-                "webhookHref": "http://localhost/dummy-url"
-            };
+            json payload = { "command": "cancel" };
             http:Response|error cancelRes = httpClient->post("", payload);
             
             if cancelRes is error {
