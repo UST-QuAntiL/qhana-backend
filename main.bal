@@ -788,6 +788,61 @@ service / on new http:Listener(serverPort) {
         return mapToTimelineStepResponse(createdStep, (), inputData, []);
     }
 
+    # Cancel a running timeline step.
+    #
+    # + experimentId - the id of the experiment
+    # + timelineStepSequence - the step number of the timeline step
+    # + return - 204 No Content or error
+    resource function post experiments/[int experimentId]/timeline/[int timelineStepSequence]/cancel() returns http:NoContent|http:InternalServerError|error {
+        string? resultEndpoint = ();
+        int stepId;
+        
+        transaction {
+            database:TimelineStepWithParams step = check database:getTimelineStep(experimentId = experimentId, sequence = timelineStepSequence);
+            stepId = step.stepId;
+            resultEndpoint = check database:getTimelineStepResultEndpoint(stepId);
+
+            check commit;
+        } on fail error err {
+            log:printError("Could not get timeline step status from database.", 'error = err, stackTrace = err.stackTrace());
+            http:InternalServerError resultErr = {body: "Something went wrong while retrieving the timeline step status from the database."};
+            return resultErr;
+        } 
+            
+        if resultEndpoint is string && resultEndpoint != "" {
+            http:Client httpClient = check new (resultEndpoint);
+
+            json payload = { "command": "cancel" };
+            http:Response|error cancelRes = httpClient->post("", payload);
+            
+            if cancelRes is error {
+                log:printError(string`Network failure: Could not reach plugin runner at ${resultEndpoint}`, 'error = cancelRes);
+                return cancelRes;
+            } 
+
+            if cancelRes.statusCode >= 400 {
+                log:printError(string`Plugin runner rejected cancellation. HTTP Status: ${cancelRes.statusCode.toString()}`);
+                http:InternalServerError resultErr = {body: "Plugin runner failed to cancel the task."};
+                return resultErr;
+            }
+        }
+
+        transaction {
+            check database:deleteTimelineStepResultWatcher(stepId);
+            check database:updateTimelineStepStatus(stepId, "CANCELED", "Task was canceled by the user.");
+            
+            check commit;
+        } on fail error err {
+            log:printError("Could not update timeline step status in database.", 'error = err, stackTrace = err.stackTrace());
+            
+            http:InternalServerError resultErr = {body: "Something went wrong while updating the local database."};
+            return resultErr;
+        }
+
+        http:NoContent successResp = {};
+        return successResp;
+    }
+
     # Get a specific timeline step by its step number.
     #
     # + experimentId - the id of the experiment
@@ -1341,7 +1396,12 @@ service / on new http:Listener(serverPort) {
     # + return - possible errors
     resource function post webhooks/[int stepId](string? 'source=(), string? event=()) returns error? {
         log:printDebug(string`Received webhook for stepId ${stepId}. (event=${event.toBalString()}, source=${'source.toBalString()})`);
-        check ScheduleWatcherOnce(stepId);
+        
+        error? err =  ScheduleWatcherOnce(stepId);
+        if err is error {
+            log:printDebug(string`Ignored webhook for stepId ${stepId}: ${err.message()}`);      
+            return err;
+        }
     }
 }
 
