@@ -185,6 +185,15 @@ public type TypedExperimentDataReference record {|
     string contentType;
 |};
 
+# Record specifying a specific processor plugin.
+#
+# + processorName - the name of the plugin
+# + processorVersion - the version of the plugin
+type ProcessorTuple record {|
+    string processorName;
+    string processorVersion;
+|};
+
 # Record specifying data and content type tags.
 #
 # + dataType - the data type (what kind of data)
@@ -607,6 +616,26 @@ public isolated transactional function getExperimentDataCount(int experimentId, 
         // should never happen based on the sql query
         return error("Could not determine the experiment count!");
     }
+}
+
+public isolated transactional function getProcessorsSummary(int experimentId) returns map<string[]>|error {
+    stream<ProcessorTuple, sql:Error?> pluginsSummaryRaw = experimentDB->query(`SELECT DISTINCT processorName, processorVersion FROM TimelineStep WHERE experimentId=${experimentId} AND status="SUCCESS";`);
+
+    map<string[]> pluginsSummary = {};
+    check from var p in pluginsSummaryRaw
+        do {
+            string[]? versions = pluginsSummary[p.processorName];
+            if versions == () {
+                pluginsSummary[p.processorName] = [p.processorVersion];
+            } else {
+                versions.push(p.processorVersion);
+                pluginsSummary[p.processorName] = versions;
+            }
+        };
+
+    check pluginsSummaryRaw.close();
+
+    return pluginsSummary;
 }
 
 public isolated transactional function getDataTypesSummary(int experimentId) returns map<string[]>|error {

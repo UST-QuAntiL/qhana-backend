@@ -429,6 +429,29 @@ service / on new http:Listener(serverPort) {
     // Data ////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
 
+    # Get summary information about successful plugin executions in the experiment.
+    #
+    # The summary is a map which keys are the successful plugin identifiers.
+    # The values of the map are lists of versions.
+    #
+    # + experimentId - the id of the experiment
+    # + return - the summary information of the successful plugin steps
+    resource function get experiments/[int experimentId]/processor\-summary() returns map<string[]>|http:InternalServerError {
+
+        map<string[]> data;
+
+        transaction {
+            data = check database:getProcessorsSummary(experimentId);
+            check commit;
+        } on fail error err {
+            log:printError("Could not get the processsor summary.", 'error = err, stackTrace = err.stackTrace());
+            // if with return does not correctly narrow type for rest of function... this does.
+            http:InternalServerError resultErr = {body: "Something went wrong. Please try again later."};
+            return resultErr;
+        }
+        return data;
+    }
+
     # Get summary information about data available in the experiment.
     #
     # The summary is a map which keys are the available data types.
